@@ -1,38 +1,9 @@
 import numpy as np
 from skimage.feature import multiscale_basic_features
-import copick
 import zarr
 from numcodecs import Blosc
-import os
 
-def load_copick_root(copick_config_path):
-    """
-    Loads the Copick root from the given configuration file path.
-    """
-    print(f"Loading Copick root configuration from: {copick_config_path}")
-    root = copick.from_file(copick_config_path)
-    print("Copick root loaded successfully")
-    return root
-
-def get_tomogram(root, run_name, voxel_spacing, tomo_type):
-    """
-    Fetches the tomogram data from the Copick root using the run name, voxel spacing, and tomogram type.
-    """
-    run = root.get_run(run_name)
-    if run is None:
-        raise ValueError(f"Run with name '{run_name}' not found.")
-    
-    voxel_spacing_obj = run.get_voxel_spacing(voxel_spacing)
-    if voxel_spacing_obj is None:
-        raise ValueError(f"Voxel spacing '{voxel_spacing}' not found in run '{run_name}'.")
-
-    tomogram = voxel_spacing_obj.get_tomogram(tomo_type)
-    if tomogram is None:
-        raise ValueError(f"Tomogram type '{tomo_type}' not found for voxel spacing '{voxel_spacing}'.")
-    
-    return tomogram
-
-def process_tomogram(tomogram, feature_type, intensity=True, edges=True, texture=True, sigma_min=0.5, sigma_max=16.0):
+def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True, edges=True, texture=True, sigma_min=0.5, sigma_max=16.0):
     """
     Processes the tomogram chunkwise and computes the multiscale basic features.
     """
@@ -103,46 +74,14 @@ def process_tomogram(tomogram, feature_type, intensity=True, edges=True, texture
                 out_array[0:num_features, z:z + chunk_size[0], y:y + chunk_size[1], x:x + chunk_size[2]] = contiguous_chunk
 
     print(f"Features saved under feature type '{feature_type}'")
-    
-def generate_skimage_features(copick_config_path, run_name, voxel_spacing, tomo_type, feature_type, intensity=True, edges=True, texture=True, sigma_min=0.5, sigma_max=16.0):
-    """
-    Generates multiscale features using scikit-image from a Copick run.
-    """
-    # Load Copick root configuration
-    root = load_copick_root(copick_config_path)
-    
-    # Get the tomogram
-    tomogram = get_tomogram(root, run_name, voxel_spacing, tomo_type)
-    
-    # Process the image and generate features
-    process_image(tomogram, feature_type, intensity, edges, texture, sigma_min, sigma_max)
-    
+
+
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Generate Multiscale Basic Features using Scikit-Image and Copick API.")
-    parser.add_argument("copick_config_path", type=str, help="Path to the Copick configuration JSON file.")
-    parser.add_argument("run_name", type=str, help="Name of the Copick run to process.")
-    parser.add_argument("voxel_spacing", type=float, help="Voxel spacing to be used.")
-    parser.add_argument("tomo_type", type=str, help="Type of tomogram to process.")
-    parser.add_argument("feature_type", type=str, help="Name for the feature type to be saved.")
-    parser.add_argument("--intensity", type=bool, default=True, help="Include intensity features.")
-    parser.add_argument("--edges", type=bool, default=True, help="Include edge features.")
-    parser.add_argument("--texture", type=bool, default=True, help="Include texture features.")
-    parser.add_argument("--sigma_min", type=float, default=0.5, help="Minimum sigma for Gaussian blurring.")
-    parser.add_argument("--sigma_max", type=float, default=16.0, help="Maximum sigma for Gaussian blurring.")
-
-    args = parser.parse_args()
-
-    generate_skimage_features(
-        copick_config_path=args.copick_config_path,
-        run_name=args.run_name,
-        voxel_spacing=args.voxel_spacing,
-        tomo_type=args.tomo_type,
-        feature_type=args.feature_type,
-        intensity=args.intensity,
-        edges=args.edges,
-        texture=args.texture,
-        sigma_min=args.sigma_min,
-        sigma_max=args.sigma_max
+    root = None# copick.from_file
+    tomo = None# get a tomogram from root
+    compute_skimage_features(
+        tomogram=tomo,
+        feature_type="multiscale_features",
+        copick_root=root,
+        intensity=True, edges=True, texture=True, sigma_min=0.5, sigma_max=16.0
     )
