@@ -74,6 +74,7 @@ def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True
                 out_array[0:num_features, z:z + chunk_size[0], y:y + chunk_size[1], x:x + chunk_size[2]] = contiguous_chunk
 
     print(f"Features saved under feature type '{feature_type}'")
+    return copick_features
 
 
 if __name__ == "__main__":

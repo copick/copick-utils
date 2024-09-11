@@ -43,7 +43,7 @@ def grid_picker(pickable_obj, run, tomogram, grid_spacing_factor, session_id="0"
     pick_set.store()
 
     print(f"Saved {len(points)} grid points for object {obj_name}.")
-
+    return pick_set
 
 if __name__ == "__main__":
     import copick

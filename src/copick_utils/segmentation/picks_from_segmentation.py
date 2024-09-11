@@ -54,8 +54,10 @@ def picks_from_segmentation(segmentation, segmentation_idx, maxima_filter_size, 
         pick_set.points = [{'x': c[2] * voxel_spacing, 'y': c[1] * voxel_spacing, 'z': c[0] * voxel_spacing} for c in all_centroids]
         pick_set.store()
         print(f"Centroids for label {segmentation_idx} saved successfully.")
+        return pick_set
     else:
         print(f"No valid centroids found for label {segmentation_idx}.")
+        return None
 
 
 # Example call to the function
