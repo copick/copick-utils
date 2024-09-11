@@ -2,25 +2,11 @@ import numpy as np
 import zarr
 import copick
 
-def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spacing, tomo_type, pickable_object, pick_set, user_id="paintedPicks", session_id=0):
+def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spacing, tomo_type, pickable_object, pick_set, user_id="paintedPicks", session_id="0"):
     """
-    Paints picks from a run into a multiscale Zarr segmentation array, representing them as spheres (balls) of the given radius.
-
-    Parameters:
-    radius (int): The radius of the spherical ball to paint.
-    painting_segmentation_name (str): Name of the segmentation layer to create or use.
-    run (object): The run object containing picks.
-    voxel_spacing (float): The voxel spacing for scaling pick locations.
-    tomo_type (str): Type of tomogram to use for segmentation (e.g., denoised).
-    pickable_object (object): The pickable object type from the Copick configuration.
-    pick_set (list): A list of picks containing the object type and location.
-    user_id (str): The user ID for the segmentation session.
-    session_id (str): The session ID for the segmentation session.
-
-    Returns:
-    zarr.Group: The multiscale painted segmentation array.
+    Paints picks from a run into a multiscale segmentation array using copick, representing them as spheres (balls) 
+    of the given radius. The painting is done in memory using NumPy arrays, and only written to Zarr at the end for each multiscale level.
     """
-
     def create_ball(center, radius):
         """Create a 3D ball with the specified radius."""
         zc, yc, xc = center
@@ -39,24 +25,34 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
     if not tomogram:
         raise ValueError("Tomogram not found for the given parameters.")
 
+    # Use copick to create a new segmentation if one does not exist
+    segs = run.get_segmentations(user_id=user_id, session_id=session_id, is_multilabel=True, name=painting_segmentation_name, voxel_size=voxel_spacing)
+    if len(segs) == 0:
+        seg = run.new_segmentation(voxel_spacing, painting_segmentation_name, session_id, True, user_id=user_id)
+    else:
+        seg = segs[0]
+
+    segmentation_group = zarr.open_group(seg.path, mode="a")
+    
+    # Ensure that the tomogram Zarr is available
     tomogram_group = zarr.open(tomogram.zarr(), "r")
     multiscale_levels = list(tomogram_group.array_keys())
-    
-    # Create or open the segmentation group
-    segmentation_group = zarr.open_group(f"{run.name}_{painting_segmentation_name}.zarr", mode="a")
 
-    # Paint each pick as a ball at each multiscale level
+    # Iterate through multiscale levels to paint picks as spheres
     for level in multiscale_levels:
         level_data = tomogram_group[level]
         shape = level_data.shape
 
-        if level not in segmentation_group:
-            segmentation_group.create_dataset(level, shape=shape, dtype=np.uint16, fill_value=0)
-        painting_seg_array = segmentation_group[level]
+        # Load or initialize the segmentation array in memory for the current level
+        if level in segmentation_group:
+            painting_seg_array = np.array(segmentation_group[level])
+        else:
+            painting_seg_array = np.zeros(shape, dtype=np.uint16)
 
         scale_factor = tomogram_group.attrs.get('multiscales', [{}])[0].get('datasets', [{}])[int(level)].get('scale', 1)
         scaled_radius = int(radius / scale_factor)
         
+        # Paint each pick
         for pick in pick_set.points:
             z, y, x = int(pick.location.z / voxel_spacing / scale_factor), int(pick.location.y / voxel_spacing / scale_factor), int(pick.location.x / voxel_spacing / scale_factor)
 
@@ -68,13 +64,31 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
             y_min, y_max = max(0, y - scaled_radius), min(painting_seg_array.shape[1], y + scaled_radius + 1)
             x_min, x_max = max(0, x - scaled_radius), min(painting_seg_array.shape[2], x + scaled_radius + 1)
 
-            # Determine the portion of the ball to apply based on the array bounds
-            z_ball_min, z_ball_max = max(0, scaled_radius - z), min(2 * scaled_radius + 1, scaled_radius + painting_seg_array.shape[0] - z)
-            y_ball_min, y_ball_max = max(0, scaled_radius - y), min(2 * scaled_radius + 1, scaled_radius + painting_seg_array.shape[1] - y)
-            x_ball_min, x_ball_max = max(0, scaled_radius - x), min(2 * scaled_radius + 1, scaled_radius + painting_seg_array.shape[2] - x)
+            # Skip if any of the ranges have a size of 0
+            if z_min >= z_max or y_min >= y_max or x_min >= x_max:
+                continue
 
-            # Apply the ball to the segmentation array
-            mask = ball[z_ball_min:z_ball_max, y_ball_min:y_ball_max, x_ball_min:x_ball_max] == 1
+            # Calculate the actual size of the region we are painting in the segmentation array
+            z_size = z_max - z_min
+            y_size = y_max - y_min
+            x_size = x_max - x_min
+
+            # Adjust the ball dimensions to match the size of the region in the segmentation array
+            z_ball_min, z_ball_max = scaled_radius - (z - z_min), scaled_radius + (z_max - z)
+            y_ball_min, y_ball_max = scaled_radius - (y - y_min), scaled_radius + (y_max - y)
+            x_ball_min, x_ball_max = scaled_radius - (x - x_min), scaled_radius + (x_max - x)
+
+            # Ensure the mask dimensions match the segmentation array subarray
+            ball_subarray = ball[z_ball_min:z_ball_max, y_ball_min:y_ball_max, x_ball_min:x_ball_max]
+            mask = ball_subarray == 1
+
+            if painting_seg_array[z_min:z_max, y_min:y_max, x_min:x_max].shape != mask.shape:
+                raise ValueError(f"Shape mismatch between segmentation array {painting_seg_array[z_min:z_max, y_min:y_max, x_min:x_max].shape} and mask {mask.shape}")
+
+            # Apply the ball to the segmentation array in memory
             painting_seg_array[z_min:z_max, y_min:y_max, x_min:x_max][mask] = pickable_object.label
 
-    return segmentation_group
+        # Once all picks are painted at this level, write the array to the Zarr store
+        segmentation_group[level] = painting_seg_array
+
+    return seg
