@@ -3,15 +3,16 @@ from skimage.feature import multiscale_basic_features
 import zarr
 from numcodecs import Blosc
 
-def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True, edges=True, texture=True, sigma_min=0.5, sigma_max=16.0):
+def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True, edges=True, texture=True, sigma_min=0.5, sigma_max=16.0, feature_chunk_size=None):
     """
     Processes the tomogram chunkwise and computes the multiscale basic features.
+    Allows for optional feature chunk size.
     """
     image = zarr.open(tomogram.zarr(), mode='r')['0']
-    input_chunk_size = image.chunks
+    input_chunk_size = feature_chunk_size if feature_chunk_size else image.chunks
     chunk_size = input_chunk_size if len(input_chunk_size) == 3 else input_chunk_size[1:]
     
-    overlap = int(3 * sigma_max)
+    overlap = int(chunk_size[0] / 2)
     
     print(f"Processing image with shape {image.shape}")
     print(f"Using chunk size: {chunk_size}, overlap: {overlap}")
@@ -33,9 +34,15 @@ def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True
     copick_features = tomogram.new_features(feature_type)
     feature_store = copick_features.zarr()
 
+    # Use the provided feature chunk size if available, otherwise default to the input chunk size
+    if feature_chunk_size is None:
+        feature_chunk_size = (num_features, *chunk_size)
+    else:
+        feature_chunk_size = (num_features, *feature_chunk_size)
+
     out_array = zarr.create(
         shape=(num_features, *image.shape),
-        chunks=(num_features, *chunk_size),
+        chunks=feature_chunk_size,
         dtype='float32',
         compressor=Blosc(cname='zstd', clevel=3, shuffle=2),
         store=feature_store,
@@ -78,11 +85,12 @@ def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True
 
 
 if __name__ == "__main__":
-    root = None# copick.from_file
-    tomo = None# get a tomogram from root
+    root = None  # copick.from_file
+    tomo = None  # get a tomogram from root
     compute_skimage_features(
         tomogram=tomo,
-        feature_type="multiscale_features",
+        feature_type="skimageFeatures",
         copick_root=root,
-        intensity=True, edges=True, texture=True, sigma_min=0.5, sigma_max=16.0
+        intensity=True, edges=True, texture=True, sigma_min=0.5, sigma_max=16.0,
+        feature_chunk_size=None  # Default to detected chunk size
     )
