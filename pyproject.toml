@@ -27,9 +27,9 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Documentation = "https://github.com/Kyle Harrington/copick-utils#readme"
-Issues = "https://github.com/Kyle Harrington/copick-utils/issues"
-Source = "https://github.com/Kyle Harrington/copick-utils"
+Documentation = "https://github.com/copick/copick-utils#readme"
+Issues = "https://github.com/copick/copick-utils/issues"
+Source = "https://github.com/copick/copick-utils"
 
 [tool.hatch.version]
 path = "src/copick_utils/__about__.py"
@@ -42,7 +42,7 @@ extra-dependencies = [
 check = "mypy --install-types --non-interactive {args:src/copick_utils tests}"
 
 [tool.coverage.run]
-source_pkgs = ["copick_utils", "tests"]
+source_pkgs = ["src/copick_utils", "tests"]
 branch = true
 parallel = true
 omit = [
