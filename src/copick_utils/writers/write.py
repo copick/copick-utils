@@ -19,13 +19,12 @@ def tomogram(
     # Create a new segmentation or Read Previous Segmentation
     vs = run.get_voxel_spacing(voxelSize)
     if vs is None:
-        vs = run.new_voxel_spacing(
-            voxel_size=voxelSize,
-        )
+        vs = run.new_voxel_spacing(voxel_size=voxelSize)
         tomogram = vs.new_tomogram(tomo_algorithm)
     else:
         tomogram = vs.get_tomogram(tomo_algorithm)
         
+    # Write the Tomogram
     tomogram.from_numpy(inputVol, voxelSize)
 
 def segmentation(
@@ -43,13 +42,16 @@ def segmentation(
     Parameters:
     - run: The run object, which provides a method to create a new segmentation.
     - segmentation: The segmentation data to be written.
+    - userID: The User ID with the Associated 
     - voxelsize (float): The size of the voxels. Default is 10.
     """
 
     # Create a new segmentation or Read Previous Segmentation
     seg = run.get_segmentations(name=segmentationName, user_id=userID, session_id=sessionID)
 
-    if len(seg) == 0 or seg[0].voxel_size != voxelSize:
+    # Write New Segmentation if Neither Any Segmentations Exist, 
+    # Or Any for the Given Voxel Size
+    if len(seg) == 0 or any(s.voxel_size != voxelSize for s in seg):
         seg = run.new_segmentation(
             voxel_size=voxelSize,
             name=segmentationName,
@@ -58,7 +60,10 @@ def segmentation(
             user_id=userID,
         )
     else:
-        seg = seg[0]
+        # Overwrite Current Segmentation at that Resolution 
+        # if it Exists
+        seg = next(s for s in seg if s.voxel_size == voxelSize)
 
+    # Write the Segmentation
     seg.from_numpy(inputSegmentVol, dtype=np.uint8)
 
