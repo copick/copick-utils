@@ -2,24 +2,89 @@ import numpy as np
 import zarr
 import copick
 
+def _from_picks(pick, 
+               seg_volume,
+               radius: float = 10.0, 
+               label_value: int = 1,
+               voxel_spacing: float = 10):
+    """
+    Paints picks from a run into a multiscale segmentation array using copick, representing them as spheres (balls) 
+    of the given radius.
+    
+    Parameters:
+    pick (object): Copick object containing the `points` attribute, where each point represents a pick with `location` 
+                   coordinates (`x`, `y`, `z`). These coordinates are used as the center of each sphere.
+    seg_volume (numpy.ndarray): The 3D segmentation volume (numpy array) where the spheres are painted. 
+                                The array should have dimensions (Z, Y, X).
+    radius (float, optional): The radius of the spheres to be inserted, in physical units (not voxel units). 
+    label_value (int, optional): The integer value used to label the sphere regions in the segmentation volume. 
+    voxel_spacing (float, optional): The spacing of voxels in the segmentation volume, used to scale the radius of the spheres. 
+
+    Returns:
+    numpy.ndarray: The modified segmentation volume (`seg_volume`) with spheres inserted at the pick locations.
+    """
+        
+    def create_sphere(shape, center, radius, val):
+        """Creates a 3D sphere within the given shape, centered at the given coordinates."""
+        zc, yc, xc = center
+        z, y, x = np.indices(shape)
+        
+        # Compute squared distance from the center
+        distance_sq = (x - xc)**2 + (y - yc)**2 + (z - zc)**2
+        
+        # Create a mask for points within the sphere
+        sphere = np.zeros(shape, dtype=np.float32)
+        sphere[distance_sq <= radius**2] = val
+        return sphere
+
+    def get_relative_target_coordinates(center, delta, shape):
+        """
+        Calculate the low and high index bounds for placing a sphere within a 3D volume, 
+        ensuring that the indices are clamped to the valid range of the volume dimensions.
+        """
+
+        low = max(int(np.floor(center) - delta), 0)
+        high = min(int(np.ceil(center) + delta + 1), shape)
+
+        return low, high
+
+    # Adjust radius for voxel spacing
+    radius_voxel = radius / voxel_spacing
+    delta = int(np.ceil(radius_voxel))
+
+    # Get volume dimensions
+    vol_shape_x, vol_shape_y, vol_shape_z = seg_volume.shape
+
+    # Paint each pick as a sphere
+    for pick in pick.points:
+        
+        # Adjust the pick's location for voxel spacing
+        cx, cy, cz = pick.location.z / voxel_spacing, pick.location.y / voxel_spacing, pick.location.x / voxel_spacing
+
+        # Calculate subarray bounds, clamped to the valid volume dimensions
+        xLow, xHigh = get_relative_target_coordinates(cx, delta, vol_shape_x)
+        yLow, yHigh = get_relative_target_coordinates(cy, delta, vol_shape_y)
+        zLow, zHigh = get_relative_target_coordinates(cz, delta, vol_shape_z)
+
+        # Subarray shape
+        subarray_shape = (xHigh - xLow, yHigh - yLow, zHigh - zLow)
+
+        # Compute the local center of the sphere within the subarray
+        local_center = (cx - xLow, cy - yLow, cz - zLow)
+
+        # Create the sphere
+        sphere = create_sphere(subarray_shape, local_center, radius_voxel, label_value)
+
+        # Assign Sphere to Segmentation Target Volume
+        seg_volume[xLow:xHigh, yLow:yHigh, zLow:zHigh] = np.maximum(seg_volume[xLow:xHigh, yLow:yHigh, zLow:zHigh], sphere)
+
+    return seg_volume
+
 def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spacing, tomo_type, pickable_object, pick_set, user_id="paintedPicks", session_id="0"):
     """
     Paints picks from a run into a multiscale segmentation array using copick, representing them as spheres (balls) 
     of the given radius. The painting is done in memory using NumPy arrays, and only written to Zarr at the end for each multiscale level.
     """
-    def create_ball(center, radius):
-        """Create a 3D ball with the specified radius."""
-        zc, yc, xc = center
-        shape = (2 * radius + 1, 2 * radius + 1, 2 * radius + 1)
-        ball = np.zeros(shape, dtype=np.uint8)
-
-        for z in range(shape[0]):
-            for y in range(shape[1]):
-                for x in range(shape[2]):
-                    if np.linalg.norm(np.array([z, y, x]) - np.array([radius, radius, radius])) <= radius:
-                        ball[z, y, x] = 1
-        return ball
-
     # Fetch the tomogram and determine its multiscale structure
     tomogram = run.get_voxel_spacing(voxel_spacing).get_tomogram(tomo_type)
     if not tomogram:
@@ -50,45 +115,9 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
             painting_seg_array = np.zeros(shape, dtype=np.uint16)
 
         scale_factor = tomogram_group.attrs.get('multiscales', [{}])[0].get('datasets', [{}])[int(level)].get('scale', 1)
-        scaled_radius = int(radius / scale_factor)
-        
-        # Paint each pick
-        for pick in pick_set.points:
-            z, y, x = int(pick.location.z / voxel_spacing / scale_factor), int(pick.location.y / voxel_spacing / scale_factor), int(pick.location.x / voxel_spacing / scale_factor)
-
-            # Create the spherical ball with the scaled radius
-            ball = create_ball((scaled_radius, scaled_radius, scaled_radius), scaled_radius)
-
-            # Determine where the ball should be placed in the segmentation array
-            z_min, z_max = max(0, z - scaled_radius), min(painting_seg_array.shape[0], z + scaled_radius + 1)
-            y_min, y_max = max(0, y - scaled_radius), min(painting_seg_array.shape[1], y + scaled_radius + 1)
-            x_min, x_max = max(0, x - scaled_radius), min(painting_seg_array.shape[2], x + scaled_radius + 1)
-
-            # Skip if any of the ranges have a size of 0
-            if z_min >= z_max or y_min >= y_max or x_min >= x_max:
-                continue
-
-            # Calculate the actual size of the region we are painting in the segmentation array
-            z_size = z_max - z_min
-            y_size = y_max - y_min
-            x_size = x_max - x_min
-
-            # Adjust the ball dimensions to match the size of the region in the segmentation array
-            z_ball_min, z_ball_max = scaled_radius - (z - z_min), scaled_radius + (z_max - z)
-            y_ball_min, y_ball_max = scaled_radius - (y - y_min), scaled_radius + (y_max - y)
-            x_ball_min, x_ball_max = scaled_radius - (x - x_min), scaled_radius + (x_max - x)
-
-            # Ensure the mask dimensions match the segmentation array subarray
-            ball_subarray = ball[z_ball_min:z_ball_max, y_ball_min:y_ball_max, x_ball_min:x_ball_max]
-            mask = ball_subarray == 1
-
-            if painting_seg_array[z_min:z_max, y_min:y_max, x_min:x_max].shape != mask.shape:
-                raise ValueError(f"Shape mismatch between segmentation array {painting_seg_array[z_min:z_max, y_min:y_max, x_min:x_max].shape} and mask {mask.shape}")
-
-            # Apply the ball to the segmentation array in memory
-            painting_seg_array[z_min:z_max, y_min:y_max, x_min:x_max][mask] = pickable_object.label
+        scaled_radius = int(radius / scale_factor)        
 
         # Once all picks are painted at this level, write the array to the Zarr store
-        segmentation_group[level] = painting_seg_array
+        segmentation_group[level] = _from_picks(pick_set, painting_seg_array, radius, pickable_object.label, voxel_spacing)
 
     return seg
