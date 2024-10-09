@@ -3,67 +3,92 @@ import numpy as np
 
 def tomogram(
     run,
-    inputVol,
-    voxelSize=10,
-    tomo_algorithm="wbp"
-    ):
+    input_volume,
+    voxel_size=10,
+    algorithm="wbp"
+):
     """
-    Write a OME-Zarr tomogram into a Copick Directory.
+    Writes a volumetric tomogram into an OME-Zarr format within a Copick directory.
 
     Parameters:
-    - run: The run object, which provides a method to create a new tomogram.
-    - inputVol: The volumetric tomgoram data to be written.
-    - voxelsize (float): The size of the voxels. Default is 10.
-    """
+    -----------
+    run : copick.Run
+        The current Copick run object.
+    input_volume : np.ndarray
+        The volumetric tomogram data to be written.
+    voxel_size : float, optional
+        The size of the voxels in physical units. Default is 10.
+    algorithm : str, optional
+        The tomographic reconstruction algorithm to use. Default is 'wbp'.
 
-    # Create a new segmentation or Read Previous Segmentation
-    vs = run.get_voxel_spacing(voxelSize)
-    if vs is None:
-        vs = run.new_voxel_spacing(voxel_size=voxelSize)
-        tomogram = vs.new_tomogram(tomo_algorithm)
+    Returns:
+    --------
+    copick.Tomogram
+        The created or modified tomogram object.
+    """
+    
+    # Retrieve or create voxel spacing
+    voxel_spacing = run.get_voxel_spacing(voxel_size)
+    if voxel_spacing is None:
+        voxel_spacing = run.new_voxel_spacing(voxel_size=voxel_size)
+        tomogram = voxel_spacing.new_tomogram(algorithm)
     else:
-        tomogram = vs.get_tomogram(tomo_algorithm)
-        
-    # Write the Tomogram
-    tomogram.from_numpy(inputVol, voxelSize)
+        tomogram = voxel_spacing.get_tomogram(algorithm)
+    
+    # Write the tomogram data
+    tomogram.from_numpy(input_volume, voxel_size)
+
 
 def segmentation(
     run,
-    inputSegmentVol,
-    userID,
-    segmentationName="segmentation",
-    sessionID="0",
-    voxelSize=10,
-    multilabel_seg = True
-    ):
+    segmentation_volume,
+    user_id,
+    name="segmentation",
+    session_id="0",
+    voxel_size=10,
+    multilabel=True
+):
     """
-    Write a OME-Zarr segmentation into a Copick Directory.
+    Writes a segmentation into an OME-Zarr format within a Copick directory.
 
     Parameters:
-    - run: The run object, which provides a method to create a new segmentation.
-    - segmentation: The segmentation data to be written.
-    - userID: The User ID with the Associated 
-    - voxelsize (float): The size of the voxels. Default is 10.
+    -----------
+    run : copick.Run
+        The current Copick run object.
+    segmentation_volume : np.ndarray
+        The segmentation data to be written.
+    user_id : str
+        The ID of the user creating the segmentation.
+    name : str, optional
+        The name of the segmentation dataset to be created or modified. Default is 'segmentation'.
+    session_id : str, optional
+        The session ID for this segmentation. Default is '0'.
+    voxel_size : float, optional
+        The size of the voxels in physical units. Default is 10.
+    multilabel : bool, optional
+        Whether the segmentation is a multilabel segmentation. Default is True.
+
+    Returns:
+    --------
+    copick.Segmentation
+        The created or modified segmentation object.
     """
+    
+    # Retrieve or create a segmentation
+    segmentations = run.get_segmentations(name=name, user_id=user_id, session_id=session_id)
 
-    # Create a new segmentation or Read Previous Segmentation
-    seg = run.get_segmentations(name=segmentationName, user_id=userID, session_id=sessionID)
-
-    # Write New Segmentation if Neither Any Segmentations Exist, 
-    # Or Any for the Given Voxel Size
-    if len(seg) == 0 or any(s.voxel_size != voxelSize for s in seg):
-        seg = run.new_segmentation(
-            voxel_size=voxelSize,
-            name=segmentationName,
-            session_id=sessionID,
-            is_multilabel=multilabel_seg,
-            user_id=userID,
+    # If no segmentation exists or no segmentation at the given voxel size, create a new one
+    if len(segmentations) == 0 or any(seg.voxel_size != voxel_size for seg in segmentations):
+        segmentation = run.new_segmentation(
+            voxel_size=voxel_size,
+            name=name,
+            session_id=session_id,
+            is_multilabel=multilabel,
+            user_id=user_id
         )
     else:
-        # Overwrite Current Segmentation at that Resolution 
-        # if it Exists
-        seg = next(s for s in seg if s.voxel_size == voxelSize)
-
-    # Write the Segmentation
-    seg.from_numpy(inputSegmentVol, dtype=np.uint8)
-
+        # Overwrite the current segmentation at the specified voxel size if it exists
+        segmentation = next(seg for seg in segmentations if seg.voxel_size == voxel_size)
+    
+    # Write the segmentation data
+    segmentation.from_numpy(segmentation_volume, dtype=np.uint8)
