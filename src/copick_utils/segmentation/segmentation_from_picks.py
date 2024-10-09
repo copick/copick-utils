@@ -148,6 +148,6 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
         scaled_radius = int(radius / scale_factor)        
 
         # Once all picks are painted at this level, write the array to the Zarr store
-        segmentation_group[level] = _from_picks(pick_set, painting_seg_array, radius, pickable_object.label, voxel_spacing)
+        segmentation_group[level] = _from_picks(pick_set, painting_seg_array, scaled_radius, pickable_object.label, voxel_spacing)
 
     return seg
