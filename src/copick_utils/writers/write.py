@@ -36,7 +36,7 @@ def tomogram(
         tomogram = voxel_spacing.get_tomogram(algorithm)
     
     # Write the tomogram data
-    tomogram.from_numpy(input_volume, voxel_size)
+    tomogram.from_numpy(input_volume)
 
 
 def segmentation(
