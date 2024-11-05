@@ -31,9 +31,11 @@ def tomogram(
     voxel_spacing = run.get_voxel_spacing(voxel_size)
     if voxel_spacing is None:
         voxel_spacing = run.new_voxel_spacing(voxel_size=voxel_size)
+    
+    # Check if We Need to Create a New Tomogram for Given Algorithm
+    tomogram = voxel_spacing.get_tomogram(algorithm)
+    if tomogram is None:
         tomogram = voxel_spacing.new_tomogram(algorithm)
-    else:
-        tomogram = voxel_spacing.get_tomogram(algorithm)
     
     # Write the tomogram data
     tomogram.from_numpy(input_volume)
