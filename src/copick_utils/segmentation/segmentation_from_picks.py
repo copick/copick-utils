@@ -75,11 +75,13 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
     else:
         seg = segs[0]
 
-    segmentation_group = zarr.open_group(seg.path, mode="a")
+    segmentation_group = zarr.open(seg.zarr(), mode="a")
     highest_res_name = "0"
 
     # Get the highest resolution dimensions and create a new array if necessary
-    highest_res_shape = segmentation_group[highest_res_name].shape if highest_res_name in segmentation_group else tomogram.shape
+    tomogram_zarr = zarr.open(tomogram.zarr(), "r")
+
+    highest_res_shape = tomogram_zarr[highest_res_name].shape
     if highest_res_name not in segmentation_group:
         segmentation_group.create(highest_res_name, shape=highest_res_shape, dtype=np.uint16, overwrite=True)
 
@@ -93,8 +95,6 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
     # Write back the highest resolution data
     segmentation_group[highest_res_name][:] = highest_res_seg
 
-    tomogram_zarr = zarr.open(tomogram.zarr(), "r")
-
     # Downsample to create lower resolution scales
     multiscale_metadata = tomogram_zarr.attrs.get('multiscales', [{}])[0].get('datasets', [])
     for level_index, level_metadata in enumerate(multiscale_metadata):
@@ -102,15 +102,14 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
             continue
 
         level_name = level_metadata.get("path", str(level_index))
-        expected_shape = tuple(segmentation_group[level_name].shape)
+        expected_shape = tuple(tomogram_zarr[level_name].shape)
 
         # Compute scaling factors relative to the highest resolution shape
         scaled_array = downsample_to_exact_shape(highest_res_seg, expected_shape)
 
         # Create or update the Zarr array for this level
-        if level_name in segmentation_group:
-            segmentation_group[level_name][:] = scaled_array
-        else:
+        if level_name not in segmentation_group:
             segmentation_group.create(level_name, shape=expected_shape, data=scaled_array, dtype=np.uint16, overwrite=True)
+        segmentation_group[level_name][:] = scaled_array
 
     return seg
