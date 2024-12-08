@@ -1,10 +1,11 @@
 import numpy as np
 import zarr
+from scipy.ndimage import zoom
 import copick
 
-def from_picks(pick, 
+def from_picks(pick,
                seg_volume,
-               radius: float = 10.0, 
+               radius: float = 10.0,
                label_value: int = 1,
                voxel_spacing: float = 10):
     """
@@ -22,68 +23,61 @@ def from_picks(pick,
         The integer value used to label the sphere regions in the segmentation volume. Default is 1.
     voxel_spacing : float, optional
         The spacing of voxels in the segmentation volume, used to scale the radius of the spheres. Default is 10.
-
     Returns:
     --------
     numpy.ndarray
-        The modified segmentation volume with spheres inserted at pick locations.
+        The modified segmentation volume with spheres inserted at pick locations.    
     """
-        
     def create_sphere(shape, center, radius, val):
-        """Creates a 3D sphere within the given shape, centered at the given coordinates."""
         zc, yc, xc = center
         z, y, x = np.indices(shape)
-        
-        # Compute squared distance from the center
         distance_sq = (x - xc)**2 + (y - yc)**2 + (z - zc)**2
-        
-        # Create a mask for points within the sphere
         sphere = np.zeros(shape, dtype=np.float32)
         sphere[distance_sq <= radius**2] = val
         return sphere
 
     def get_relative_target_coordinates(center, delta, shape):
-        """
-        Calculate the low and high index bounds for placing a sphere within a 3D volume, 
-        ensuring that the indices are clamped to the valid range of the volume dimensions.
-        """
-
-        low = max(int(np.floor(center) - delta), 0)
-        high = min(int(np.ceil(center) + delta + 1), shape)
-
+        low = max(int(np.floor(center - delta)), 0)
+        high = min(int(np.ceil(center + delta + 1)), shape)
         return low, high
 
     # Adjust radius for voxel spacing
-    radius_voxel = radius / voxel_spacing
+    radius_voxel = max(radius / voxel_spacing, 1)
     delta = int(np.ceil(radius_voxel))
 
-    # Get volume dimensions
-    vol_shape_x, vol_shape_y, vol_shape_z = seg_volume.shape
-
     # Paint each pick as a sphere
-    for pick in pick.points:
-        
-        # Adjust the pick's location for voxel spacing
-        cx, cy, cz = pick.location.z / voxel_spacing, pick.location.y / voxel_spacing, pick.location.x / voxel_spacing
+    for point in pick.points:
+        # Convert the pick's location from angstroms to voxel units
+        cx, cy, cz = point.location.x / voxel_spacing, point.location.y / voxel_spacing, point.location.z / voxel_spacing
 
-        # Calculate subarray bounds, clamped to the valid volume dimensions
-        xLow, xHigh = get_relative_target_coordinates(cx, delta, vol_shape_x)
-        yLow, yHigh = get_relative_target_coordinates(cy, delta, vol_shape_y)
-        zLow, zHigh = get_relative_target_coordinates(cz, delta, vol_shape_z)
+        # Calculate subarray bounds
+        xLow, xHigh = get_relative_target_coordinates(cx, delta, seg_volume.shape[2])
+        yLow, yHigh = get_relative_target_coordinates(cy, delta, seg_volume.shape[1])
+        zLow, zHigh = get_relative_target_coordinates(cz, delta, seg_volume.shape[0])
 
         # Subarray shape
-        subarray_shape = (xHigh - xLow, yHigh - yLow, zHigh - zLow)
+        subarray_shape = (zHigh - zLow, yHigh - yLow, xHigh - xLow)
+        if any(dim <= 0 for dim in subarray_shape):
+            continue
 
         # Compute the local center of the sphere within the subarray
-        local_center = (cx - xLow, cy - yLow, cz - zLow)
-
-        # Create the sphere
+        local_center = (cz - zLow, cy - yLow, cx - xLow)
         sphere = create_sphere(subarray_shape, local_center, radius_voxel, label_value)
 
         # Assign Sphere to Segmentation Target Volume
-        seg_volume[xLow:xHigh, yLow:yHigh, zLow:zHigh] = np.maximum(seg_volume[xLow:xHigh, yLow:yHigh, zLow:zHigh], sphere)
+        seg_volume[zLow:zHigh, yLow:yHigh, xLow:xHigh] = np.maximum(seg_volume[zLow:zHigh, yLow:yHigh, xLow:xHigh], sphere)
 
     return seg_volume
+
+
+def downsample_to_exact_shape(array, target_shape):
+    """
+    Downsamples a 3D array to match the target shape using nearest-neighbor interpolation.
+    Ensures that the resulting array has the exact target shape.
+    """
+    zoom_factors = [t / s for t, s in zip(target_shape, array.shape)]
+    return zoom(array, zoom_factors, order=0)
+
 
 def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spacing, tomo_type, pickable_object, pick_set, user_id="paintedPicks", session_id="0"):
     """
@@ -127,27 +121,41 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
     else:
         seg = segs[0]
 
-    segmentation_group = zarr.open_group(seg.path, mode="a")
-    
-    # Ensure that the tomogram Zarr is available
-    tomogram_group = zarr.open(tomogram.zarr(), "r")
-    multiscale_levels = list(tomogram_group.array_keys())
+    segmentation_group = zarr.open(seg.zarr(), mode="a")
+    highest_res_name = "0"
 
-    # Iterate through multiscale levels to paint picks as spheres
-    for level in multiscale_levels:
-        level_data = tomogram_group[level]
-        shape = level_data.shape
+    # Get the highest resolution dimensions and create a new array if necessary
+    tomogram_zarr = zarr.open(tomogram.zarr(), "r")
 
-        # Load or initialize the segmentation array in memory for the current level
-        if level in segmentation_group:
-            painting_seg_array = np.array(segmentation_group[level])
-        else:
-            painting_seg_array = np.zeros(shape, dtype=np.uint16)
+    highest_res_shape = tomogram_zarr[highest_res_name].shape
+    if highest_res_name not in segmentation_group:
+        segmentation_group.create(highest_res_name, shape=highest_res_shape, dtype=np.uint16, overwrite=True)
 
-        scale_factor = tomogram_group.attrs.get('multiscales', [{}])[0].get('datasets', [{}])[int(level)].get('scale', 1)
-        scaled_radius = int(radius / scale_factor)        
+    # Initialize or load the highest resolution array
+    highest_res_seg = segmentation_group[highest_res_name][:]
+    highest_res_seg.fill(0)
 
-        # Once all picks are painted at this level, write the array to the Zarr store
-        segmentation_group[level] = from_picks(pick_set, painting_seg_array, scaled_radius, pickable_object.label, voxel_spacing)
+    # Paint picks into the highest resolution array
+    highest_res_seg = from_picks(pick_set, highest_res_seg, radius, pickable_object.label, voxel_spacing)
+
+    # Write back the highest resolution data
+    segmentation_group[highest_res_name][:] = highest_res_seg
+
+    # Downsample to create lower resolution scales
+    multiscale_metadata = tomogram_zarr.attrs.get('multiscales', [{}])[0].get('datasets', [])
+    for level_index, level_metadata in enumerate(multiscale_metadata):
+        if level_index == 0:
+            continue
+
+        level_name = level_metadata.get("path", str(level_index))
+        expected_shape = tuple(tomogram_zarr[level_name].shape)
+
+        # Compute scaling factors relative to the highest resolution shape
+        scaled_array = downsample_to_exact_shape(highest_res_seg, expected_shape)
+
+        # Create/overwrite the Zarr array for this level
+        segmentation_group.create_dataset(level_name, shape=expected_shape, data=scaled_array, dtype=np.uint16, overwrite=True)
+
+        segmentation_group[level_name][:] = scaled_array
 
     return seg
