@@ -51,8 +51,11 @@ def picks_from_segmentation(segmentation, segmentation_idx, maxima_filter_size, 
     # Save centroids as picks
     if all_centroids:
         pick_set = run.new_picks(pickable_object, session_id, user_id)
-        pick_set.points = [{'x': c[2] * voxel_spacing, 'y': c[1] * voxel_spacing, 'z': c[0] * voxel_spacing} for c in all_centroids]
+
+        positions = np.array(all_centroids)[:, [2, 1, 0]] * voxel_spacing
+        pick_set.from_numpy(positions=positions)
         pick_set.store()
+        
         print(f"Centroids for label {segmentation_idx} saved successfully.")
         return pick_set
     else:
