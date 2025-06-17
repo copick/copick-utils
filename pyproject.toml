@@ -1,17 +1,18 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
 
-[project]
+[tool.poetry]
 name = "copick-utils"
-dynamic = ["version"]
-description = ''
+version = "0.5.0"
+description = "Utilities for copick"
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
 keywords = []
 authors = [
-  { name = "Kyle Harrington", email = "czi@kyleharrington.com" },
+  "Kyle Harrington <czi@kyleharrington.com>",
+  "Jonathan Schwartz <jonathan.schwartz@czii.org>"
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -24,24 +25,20 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = [
-  "copick >=0.8.0",
-]
+packages = [{ include = "copick_utils", from = "src" }]
+# Or just omit 'packages' if you're using poetry’s default layout
 
-[project.urls]
-Documentation = "https://github.com/Kyle Harrington/copick-utils#readme"
-Issues = "https://github.com/Kyle Harrington/copick-utils/issues"
-Source = "https://github.com/Kyle Harrington/copick-utils"
+[tool.poetry.dependencies]
+copick = ">=0.8.0"
 
-[tool.hatch.version]
-path = "src/copick_utils/__about__.py"
+[tool.poetry.urls]
+Documentation = "https://github.com/KyleHarrington/copick-utils#readme"
+Issues = "https://github.com/KyleHarrington/copick-utils/issues"
+Source = "https://github.com/KyleHarrington/copick-utils"
 
-[tool.hatch.envs.types]
-extra-dependencies = [
-  "mypy>=1.0.0",
-]
-[tool.hatch.envs.types.scripts]
-check = "mypy --install-types --non-interactive {args:src/copick_utils tests}"
+[tool.poetry.scripts]
+# optional if you expose CLI commands
+# copick-utils = "copick_utils.cli:main"
 
 [tool.coverage.run]
 source_pkgs = ["copick_utils", "tests"]
