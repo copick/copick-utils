@@ -1,51 +1,105 @@
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
-[tool.poetry]
+[project]
 name = "copick-utils"
-version = "0.6.0"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+dependencies = [
+    "copick>=0.8.0",
+]
+authors = [
+    { name = "Kyle Harrington", email = "czi@kyleharrington.com" },
+    { name = "Jonathan Schwartz", email = "jonathan.schwartz@czii.org" },
+]
 description = "Utilities for copick"
 readme = "README.md"
-license = "MIT"
-keywords = []
-authors = [
-  "Kyle Harrington <czi@kyleharrington.com>",
-  "Jonathan Schwartz <jonathan.schwartz@czii.org>"
-]
-classifiers = [
-  "Development Status :: 4 - Beta",
-  "Programming Language :: Python",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
-]
-packages = [{ include = "copick_utils", from = "src" }]
+license = { file = "LICENSE" }
+keywords = ["copick", "cryoet", "cryo-et", "tomography", "annotation", "utilities"]
 
-[tool.poetry.dependencies]
-python = ">=3.9"
-copick = ">=0.8.0"
-
-[tool.poetry.urls]
-Documentation = "https://github.com/KyleHarrington/copick-utils#readme"
+[project.urls]
+Repository = "https://github.com/KyleHarrington/copick-utils.git"
 Issues = "https://github.com/KyleHarrington/copick-utils/issues"
-Source = "https://github.com/KyleHarrington/copick-utils"
+Documentation = "https://github.com/KyleHarrington/copick-utils#readme"
 
-[tool.poetry.scripts]
-# optional if you expose CLI commands
-# copick-utils = "copick_utils.cli:main"
+[project.optional-dependencies]
+dev = [
+    "black>=25.1.0",
+    "hatchling>=1.25.0",
+    "hatch-vcs>=0.4.0",
+    "pre-commit>=4.2.0",
+    "ruff>=0.12.0",
+]
+
+[tool.hatch.version]
+path = "src/copick_utils/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.black]
+line-length = 120
+target_version = ['py311']
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "B",       # bugbear
+    "I",       # isort
+    "N",       # pep8-naming
+    "ASYNC",   # async
+    "COM",     # commas
+    "C4",      # comprehensions
+    "DTZ",     # datetimez
+    "ISC",     # implicit-str-concat
+    "G",       # logging-format
+    "T20",     # print
+    "SIM",     # simplify
+]
+ignore = [
+    "G004",   # logging format
+    "W293",   # blank line contains whitespace
+    "B008",   # Do not perform calls in argument defaults
+    "B905",   # `zip()` without an explicit `strict=` parameter
+    "N802",   # Function name should be lowercase
+    "N805",   # First argument of a method should be named `self`
+    "N806",   # Variable in function should be lowercase
+    "N999",   # Invalid module name
+    "E501",   # line too long
+    "C408",   # rewrite empty built-ins as literals
+    "T201",   # print statements.
+    "DTZ007", # Datetime objects without timezones.
+    "DTZ005", # More datetimes without timezones.
+]
+
+[tool.ruff.lint.isort]
+known-first-party =["common"]
+
+[tool.ruff.lint.flake8-quotes]
+docstring-quotes = "double"
 
 [tool.coverage.run]
 source_pkgs = ["copick_utils", "tests"]
 branch = true
 parallel = true
-omit = [
-  "src/copick_utils/__about__.py",
-]
 
 [tool.coverage.paths]
 copick_utils = ["src/copick_utils", "*/copick-utils/src/copick_utils"]

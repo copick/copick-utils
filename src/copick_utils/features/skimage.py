@@ -1,19 +1,30 @@
 import numpy as np
-from skimage.feature import multiscale_basic_features
 import zarr
 from numcodecs import Blosc
+from skimage.feature import multiscale_basic_features
 
-def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True, edges=True, texture=True, sigma_min=0.5, sigma_max=16.0, feature_chunk_size=None):
+
+def compute_skimage_features(
+    tomogram,
+    feature_type,
+    copick_root,
+    intensity=True,
+    edges=True,
+    texture=True,
+    sigma_min=0.5,
+    sigma_max=16.0,
+    feature_chunk_size=None,
+):
     """
     Processes the tomogram chunkwise and computes the multiscale basic features.
     Allows for optional feature chunk size.
     """
-    image = zarr.open(tomogram.zarr(), mode='r')['0']
+    image = zarr.open(tomogram.zarr(), mode="r")["0"]
     input_chunk_size = feature_chunk_size if feature_chunk_size else image.chunks
     chunk_size = input_chunk_size if len(input_chunk_size) == 3 else input_chunk_size[1:]
-    
+
     overlap = int(chunk_size[0] / 2)
-    
+
     print(f"Processing image with shape {image.shape}")
     print(f"Using chunk size: {chunk_size}, overlap: {overlap}")
 
@@ -25,7 +36,7 @@ def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True
         edges=edges,
         texture=texture,
         sigma_min=sigma_min,
-        sigma_max=sigma_max
+        sigma_max=sigma_max,
     )
     num_features = test_features.shape[-1]
 
@@ -43,10 +54,10 @@ def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True
     out_array = zarr.create(
         shape=(num_features, *image.shape),
         chunks=feature_chunk_size,
-        dtype='float32',
-        compressor=Blosc(cname='zstd', clevel=3, shuffle=2),
+        dtype="float32",
+        compressor=Blosc(cname="zstd", clevel=3, shuffle=2),
         store=feature_store,
-        overwrite=True
+        overwrite=True,
     )
 
     # Process each chunk
@@ -67,7 +78,7 @@ def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True
                     edges=edges,
                     texture=texture,
                     sigma_min=sigma_min,
-                    sigma_max=sigma_max
+                    sigma_max=sigma_max,
                 )
 
                 # Adjust indices for overlap
@@ -78,7 +89,12 @@ def compute_skimage_features(tomogram, feature_type, copick_root, intensity=True
                 # Ensure contiguous array and correct slicing
                 contiguous_chunk = np.ascontiguousarray(chunk_features[z_slice, y_slice, x_slice].transpose(3, 0, 1, 2))
 
-                out_array[0:num_features, z:z + chunk_size[0], y:y + chunk_size[1], x:x + chunk_size[2]] = contiguous_chunk
+                out_array[
+                    0:num_features,
+                    z : z + chunk_size[0],
+                    y : y + chunk_size[1],
+                    x : x + chunk_size[2],
+                ] = contiguous_chunk
 
     print(f"Features saved under feature type '{feature_type}'")
     return copick_features
@@ -91,6 +107,10 @@ if __name__ == "__main__":
         tomogram=tomo,
         feature_type="skimageFeatures",
         copick_root=root,
-        intensity=True, edges=True, texture=True, sigma_min=0.5, sigma_max=16.0,
-        feature_chunk_size=None  # Default to detected chunk size
+        intensity=True,
+        edges=True,
+        texture=True,
+        sigma_min=0.5,
+        sigma_max=16.0,
+        feature_chunk_size=None,  # Default to detected chunk size
     )
