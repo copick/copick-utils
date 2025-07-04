@@ -1,12 +1,7 @@
-from typing import Any, Dict, List
 import numpy as np
 
-def tomogram(
-    run,
-    input_volume,
-    voxel_size=10,
-    algorithm="wbp"
-):
+
+def tomogram(run, input_volume, voxel_size=10, algorithm="wbp"):
     """
     Writes a volumetric tomogram into an OME-Zarr format within a Copick directory.
 
@@ -26,17 +21,17 @@ def tomogram(
     copick.Tomogram
         The created or modified tomogram object.
     """
-    
+
     # Retrieve or create voxel spacing
     voxel_spacing = run.get_voxel_spacing(voxel_size)
     if voxel_spacing is None:
         voxel_spacing = run.new_voxel_spacing(voxel_size=voxel_size)
-    
+
     # Check if We Need to Create a New Tomogram for Given Algorithm
     tomogram = voxel_spacing.get_tomogram(algorithm)
     if tomogram is None:
         tomogram = voxel_spacing.new_tomogram(tomo_type=algorithm)
-    
+
     # Write the tomogram data
     tomogram.from_numpy(input_volume)
 
@@ -48,7 +43,7 @@ def segmentation(
     name="segmentation",
     session_id="0",
     voxel_size=10,
-    multilabel=True
+    multilabel=True,
 ):
     """
     Writes a segmentation into an OME-Zarr format within a Copick directory.
@@ -75,7 +70,7 @@ def segmentation(
     copick.Segmentation
         The created or modified segmentation object.
     """
-    
+
     # Retrieve or create a segmentation
     segmentations = run.get_segmentations(name=name, user_id=user_id, session_id=session_id)
 
@@ -86,11 +81,11 @@ def segmentation(
             name=name,
             session_id=session_id,
             is_multilabel=multilabel,
-            user_id=user_id
+            user_id=user_id,
         )
     else:
         # Overwrite the current segmentation at the specified voxel size if it exists
         segmentation = next(seg for seg in segmentations if seg.voxel_size == voxel_size)
-    
+
     # Write the segmentation data
     segmentation.from_numpy(segmentation_volume, dtype=np.uint8)

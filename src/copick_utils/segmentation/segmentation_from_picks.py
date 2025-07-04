@@ -1,13 +1,9 @@
 import numpy as np
 import zarr
 from scipy.ndimage import zoom
-import copick
 
-def from_picks(pick,
-               seg_volume,
-               radius: float = 10.0,
-               label_value: int = 1,
-               voxel_spacing: float = 10):
+
+def from_picks(pick, seg_volume, radius: float = 10.0, label_value: int = 1, voxel_spacing: float = 10):
     """
     Paints picks into a segmentation volume as spheres.
 
@@ -26,12 +22,13 @@ def from_picks(pick,
     Returns:
     --------
     numpy.ndarray
-        The modified segmentation volume with spheres inserted at pick locations.    
+        The modified segmentation volume with spheres inserted at pick locations.
     """
+
     def create_sphere(shape, center, radius, val):
         zc, yc, xc = center
         z, y, x = np.indices(shape)
-        distance_sq = (x - xc)**2 + (y - yc)**2 + (z - zc)**2
+        distance_sq = (x - xc) ** 2 + (y - yc) ** 2 + (z - zc) ** 2
         sphere = np.zeros(shape, dtype=np.float32)
         sphere[distance_sq <= radius**2] = val
         return sphere
@@ -48,7 +45,11 @@ def from_picks(pick,
     # Paint each pick as a sphere
     for point in pick.points:
         # Convert the pick's location from angstroms to voxel units
-        cx, cy, cz = point.location.x / voxel_spacing, point.location.y / voxel_spacing, point.location.z / voxel_spacing
+        cx, cy, cz = (
+            point.location.x / voxel_spacing,
+            point.location.y / voxel_spacing,
+            point.location.z / voxel_spacing,
+        )
 
         # Calculate subarray bounds
         xLow, xHigh = get_relative_target_coordinates(cx, delta, seg_volume.shape[2])
@@ -65,7 +66,10 @@ def from_picks(pick,
         sphere = create_sphere(subarray_shape, local_center, radius_voxel, label_value)
 
         # Assign Sphere to Segmentation Target Volume
-        seg_volume[zLow:zHigh, yLow:yHigh, xLow:xHigh] = np.maximum(seg_volume[zLow:zHigh, yLow:yHigh, xLow:xHigh], sphere)
+        seg_volume[zLow:zHigh, yLow:yHigh, xLow:xHigh] = np.maximum(
+            seg_volume[zLow:zHigh, yLow:yHigh, xLow:xHigh],
+            sphere,
+        )
 
     return seg_volume
 
@@ -79,7 +83,17 @@ def downsample_to_exact_shape(array, target_shape):
     return zoom(array, zoom_factors, order=0)
 
 
-def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spacing, tomo_type, pickable_object, pick_set, user_id="paintedPicks", session_id="0"):
+def segmentation_from_picks(
+    radius,
+    painting_segmentation_name,
+    run,
+    voxel_spacing,
+    tomo_type,
+    pickable_object,
+    pick_set,
+    user_id="paintedPicks",
+    session_id="0",
+):
     """
     Paints picks from a run into a multiscale segmentation array, representing them as spheres in 3D space.
 
@@ -115,7 +129,13 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
         raise ValueError("Tomogram not found for the given parameters.")
 
     # Use copick to create a new segmentation if one does not exist
-    segs = run.get_segmentations(user_id=user_id, session_id=session_id, is_multilabel=True, name=painting_segmentation_name, voxel_size=voxel_spacing)
+    segs = run.get_segmentations(
+        user_id=user_id,
+        session_id=session_id,
+        is_multilabel=True,
+        name=painting_segmentation_name,
+        voxel_size=voxel_spacing,
+    )
     if len(segs) == 0:
         seg = run.new_segmentation(voxel_spacing, painting_segmentation_name, session_id, True, user_id=user_id)
     else:
@@ -142,7 +162,7 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
     segmentation_group[highest_res_name][:] = highest_res_seg
 
     # Downsample to create lower resolution scales
-    multiscale_metadata = tomogram_zarr.attrs.get('multiscales', [{}])[0].get('datasets', [])
+    multiscale_metadata = tomogram_zarr.attrs.get("multiscales", [{}])[0].get("datasets", [])
     for level_index, level_metadata in enumerate(multiscale_metadata):
         if level_index == 0:
             continue
@@ -154,7 +174,13 @@ def segmentation_from_picks(radius, painting_segmentation_name, run, voxel_spaci
         scaled_array = downsample_to_exact_shape(highest_res_seg, expected_shape)
 
         # Create/overwrite the Zarr array for this level
-        segmentation_group.create_dataset(level_name, shape=expected_shape, data=scaled_array, dtype=np.uint16, overwrite=True)
+        segmentation_group.create_dataset(
+            level_name,
+            shape=expected_shape,
+            data=scaled_array,
+            dtype=np.uint16,
+            overwrite=True,
+        )
 
         segmentation_group[level_name][:] = scaled_array
 

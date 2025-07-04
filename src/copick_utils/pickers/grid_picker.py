@@ -2,6 +2,7 @@ import numpy as np
 import zarr
 from copick.models import CopickPoint
 
+
 def grid_picker(pickable_obj, run, tomogram, grid_spacing_factor, session_id="0", user_id="gridPicker"):
     """
     Creates a grid of picks for a pickable object based on a tomogram and grid spacing factor.
@@ -28,14 +29,14 @@ def grid_picker(pickable_obj, run, tomogram, grid_spacing_factor, session_id="0"
     grid_spacing = radius * grid_spacing_factor
 
     # Open the highest resolution of the tomogram
-    image = zarr.open(tomogram.zarr(), mode='r')['0']
+    image = zarr.open(tomogram.zarr(), mode="r")["0"]
 
     # Create a grid of points
     points = []
     for z in np.arange(0, image.shape[0], grid_spacing):
         for y in np.arange(0, image.shape[1], grid_spacing):
             for x in np.arange(0, image.shape[2], grid_spacing):
-                points.append(CopickPoint(location={'x': x, 'y': y, 'z': z}))
+                points.append(CopickPoint(location={"x": x, "y": y, "z": z}))
 
     # Save the picks
     pick_set = run.new_picks(obj_name, session_id, user_id)
@@ -44,6 +45,7 @@ def grid_picker(pickable_obj, run, tomogram, grid_spacing_factor, session_id="0"
 
     print(f"Saved {len(points)} grid points for object {obj_name}.")
     return pick_set
+
 
 if __name__ == "__main__":
     import copick
@@ -66,4 +68,3 @@ if __name__ == "__main__":
 
     for pickable_obj in root.pickable_objects:
         create_grid_of_picks(pickable_obj, run, tomogram, grid_spacing_factor, session_id, user_id)
-
