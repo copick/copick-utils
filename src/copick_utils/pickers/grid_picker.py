@@ -67,4 +67,4 @@ if __name__ == "__main__":
     tomogram = voxel_spacing_obj.get_tomogram(tomo_type)
 
     for pickable_obj in root.pickable_objects:
-        create_grid_of_picks(pickable_obj, run, tomogram, grid_spacing_factor, session_id, user_id)
+        grid_picker(pickable_obj, run, tomogram, grid_spacing_factor, session_id, user_id)
