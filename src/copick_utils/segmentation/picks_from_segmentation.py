@@ -1,11 +1,22 @@
 import numpy as np
 import scipy.ndimage as ndi
-from skimage.segmentation import watershed
 from skimage.measure import regionprops
-from skimage.morphology import binary_erosion, binary_dilation, ball
+from skimage.morphology import ball, binary_dilation, binary_erosion
+from skimage.segmentation import watershed
 
 
-def picks_from_segmentation(segmentation, segmentation_idx, maxima_filter_size, min_particle_size, max_particle_size, session_id, user_id, pickable_object, run, voxel_spacing=1):
+def picks_from_segmentation(
+    segmentation,
+    segmentation_idx,
+    maxima_filter_size,
+    min_particle_size,
+    max_particle_size,
+    session_id,
+    user_id,
+    pickable_object,
+    run,
+    voxel_spacing=1,
+):
     """
     Process a specific label in the segmentation, extract centroids, and save them as picks.
 
@@ -36,7 +47,10 @@ def picks_from_segmentation(segmentation, segmentation_idx, maxima_filter_size, 
 
     # Distance transform and local maxima detection
     distance = ndi.distance_transform_edt(dilated)
-    local_max = (distance == ndi.maximum_filter(distance, footprint=np.ones((maxima_filter_size, maxima_filter_size, maxima_filter_size))))
+    local_max = distance == ndi.maximum_filter(
+        distance,
+        footprint=np.ones((maxima_filter_size, maxima_filter_size, maxima_filter_size)),
+    )
 
     # Watershed segmentation
     markers, _ = ndi.label(local_max)
@@ -55,7 +69,7 @@ def picks_from_segmentation(segmentation, segmentation_idx, maxima_filter_size, 
         positions = np.array(all_centroids)[:, [2, 1, 0]] * voxel_spacing
         pick_set.from_numpy(positions=positions)
         pick_set.store()
-        
+
         print(f"Centroids for label {segmentation_idx} saved successfully.")
         return pick_set
     else:
