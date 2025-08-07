@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/copick/copick-utils/compare/copick-utils-v0.6.1...copick-utils-v0.6.2) (2025-08-07)
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.4.0 to 6.5.0 ([#20](https://github.com/copick/copick-utils/issues/20)) ([13056ae](https://github.com/copick/copick-utils/commit/13056ae6ee0fc0132c20b5f0539614c9d4d4aa24))
+
 ## [0.6.1](https://github.com/copick/copick-utils/compare/copick-utils-v0.6.0...copick-utils-v0.6.1) (2025-07-16)
 
 
