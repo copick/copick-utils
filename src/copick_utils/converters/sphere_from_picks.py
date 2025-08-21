@@ -54,7 +54,8 @@ def fit_sphere_to_points(points: np.ndarray) -> Tuple[np.ndarray, float]:
 
 
 def deduplicate_spheres(
-    spheres: List[Tuple[np.ndarray, float]], min_distance: float = None,
+    spheres: List[Tuple[np.ndarray, float]],
+    min_distance: float = None,
 ) -> List[Tuple[np.ndarray, float]]:
     """
     Merge spheres that are too close to each other.
