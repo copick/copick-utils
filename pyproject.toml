@@ -19,7 +19,15 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "copick>=0.8.0",
+    "copick>=1.11.0",
+    "click",
+    "click-option-group",
+    "numpy",
+    "scipy",
+    "scikit-image",
+    "zarr",
+    "trimesh",
+    "tqdm",
 ]
 authors = [
     { name = "Kyle Harrington", email = "czi@kyleharrington.com" },
@@ -43,6 +51,23 @@ dev = [
     "pre-commit>=4.2.0",
     "ruff>=0.12.0",
 ]
+
+[project.entry-points."copick.convert.commands"]
+picks2seg = "copick_utils.cli.conversion_commands:picks2seg"
+seg2picks = "copick_utils.cli.conversion_commands:seg2picks"
+mesh2seg = "copick_utils.cli.conversion_commands:mesh2seg"
+seg2mesh = "copick_utils.cli.conversion_commands:seg2mesh"
+mesh2picks = "copick_utils.cli.conversion_commands:mesh2picks"
+picks2mesh = "copick_utils.cli.conversion_commands:picks2mesh"
+picks2sphere = "copick_utils.cli.conversion_commands:picks2sphere"
+picks2spheroid = "copick_utils.cli.conversion_commands:picks2spheroid"
+picks2plane = "copick_utils.cli.conversion_commands:picks2plane"
+picks2surface = "copick_utils.cli.conversion_commands:picks2surface"
+
+[project.entry-points."copick.process.commands"]
+separate_components = "copick_utils.cli.processing_commands:separate_components"
+skeletonize = "copick_utils.cli.processing_commands:skeletonize"
+fit_spline = "copick_utils.cli.processing_commands:fit_spline"
 
 [tool.hatch.version]
 path = "src/copick_utils/__init__.py"
