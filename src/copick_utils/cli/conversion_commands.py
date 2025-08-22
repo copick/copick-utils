@@ -751,7 +751,7 @@ def mesh2picks(
     "--clustering-eps",
     type=float,
     default=1.0,
-    help="DBSCAN eps parameter.",
+    help="DBSCAN eps parameter - maximum distance between points in a cluster (in angstroms).",
 )
 @optgroup.option(
     "--clustering-min-samples",
@@ -766,10 +766,20 @@ def mesh2picks(
     help="K-means n_clusters parameter.",
 )
 @optgroup.option(
-    "--voxel-spacing",
-    type=float,
-    required=True,
-    help="Voxel spacing for coordinate scaling.",
+    "--create-multiple/--no-create-multiple",
+    is_flag=True,
+    default=False,
+    help="Create separate meshes for each cluster.",
+)
+@optgroup.option(
+    "--individual-meshes/--no-individual-meshes",
+    is_flag=True,
+    default=False,
+    help="Create individual mesh files for each mesh instead of combining them.",
+)
+@optgroup.option(
+    "--session-id-template",
+    help="Template for individual mesh session IDs. Use {base_session_id} and {mesh_id} as placeholders (default: '{base_session_id}-{mesh_id:03d}').",
 )
 @optgroup.option(
     "--workers",
@@ -807,7 +817,9 @@ def picks2mesh(
     clustering_eps,
     clustering_min_samples,
     clustering_n_clusters,
-    voxel_spacing,
+    create_multiple,
+    individual_meshes,
+    session_id_template,
     workers,
     mesh_object_name,
     mesh_user_id,
@@ -854,7 +866,9 @@ def picks2mesh(
         use_clustering=use_clustering,
         clustering_method=clustering_method,
         clustering_params=clustering_params,
-        voxel_spacing=voxel_spacing,
+        create_multiple=create_multiple,
+        individual_meshes=individual_meshes,
+        session_id_template=session_id_template,
         run_names=run_names_list,
         workers=workers,
     )
@@ -912,7 +926,7 @@ def picks2mesh(
     "--clustering-eps",
     type=float,
     default=1.0,
-    help="DBSCAN eps parameter.",
+    help="DBSCAN eps parameter - maximum distance between points in a cluster (in angstroms).",
 )
 @optgroup.option(
     "--clustering-min-samples",
@@ -1049,7 +1063,6 @@ def picks2sphere(
         run_names=run_names_list,
         workers=workers,
     )
-    print(results)
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
     total_vertices = sum(result.get("vertices_created", 0) for result in results.values() if result)
     total_faces = sum(result.get("faces_created", 0) for result in results.values() if result)
@@ -1061,7 +1074,7 @@ def picks2sphere(
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="Convert picks to spheroid (ellipsoid) meshes.",
+    short_help="Convert picks to ellipsoid meshes.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -1103,7 +1116,7 @@ def picks2sphere(
     "--clustering-eps",
     type=float,
     default=1.0,
-    help="DBSCAN eps parameter.",
+    help="DBSCAN eps parameter - maximum distance between points in a cluster (in angstroms).",
 )
 @optgroup.option(
     "--clustering-min-samples",
@@ -1121,19 +1134,34 @@ def picks2sphere(
     "--subdivisions",
     type=int,
     default=2,
-    help="Number of spheroid subdivisions for mesh resolution.",
+    help="Number of ellipsoid subdivisions for mesh resolution.",
 )
 @optgroup.option(
     "--create-multiple/--no-create-multiple",
     is_flag=True,
     default=False,
-    help="Create separate spheroids for each cluster.",
+    help="Create separate ellipsoids for each cluster.",
 )
 @optgroup.option(
-    "--voxel-spacing",
+    "--deduplicate-ellipsoids/--no-deduplicate-ellipsoids",
+    is_flag=True,
+    default=True,
+    help="Merge overlapping ellipsoids to avoid duplicates.",
+)
+@optgroup.option(
+    "--min-ellipsoid-distance",
     type=float,
-    required=True,
-    help="Voxel spacing for coordinate scaling.",
+    help="Minimum distance between ellipsoid centers for deduplication (default: 0.5 * average major axis).",
+)
+@optgroup.option(
+    "--individual-meshes/--no-individual-meshes",
+    is_flag=True,
+    default=False,
+    help="Create individual mesh files for each ellipsoid instead of combining them.",
+)
+@optgroup.option(
+    "--session-id-template",
+    help="Template for individual mesh session IDs. Use {base_session_id} and {ellipsoid_id} as placeholders (default: '{base_session_id}-{ellipsoid_id:03d}').",
 )
 @optgroup.option(
     "--workers",
@@ -1158,7 +1186,7 @@ def picks2sphere(
     help="Session ID for created mesh.",
 )
 @add_debug_option
-def picks2spheroid(
+def picks2ellipsoid(
     config,
     run_names,
     pick_object_name,
@@ -1171,15 +1199,18 @@ def picks2spheroid(
     clustering_n_clusters,
     subdivisions,
     create_multiple,
-    voxel_spacing,
+    deduplicate_ellipsoids,
+    min_ellipsoid_distance,
+    individual_meshes,
+    session_id_template,
     workers,
     mesh_object_name,
     mesh_user_id,
     mesh_session_id,
     debug,
 ):
-    """Convert picks to spheroid (ellipsoid) meshes."""
-    from copick_utils.converters.spheroid_from_picks import spheroid_from_picks_batch
+    """Convert picks to ellipsoid meshes."""
+    from copick_utils.converters.ellipsoid_from_picks import ellipsoid_from_picks_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -1193,7 +1224,7 @@ def picks2spheroid(
     elif clustering_method == "kmeans":
         clustering_params = {"n_clusters": clustering_n_clusters}
 
-    logger.info(f"Converting picks to spheroid mesh for object '{pick_object_name}'")
+    logger.info(f"Converting picks to ellipsoid mesh for object '{pick_object_name}'")
     logger.info(f"Source picks: {pick_user_id}/{pick_session_id}")
     logger.info(f"Target mesh: {mesh_object_name} ({mesh_user_id}/{mesh_session_id})")
 
@@ -1202,7 +1233,7 @@ def picks2spheroid(
     else:
         logger.info(f"Processing all {len(root.runs)} runs")
 
-    results = spheroid_from_picks_batch(
+    results = ellipsoid_from_picks_batch(
         root=root,
         pick_object_name=pick_object_name,
         pick_user_id=pick_user_id,
@@ -1215,7 +1246,10 @@ def picks2spheroid(
         clustering_params=clustering_params,
         subdivisions=subdivisions,
         create_multiple=create_multiple,
-        voxel_spacing=voxel_spacing,
+        deduplicate_ellipsoids=deduplicate_ellipsoids,
+        min_ellipsoid_distance=min_ellipsoid_distance,
+        individual_meshes=individual_meshes,
+        session_id_template=session_id_template,
         run_names=run_names_list,
         workers=workers,
     )
@@ -1273,7 +1307,7 @@ def picks2spheroid(
     "--clustering-eps",
     type=float,
     default=1.0,
-    help="DBSCAN eps parameter.",
+    help="DBSCAN eps parameter - maximum distance between points in a cluster (in angstroms).",
 )
 @optgroup.option(
     "--clustering-min-samples",
@@ -1300,10 +1334,14 @@ def picks2spheroid(
     help="Create separate planes for each cluster.",
 )
 @optgroup.option(
-    "--voxel-spacing",
-    type=float,
-    required=True,
-    help="Voxel spacing for coordinate scaling.",
+    "--individual-meshes/--no-individual-meshes",
+    is_flag=True,
+    default=False,
+    help="Create individual mesh files for each plane instead of combining them.",
+)
+@optgroup.option(
+    "--session-id-template",
+    help="Template for individual mesh session IDs. Use {base_session_id} and {plane_id} as placeholders (default: '{base_session_id}-{plane_id:03d}').",
 )
 @optgroup.option(
     "--workers",
@@ -1341,7 +1379,8 @@ def picks2plane(
     clustering_n_clusters,
     padding,
     create_multiple,
-    voxel_spacing,
+    individual_meshes,
+    session_id_template,
     workers,
     mesh_object_name,
     mesh_user_id,
@@ -1385,7 +1424,8 @@ def picks2plane(
         clustering_params=clustering_params,
         padding=padding,
         create_multiple=create_multiple,
-        voxel_spacing=voxel_spacing,
+        individual_meshes=individual_meshes,
+        session_id_template=session_id_template,
         run_names=run_names_list,
         workers=workers,
     )
@@ -1455,7 +1495,7 @@ def picks2plane(
     "--clustering-eps",
     type=float,
     default=1.0,
-    help="DBSCAN eps parameter.",
+    help="DBSCAN eps parameter - maximum distance between points in a cluster (in angstroms).",
 )
 @optgroup.option(
     "--clustering-min-samples",
@@ -1476,10 +1516,14 @@ def picks2plane(
     help="Create separate surfaces for each cluster.",
 )
 @optgroup.option(
-    "--voxel-spacing",
-    type=float,
-    required=True,
-    help="Voxel spacing for coordinate scaling.",
+    "--individual-meshes/--no-individual-meshes",
+    is_flag=True,
+    default=False,
+    help="Create individual mesh files for each surface instead of combining them.",
+)
+@optgroup.option(
+    "--session-id-template",
+    help="Template for individual mesh session IDs. Use {base_session_id} and {surface_id} as placeholders (default: '{base_session_id}-{surface_id:03d}').",
 )
 @optgroup.option(
     "--workers",
@@ -1518,7 +1562,8 @@ def picks2surface(
     clustering_min_samples,
     clustering_n_clusters,
     create_multiple,
-    voxel_spacing,
+    individual_meshes,
+    session_id_template,
     workers,
     mesh_object_name,
     mesh_user_id,
@@ -1563,7 +1608,8 @@ def picks2surface(
         clustering_method=clustering_method,
         clustering_params=clustering_params,
         create_multiple=create_multiple,
-        voxel_spacing=voxel_spacing,
+        individual_meshes=individual_meshes,
+        session_id_template=session_id_template,
         run_names=run_names_list,
         workers=workers,
     )
