@@ -1,18 +1,18 @@
 """CLI commands for copick-utils."""
 
 from .conversion_commands import (
-    mesh2seg,
-    seg2mesh,
-    picks2seg,
-    seg2picks,
     mesh2picks,
+    mesh2seg,
+    picks2ellipsoid,
     picks2mesh,
-    picks2surface,
     picks2plane,
+    picks2seg,
     picks2sphere,
-    picks2spheroid,
+    picks2surface,
+    seg2mesh,
+    seg2picks,
 )
-from .processing_commands import separate_components, skeletonize, fit_spline
+from .processing_commands import fit_spline, separate_components, skeletonize
 
 __all__ = [
     "picks2seg",
@@ -24,7 +24,7 @@ __all__ = [
     "picks2surface",
     "picks2plane",
     "picks2sphere",
-    "picks2spheroid",
+    "picks2ellipsoid",
     "separate_components",
     "skeletonize",
     "fit_spline",

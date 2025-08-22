@@ -60,7 +60,7 @@ seg2mesh = "copick_utils.cli.conversion_commands:seg2mesh"
 mesh2picks = "copick_utils.cli.conversion_commands:mesh2picks"
 picks2mesh = "copick_utils.cli.conversion_commands:picks2mesh"
 picks2sphere = "copick_utils.cli.conversion_commands:picks2sphere"
-picks2spheroid = "copick_utils.cli.conversion_commands:picks2spheroid"
+picks2ellipsoid = "copick_utils.cli.conversion_commands:picks2ellipsoid"
 picks2plane = "copick_utils.cli.conversion_commands:picks2plane"
 picks2surface = "copick_utils.cli.conversion_commands:picks2surface"
 

@@ -6,6 +6,13 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
+from copick_utils.cli.util import (
+    add_clustering_options,
+    add_mesh_output_options,
+    add_pick_input_options,
+    add_workers_option,
+)
+
 
 @click.command(
     context_settings={"show_default": True},
@@ -16,104 +23,29 @@ from copick.util.log import get_logger
 @optgroup.group("\nInput Options", help="Options related to the input picks.")
 @optgroup.option(
     "--run-names",
+    "-r",
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@optgroup.option(
-    "--pick-object-name",
-    required=True,
-    help="Name of the pick object to convert.",
-)
-@optgroup.option(
-    "--pick-user-id",
-    required=True,
-    help="User ID of the picks to convert.",
-)
-@optgroup.option(
-    "--pick-session-id",
-    required=True,
-    help="Session ID of the picks to convert.",
-)
+@add_pick_input_options
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
     "--mesh-type",
+    "-t",
     type=click.Choice(["convex_hull", "alpha_shape"]),
     default="convex_hull",
     help="Type of mesh to create.",
 )
 @optgroup.option(
     "--alpha",
+    "-a",
     type=float,
     help="Alpha parameter for alpha shapes (required if mesh-type=alpha_shape).",
 )
-@optgroup.option(
-    "--use-clustering/--no-use-clustering",
-    is_flag=True,
-    default=False,
-    help="Cluster points before mesh creation.",
-)
-@optgroup.option(
-    "--clustering-method",
-    type=click.Choice(["dbscan", "kmeans"]),
-    default="dbscan",
-    help="Clustering method.",
-)
-@optgroup.option(
-    "--clustering-eps",
-    type=float,
-    default=1.0,
-    help="DBSCAN eps parameter - maximum distance between points in a cluster (in angstroms).",
-)
-@optgroup.option(
-    "--clustering-min-samples",
-    type=int,
-    default=3,
-    help="DBSCAN min_samples parameter.",
-)
-@optgroup.option(
-    "--clustering-n-clusters",
-    type=int,
-    default=1,
-    help="K-means n_clusters parameter.",
-)
-@optgroup.option(
-    "--create-multiple/--no-create-multiple",
-    is_flag=True,
-    default=False,
-    help="Create separate meshes for each cluster.",
-)
-@optgroup.option(
-    "--individual-meshes/--no-individual-meshes",
-    is_flag=True,
-    default=False,
-    help="Create individual mesh files for each mesh instead of combining them.",
-)
-@optgroup.option(
-    "--session-id-template",
-    help="Template for individual mesh session IDs. Use {base_session_id} and {mesh_id} as placeholders (default: '{base_session_id}-{mesh_id:03d}').",
-)
-@optgroup.option(
-    "--workers",
-    type=int,
-    default=8,
-    help="Number of worker processes.",
-)
+@add_clustering_options
+@add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@optgroup.option(
-    "--mesh-object-name",
-    required=True,
-    help="Name of the mesh object to create.",
-)
-@optgroup.option(
-    "--mesh-user-id",
-    default="from-picks",
-    help="User ID for created mesh.",
-)
-@optgroup.option(
-    "--mesh-session-id",
-    default="0",
-    help="Session ID for created mesh.",
-)
+@add_mesh_output_options
 @add_debug_option
 def picks2mesh(
     config,
@@ -128,13 +60,12 @@ def picks2mesh(
     clustering_eps,
     clustering_min_samples,
     clustering_n_clusters,
-    create_multiple,
-    individual_meshes,
-    session_id_template,
     workers,
     mesh_object_name,
     mesh_user_id,
     mesh_session_id,
+    create_multiple,
+    individual_meshes,
     debug,
 ):
     """Convert picks to meshes using convex hull or alpha shapes."""
@@ -179,7 +110,7 @@ def picks2mesh(
         clustering_params=clustering_params,
         create_multiple=create_multiple,
         individual_meshes=individual_meshes,
-        session_id_template=session_id_template,
+        session_id_template=mesh_session_id,
         run_names=run_names_list,
         workers=workers,
     )
@@ -201,67 +132,17 @@ def picks2mesh(
 @add_config_option
 @optgroup.group("\nInput Options", help="Options related to the input picks.")
 @optgroup.option(
-    "--run-names",
+    "--run-names", "-r",
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@optgroup.option(
-    "--pick-object-name",
-    required=True,
-    help="Name of the pick object to convert.",
-)
-@optgroup.option(
-    "--pick-user-id",
-    required=True,
-    help="User ID of the picks to convert.",
-)
-@optgroup.option(
-    "--pick-session-id",
-    required=True,
-    help="Session ID of the picks to convert.",
-)
+@add_pick_input_options
 @optgroup.group("\nTool Options", help="Options related to this tool.")
-@optgroup.option(
-    "--use-clustering/--no-use-clustering",
-    is_flag=True,
-    default=False,
-    help="Cluster points before sphere fitting.",
-)
-@optgroup.option(
-    "--clustering-method",
-    type=click.Choice(["dbscan", "kmeans"]),
-    default="dbscan",
-    help="Clustering method.",
-)
-@optgroup.option(
-    "--clustering-eps",
-    type=float,
-    default=1.0,
-    help="DBSCAN eps parameter - maximum distance between points in a cluster (in angstroms).",
-)
-@optgroup.option(
-    "--clustering-min-samples",
-    type=int,
-    default=3,
-    help="DBSCAN min_samples parameter.",
-)
-@optgroup.option(
-    "--clustering-n-clusters",
-    type=int,
-    default=1,
-    help="K-means n_clusters parameter.",
-)
 @optgroup.option(
     "--subdivisions",
     type=int,
     default=2,
     help="Number of sphere subdivisions for mesh resolution.",
-)
-@optgroup.option(
-    "--create-multiple/--no-create-multiple",
-    is_flag=True,
-    default=False,
-    help="Create separate spheres for each cluster.",
 )
 @optgroup.option(
     "--deduplicate-spheres/--no-deduplicate-spheres",
@@ -274,38 +155,10 @@ def picks2mesh(
     type=float,
     help="Minimum distance between sphere centers for deduplication (default: 0.5 * average radius).",
 )
-@optgroup.option(
-    "--individual-meshes/--no-individual-meshes",
-    is_flag=True,
-    default=False,
-    help="Create individual mesh files for each sphere instead of combining them.",
-)
-@optgroup.option(
-    "--session-id-template",
-    help="Template for individual mesh session IDs. Use {base_session_id} and {sphere_id} as placeholders (default: '{base_session_id}-{sphere_id:03d}').",
-)
-@optgroup.option(
-    "--workers",
-    type=int,
-    default=8,
-    help="Number of worker processes.",
-)
+@add_clustering_options
+@add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@optgroup.option(
-    "--mesh-object-name",
-    required=True,
-    help="Name of the mesh object to create.",
-)
-@optgroup.option(
-    "--mesh-user-id",
-    default="from-picks",
-    help="User ID for created mesh.",
-)
-@optgroup.option(
-    "--mesh-session-id",
-    default="0",
-    help="Session ID for created mesh.",
-)
+@add_mesh_output_options
 @add_debug_option
 def picks2sphere(
     config,
@@ -319,15 +172,14 @@ def picks2sphere(
     clustering_min_samples,
     clustering_n_clusters,
     subdivisions,
-    create_multiple,
     deduplicate_spheres,
     min_sphere_distance,
-    individual_meshes,
-    session_id_template,
+    create_multiple,
     workers,
     mesh_object_name,
     mesh_user_id,
     mesh_session_id,
+    individual_meshes,
     debug,
 ):
     """Convert picks to sphere meshes."""
@@ -370,7 +222,7 @@ def picks2sphere(
         deduplicate_spheres=deduplicate_spheres,
         min_sphere_distance=min_sphere_distance,
         individual_meshes=individual_meshes,
-        session_id_template=session_id_template,
+        session_id_template=mesh_session_id,
         run_names=run_names_list,
         workers=workers,
     )
@@ -391,67 +243,17 @@ def picks2sphere(
 @add_config_option
 @optgroup.group("\nInput Options", help="Options related to the input picks.")
 @optgroup.option(
-    "--run-names",
+    "--run-names", "-r",
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@optgroup.option(
-    "--pick-object-name",
-    required=True,
-    help="Name of the pick object to convert.",
-)
-@optgroup.option(
-    "--pick-user-id",
-    required=True,
-    help="User ID of the picks to convert.",
-)
-@optgroup.option(
-    "--pick-session-id",
-    required=True,
-    help="Session ID of the picks to convert.",
-)
+@add_pick_input_options
 @optgroup.group("\nTool Options", help="Options related to this tool.")
-@optgroup.option(
-    "--use-clustering/--no-use-clustering",
-    is_flag=True,
-    default=False,
-    help="Cluster points before ellipsoid fitting.",
-)
-@optgroup.option(
-    "--clustering-method",
-    type=click.Choice(["dbscan", "kmeans"]),
-    default="dbscan",
-    help="Clustering method.",
-)
-@optgroup.option(
-    "--clustering-eps",
-    type=float,
-    default=1.0,
-    help="DBSCAN eps parameter - maximum distance between points in a cluster (in angstroms).",
-)
-@optgroup.option(
-    "--clustering-min-samples",
-    type=int,
-    default=3,
-    help="DBSCAN min_samples parameter.",
-)
-@optgroup.option(
-    "--clustering-n-clusters",
-    type=int,
-    default=1,
-    help="K-means n_clusters parameter.",
-)
 @optgroup.option(
     "--subdivisions",
     type=int,
     default=2,
     help="Number of ellipsoid subdivisions for mesh resolution.",
-)
-@optgroup.option(
-    "--create-multiple/--no-create-multiple",
-    is_flag=True,
-    default=False,
-    help="Create separate ellipsoids for each cluster.",
 )
 @optgroup.option(
     "--deduplicate-ellipsoids/--no-deduplicate-ellipsoids",
@@ -464,38 +266,10 @@ def picks2sphere(
     type=float,
     help="Minimum distance between ellipsoid centers for deduplication (default: 0.5 * average major axis).",
 )
-@optgroup.option(
-    "--individual-meshes/--no-individual-meshes",
-    is_flag=True,
-    default=False,
-    help="Create individual mesh files for each ellipsoid instead of combining them.",
-)
-@optgroup.option(
-    "--session-id-template",
-    help="Template for individual mesh session IDs. Use {base_session_id} and {ellipsoid_id} as placeholders (default: '{base_session_id}-{ellipsoid_id:03d}').",
-)
-@optgroup.option(
-    "--workers",
-    type=int,
-    default=8,
-    help="Number of worker processes.",
-)
+@add_clustering_options
+@add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@optgroup.option(
-    "--mesh-object-name",
-    required=True,
-    help="Name of the mesh object to create.",
-)
-@optgroup.option(
-    "--mesh-user-id",
-    default="from-picks",
-    help="User ID for created mesh.",
-)
-@optgroup.option(
-    "--mesh-session-id",
-    default="0",
-    help="Session ID for created mesh.",
-)
+@add_mesh_output_options
 @add_debug_option
 def picks2ellipsoid(
     config,
@@ -509,15 +283,14 @@ def picks2ellipsoid(
     clustering_min_samples,
     clustering_n_clusters,
     subdivisions,
-    create_multiple,
     deduplicate_ellipsoids,
     min_ellipsoid_distance,
-    individual_meshes,
-    session_id_template,
+    create_multiple,
     workers,
     mesh_object_name,
     mesh_user_id,
     mesh_session_id,
+    individual_meshes,
     debug,
 ):
     """Convert picks to ellipsoid meshes."""
@@ -560,7 +333,7 @@ def picks2ellipsoid(
         deduplicate_ellipsoids=deduplicate_ellipsoids,
         min_ellipsoid_distance=min_ellipsoid_distance,
         individual_meshes=individual_meshes,
-        session_id_template=session_id_template,
+        session_id_template=mesh_session_id,
         run_names=run_names_list,
         workers=workers,
     )
@@ -582,100 +355,22 @@ def picks2ellipsoid(
 @add_config_option
 @optgroup.group("\nInput Options", help="Options related to the input picks.")
 @optgroup.option(
-    "--run-names",
+    "--run-names", "-r",
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@optgroup.option(
-    "--pick-object-name",
-    required=True,
-    help="Name of the pick object to convert.",
-)
-@optgroup.option(
-    "--pick-user-id",
-    required=True,
-    help="User ID of the picks to convert.",
-)
-@optgroup.option(
-    "--pick-session-id",
-    required=True,
-    help="Session ID of the picks to convert.",
-)
+@add_pick_input_options
 @optgroup.group("\nTool Options", help="Options related to this tool.")
-@optgroup.option(
-    "--use-clustering/--no-use-clustering",
-    is_flag=True,
-    default=False,
-    help="Cluster points before plane fitting.",
-)
-@optgroup.option(
-    "--clustering-method",
-    type=click.Choice(["dbscan", "kmeans"]),
-    default="dbscan",
-    help="Clustering method.",
-)
-@optgroup.option(
-    "--clustering-eps",
-    type=float,
-    default=1.0,
-    help="DBSCAN eps parameter - maximum distance between points in a cluster (in angstroms).",
-)
-@optgroup.option(
-    "--clustering-min-samples",
-    type=int,
-    default=3,
-    help="DBSCAN min_samples parameter.",
-)
-@optgroup.option(
-    "--clustering-n-clusters",
-    type=int,
-    default=1,
-    help="K-means n_clusters parameter.",
-)
 @optgroup.option(
     "--padding",
     type=float,
     default=1.2,
     help="Padding factor for plane size (1.0=exact fit, >1.0=larger plane).",
 )
-@optgroup.option(
-    "--create-multiple/--no-create-multiple",
-    is_flag=True,
-    default=False,
-    help="Create separate planes for each cluster.",
-)
-@optgroup.option(
-    "--individual-meshes/--no-individual-meshes",
-    is_flag=True,
-    default=False,
-    help="Create individual mesh files for each plane instead of combining them.",
-)
-@optgroup.option(
-    "--session-id-template",
-    help="Template for individual mesh session IDs. Use {base_session_id} and {plane_id} as placeholders (default: '{base_session_id}-{plane_id:03d}').",
-)
-@optgroup.option(
-    "--workers",
-    type=int,
-    default=8,
-    help="Number of worker processes.",
-)
+@add_clustering_options
+@add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@optgroup.option(
-    "--mesh-object-name",
-    required=True,
-    help="Name of the mesh object to create.",
-)
-@optgroup.option(
-    "--mesh-user-id",
-    default="from-picks",
-    help="User ID for created mesh.",
-)
-@optgroup.option(
-    "--mesh-session-id",
-    default="0",
-    help="Session ID for created mesh.",
-)
+@add_mesh_output_options
 @add_debug_option
 def picks2plane(
     config,
@@ -690,12 +385,11 @@ def picks2plane(
     clustering_n_clusters,
     padding,
     create_multiple,
-    individual_meshes,
-    session_id_template,
     workers,
     mesh_object_name,
     mesh_user_id,
     mesh_session_id,
+    individual_meshes,
     debug,
 ):
     """Convert picks to plane meshes."""
@@ -736,7 +430,7 @@ def picks2plane(
         padding=padding,
         create_multiple=create_multiple,
         individual_meshes=individual_meshes,
-        session_id_template=session_id_template,
+        session_id_template=mesh_session_id,
         run_names=run_names_list,
         workers=workers,
     )
@@ -758,25 +452,11 @@ def picks2plane(
 @add_config_option
 @optgroup.group("\nInput Options", help="Options related to the input picks.")
 @optgroup.option(
-    "--run-names",
+    "--run-names", "-r",
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@optgroup.option(
-    "--pick-object-name",
-    required=True,
-    help="Name of the pick object to convert.",
-)
-@optgroup.option(
-    "--pick-user-id",
-    required=True,
-    help="User ID of the picks to convert.",
-)
-@optgroup.option(
-    "--pick-session-id",
-    required=True,
-    help="Session ID of the picks to convert.",
-)
+@add_pick_input_options
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
     "--surface-method",
@@ -790,74 +470,10 @@ def picks2plane(
     default=50,
     help="Resolution for grid-based surface methods.",
 )
-@optgroup.option(
-    "--use-clustering/--no-use-clustering",
-    is_flag=True,
-    default=False,
-    help="Cluster points before surface fitting.",
-)
-@optgroup.option(
-    "--clustering-method",
-    type=click.Choice(["dbscan", "kmeans"]),
-    default="dbscan",
-    help="Clustering method.",
-)
-@optgroup.option(
-    "--clustering-eps",
-    type=float,
-    default=1.0,
-    help="DBSCAN eps parameter - maximum distance between points in a cluster (in angstroms).",
-)
-@optgroup.option(
-    "--clustering-min-samples",
-    type=int,
-    default=3,
-    help="DBSCAN min_samples parameter.",
-)
-@optgroup.option(
-    "--clustering-n-clusters",
-    type=int,
-    default=1,
-    help="K-means n_clusters parameter.",
-)
-@optgroup.option(
-    "--create-multiple/--no-create-multiple",
-    is_flag=True,
-    default=False,
-    help="Create separate surfaces for each cluster.",
-)
-@optgroup.option(
-    "--individual-meshes/--no-individual-meshes",
-    is_flag=True,
-    default=False,
-    help="Create individual mesh files for each surface instead of combining them.",
-)
-@optgroup.option(
-    "--session-id-template",
-    help="Template for individual mesh session IDs. Use {base_session_id} and {surface_id} as placeholders (default: '{base_session_id}-{surface_id:03d}').",
-)
-@optgroup.option(
-    "--workers",
-    type=int,
-    default=8,
-    help="Number of worker processes.",
-)
+@add_clustering_options
+@add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@optgroup.option(
-    "--mesh-object-name",
-    required=True,
-    help="Name of the mesh object to create.",
-)
-@optgroup.option(
-    "--mesh-user-id",
-    default="from-picks",
-    help="User ID for created mesh.",
-)
-@optgroup.option(
-    "--mesh-session-id",
-    default="0",
-    help="Session ID for created mesh.",
-)
+@add_mesh_output_options
 @add_debug_option
 def picks2surface(
     config,
@@ -873,12 +489,11 @@ def picks2surface(
     clustering_min_samples,
     clustering_n_clusters,
     create_multiple,
-    individual_meshes,
-    session_id_template,
     workers,
     mesh_object_name,
     mesh_user_id,
     mesh_session_id,
+    individual_meshes,
     debug,
 ):
     """Convert picks to 2D surface meshes."""
@@ -920,7 +535,7 @@ def picks2surface(
         clustering_params=clustering_params,
         create_multiple=create_multiple,
         individual_meshes=individual_meshes,
-        session_id_template=session_id_template,
+        session_id_template=mesh_session_id,
         run_names=run_names_list,
         workers=workers,
     )
