@@ -13,14 +13,13 @@ logger = get_logger(__name__)
 
 
 def fit_sphere_to_points(points: np.ndarray) -> Tuple[np.ndarray, float]:
-    """
-    Fit a sphere to a set of 3D points using least squares.
+    """Fit a sphere to a set of 3D points using least squares.
 
     Args:
-        points: Nx3 array of points
+        points: Nx3 array of points.
 
     Returns:
-        Tuple of (center, radius)
+        Tuple of (center, radius).
     """
     if len(points) < 4:
         raise ValueError("Need at least 4 points to fit a sphere")
@@ -57,15 +56,14 @@ def deduplicate_spheres(
     spheres: List[Tuple[np.ndarray, float]],
     min_distance: float = None,
 ) -> List[Tuple[np.ndarray, float]]:
-    """
-    Merge spheres that are too close to each other.
+    """Merge spheres that are too close to each other.
 
     Args:
-        spheres: List of (center, radius) tuples
-        min_distance: Minimum distance between sphere centers. If None, uses average radius
+        spheres: List of (center, radius) tuples.
+        min_distance: Minimum distance between sphere centers. If None, uses average radius.
 
     Returns:
-        List of deduplicated (center, radius) tuples
+        List of deduplicated (center, radius) tuples.
     """
     if len(spheres) <= 1:
         return spheres
@@ -118,16 +116,15 @@ def deduplicate_spheres(
 
 
 def create_sphere_mesh(center: np.ndarray, radius: float, subdivisions: int = 2) -> tm.Trimesh:
-    """
-    Create a sphere mesh with given center and radius.
+    """Create a sphere mesh with given center and radius.
 
     Args:
-        center: 3D center point
-        radius: Sphere radius
-        subdivisions: Number of subdivisions for sphere resolution
+        center: 3D center point.
+        radius: Sphere radius.
+        subdivisions: Number of subdivisions for sphere resolution.
 
     Returns:
-        Trimesh sphere object
+        Trimesh sphere object.
     """
     # Create unit sphere and scale/translate
     sphere = tm.creation.icosphere(subdivisions=subdivisions, radius=radius)
@@ -136,16 +133,15 @@ def create_sphere_mesh(center: np.ndarray, radius: float, subdivisions: int = 2)
 
 
 def cluster(points: np.ndarray, method: str = "dbscan", **kwargs) -> List[np.ndarray]:
-    """
-    Cluster points using the specified method.
+    """Cluster points using the specified method.
 
     Args:
-        points: Nx3 array of points
-        method: Clustering method ('dbscan', 'kmeans')
-        **kwargs: Additional parameters for clustering
+        points: Nx3 array of points.
+        method: Clustering method ('dbscan', 'kmeans').
+        **kwargs: Additional parameters for clustering.
 
     Returns:
-        List of point arrays, one per cluster
+        List of point arrays, one per cluster.
     """
     if method == "dbscan":
         eps = kwargs.get("eps", 1.0)
@@ -199,28 +195,30 @@ def sphere_from_picks(
     individual_meshes: bool = False,
     session_id_template: Optional[str] = None,
 ) -> Optional[Tuple["CopickMesh", Dict[str, int]]]:
-    """
-    Create sphere mesh(es) from pick points.
+    """Create sphere mesh(es) from pick points.
 
     Args:
-        points: Nx3 array of pick positions
-        run: Copick run object
-        object_name: Name of the mesh object
-        session_id: Session ID for the mesh
-        user_id: User ID for the mesh
-        use_clustering: Whether to cluster points first
-        clustering_method: Clustering method ('dbscan', 'kmeans')
-        clustering_params: Parameters for clustering
-        subdivisions: Number of subdivisions for sphere resolution
-        create_multiple: If True and clustering is used, create separate meshes for each cluster
-        deduplicate_spheres_flag: Whether to merge overlapping spheres
-        min_sphere_distance: Minimum distance between sphere centers for deduplication
-        individual_meshes: If True, create separate mesh objects for each sphere
-        session_id_template: Template for individual mesh session IDs
+        points: Nx3 array of pick positions.
+        run: Copick run object.
+        object_name: Name of the mesh object.
+        session_id: Session ID for the mesh.
+        user_id: User ID for the mesh.
+        use_clustering: Whether to cluster points first.
+        clustering_method: Clustering method ('dbscan', 'kmeans').
+        clustering_params: Parameters for clustering.
+            e.g.
+                - {'eps': 5.0, 'min_samples': 3} for DBSCAN
+                - {'n_clusters': 3} for KMeans
+        subdivisions: Number of subdivisions for sphere resolution.
+        create_multiple: If True and clustering is used, create separate meshes for each cluster.
+        deduplicate_spheres_flag: Whether to merge overlapping spheres.
+        min_sphere_distance: Minimum distance between sphere centers for deduplication.
+        individual_meshes: If True, create separate mesh objects for each sphere.
+        session_id_template: Template for individual mesh session IDs.
 
     Returns:
-        Tuple of (CopickMesh object, stats dict) or None if creation failed
-        Stats dict contains 'vertices_created' and 'faces_created' totals
+        Tuple of (CopickMesh object, stats dict) or None if creation failed.
+        Stats dict contains 'vertices_created' and 'faces_created' totals.
     """
     if len(points) < 4:
         logger.warning(f"Need at least 4 points to fit a sphere, got {len(points)}")
@@ -429,45 +427,29 @@ def sphere_from_picks_batch(
     run_names: Optional[List[str]] = None,
     workers: int = 8,
 ) -> Dict[str, Any]:
-    """
-    Batch convert picks to sphere meshes across multiple runs.
+    """Batch convert picks to sphere meshes across multiple runs.
 
-    Parameters:
-    -----------
-    root : copick.Root
-        The copick root containing runs to process.
-    pick_object_name : str
-        Name of the pick object to convert.
-    pick_user_id : str
-        User ID of the picks to convert.
-    pick_session_id : str
-        Session ID of the picks to convert.
-    mesh_object_name : str
-        Name of the mesh object to create.
-    mesh_session_id : str
-        Session ID for created mesh.
-    mesh_user_id : str
-        User ID for created mesh.
-    use_clustering : bool, optional
-        Whether to cluster points first. Default is False.
-    clustering_method : str, optional
-        Clustering method ('dbscan', 'kmeans'). Default is 'dbscan'.
-    clustering_params : dict, optional
-        Parameters for clustering method.
-    subdivisions : int, optional
-        Number of subdivisions for sphere resolution. Default is 2.
-    create_multiple : bool, optional
-        Create separate meshes for each cluster. Default is False.
-    voxel_spacing : float, optional
-        Voxel spacing for coordinate scaling. Default is 1.0.
-    run_names : list, optional
-        List of run names to process. If None, processes all runs.
-    workers : int, optional
-        Number of worker processes. Default is 8.
+    Args:
+        root: The copick root containing runs to process.
+        pick_object_name: Name of the pick object to convert.
+        pick_user_id: User ID of the picks to convert.
+        pick_session_id: Session ID of the picks to convert.
+        mesh_object_name: Name of the mesh object to create.
+        mesh_session_id: Session ID for created mesh.
+        mesh_user_id: User ID for created mesh.
+        use_clustering: Whether to cluster points first. Default is False.
+        clustering_method: Clustering method ('dbscan', 'kmeans'). Default is 'dbscan'.
+        clustering_params: Parameters for clustering method.
+        subdivisions: Number of subdivisions for sphere resolution. Default is 2.
+        create_multiple: Create separate meshes for each cluster. Default is False.
+        deduplicate_spheres: Whether to merge overlapping spheres. Default is True.
+        min_sphere_distance: Minimum distance between sphere centers for deduplication.
+        individual_meshes: If True, create separate mesh objects for each sphere. Default is False.
+        session_id_template: Template for individual mesh session IDs.
+        run_names: List of run names to process. If None, processes all runs.
+        workers: Number of worker processes. Default is 8.
 
     Returns:
-    --------
-    dict
         Dictionary with processing results and statistics.
     """
     from copick.ops.run import map_runs
