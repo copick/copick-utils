@@ -45,7 +45,7 @@ from copick_utils.cli.util import (
 @add_clustering_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options
+@add_mesh_output_options(default_tool="picks2mesh")
 @add_debug_option
 def picks2mesh(
     config,
@@ -64,7 +64,7 @@ def picks2mesh(
     mesh_object_name,
     mesh_user_id,
     mesh_session_id,
-    create_multiple,
+    all_clusters,
     individual_meshes,
     debug,
 ):
@@ -108,7 +108,7 @@ def picks2mesh(
         use_clustering=use_clustering,
         clustering_method=clustering_method,
         clustering_params=clustering_params,
-        create_multiple=create_multiple,
+        create_multiple=all_clusters,
         individual_meshes=individual_meshes,
         session_id_template=mesh_session_id,
         run_names=run_names_list,
@@ -132,7 +132,8 @@ def picks2mesh(
 @add_config_option
 @optgroup.group("\nInput Options", help="Options related to the input picks.")
 @optgroup.option(
-    "--run-names", "-r",
+    "--run-names",
+    "-r",
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
@@ -158,7 +159,7 @@ def picks2mesh(
 @add_clustering_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options
+@add_mesh_output_options(default_tool="picks2sphere")
 @add_debug_option
 def picks2sphere(
     config,
@@ -174,7 +175,7 @@ def picks2sphere(
     subdivisions,
     deduplicate_spheres,
     min_sphere_distance,
-    create_multiple,
+    all_clusters,
     workers,
     mesh_object_name,
     mesh_user_id,
@@ -218,7 +219,7 @@ def picks2sphere(
         clustering_method=clustering_method,
         clustering_params=clustering_params,
         subdivisions=subdivisions,
-        create_multiple=create_multiple,
+        create_multiple=all_clusters,
         deduplicate_spheres=deduplicate_spheres,
         min_sphere_distance=min_sphere_distance,
         individual_meshes=individual_meshes,
@@ -243,7 +244,8 @@ def picks2sphere(
 @add_config_option
 @optgroup.group("\nInput Options", help="Options related to the input picks.")
 @optgroup.option(
-    "--run-names", "-r",
+    "--run-names",
+    "-r",
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
@@ -269,7 +271,7 @@ def picks2sphere(
 @add_clustering_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options
+@add_mesh_output_options(default_tool="picks2ellipsoid")
 @add_debug_option
 def picks2ellipsoid(
     config,
@@ -285,7 +287,7 @@ def picks2ellipsoid(
     subdivisions,
     deduplicate_ellipsoids,
     min_ellipsoid_distance,
-    create_multiple,
+    all_clusters,
     workers,
     mesh_object_name,
     mesh_user_id,
@@ -329,7 +331,7 @@ def picks2ellipsoid(
         clustering_method=clustering_method,
         clustering_params=clustering_params,
         subdivisions=subdivisions,
-        create_multiple=create_multiple,
+        create_multiple=all_clusters,
         deduplicate_ellipsoids=deduplicate_ellipsoids,
         min_ellipsoid_distance=min_ellipsoid_distance,
         individual_meshes=individual_meshes,
@@ -355,7 +357,8 @@ def picks2ellipsoid(
 @add_config_option
 @optgroup.group("\nInput Options", help="Options related to the input picks.")
 @optgroup.option(
-    "--run-names", "-r",
+    "--run-names",
+    "-r",
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
@@ -370,7 +373,7 @@ def picks2ellipsoid(
 @add_clustering_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options
+@add_mesh_output_options(default_tool="picks2plane")
 @add_debug_option
 def picks2plane(
     config,
@@ -384,7 +387,7 @@ def picks2plane(
     clustering_min_samples,
     clustering_n_clusters,
     padding,
-    create_multiple,
+    all_clusters,
     workers,
     mesh_object_name,
     mesh_user_id,
@@ -428,7 +431,7 @@ def picks2plane(
         clustering_method=clustering_method,
         clustering_params=clustering_params,
         padding=padding,
-        create_multiple=create_multiple,
+        create_multiple=all_clusters,
         individual_meshes=individual_meshes,
         session_id_template=mesh_session_id,
         run_names=run_names_list,
@@ -452,7 +455,8 @@ def picks2plane(
 @add_config_option
 @optgroup.group("\nInput Options", help="Options related to the input picks.")
 @optgroup.option(
-    "--run-names", "-r",
+    "--run-names",
+    "-r",
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
@@ -473,7 +477,7 @@ def picks2plane(
 @add_clustering_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options
+@add_mesh_output_options(default_tool="picks2surface")
 @add_debug_option
 def picks2surface(
     config,
@@ -488,7 +492,7 @@ def picks2surface(
     clustering_eps,
     clustering_min_samples,
     clustering_n_clusters,
-    create_multiple,
+    all_clusters,
     workers,
     mesh_object_name,
     mesh_user_id,
@@ -533,7 +537,7 @@ def picks2surface(
         use_clustering=use_clustering,
         clustering_method=clustering_method,
         clustering_params=clustering_params,
-        create_multiple=create_multiple,
+        all_clusters=all_clusters,
         individual_meshes=individual_meshes,
         session_id_template=mesh_session_id,
         run_names=run_names_list,

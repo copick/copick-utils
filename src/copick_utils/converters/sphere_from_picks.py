@@ -4,7 +4,14 @@ import numpy as np
 import trimesh as tm
 from copick.util.log import get_logger
 from scipy.optimize import minimize
-from sklearn.cluster import DBSCAN, KMeans
+
+from copick_utils.converters.converter_common import (
+    cluster,
+    create_batch_worker,
+    create_batch_converter,
+    store_mesh_with_stats,
+    validate_points,
+)
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickRoot, CopickRun
@@ -132,51 +139,6 @@ def create_sphere_mesh(center: np.ndarray, radius: float, subdivisions: int = 2)
     return sphere
 
 
-def cluster(points: np.ndarray, method: str = "dbscan", **kwargs) -> List[np.ndarray]:
-    """Cluster points using the specified method.
-
-    Args:
-        points: Nx3 array of points.
-        method: Clustering method ('dbscan', 'kmeans').
-        **kwargs: Additional parameters for clustering.
-
-    Returns:
-        List of point arrays, one per cluster.
-    """
-    if method == "dbscan":
-        eps = kwargs.get("eps", 1.0)
-        min_samples = kwargs.get("min_samples", 3)
-
-        clustering = DBSCAN(eps=eps, min_samples=min_samples)
-        labels = clustering.fit_predict(points)
-
-        # Group points by cluster label (excluding noise points labeled as -1)
-        clusters = []
-        unique_labels = set(labels)
-        for label in unique_labels:
-            if label != -1:  # Skip noise points
-                cluster_points = points[labels == label]
-                if len(cluster_points) >= 4:  # Need at least 4 points for sphere fitting
-                    clusters.append(cluster_points)
-
-        return clusters
-
-    elif method == "kmeans":
-        n_clusters = kwargs.get("n_clusters", 1)
-
-        clustering = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        labels = clustering.fit_predict(points)
-
-        clusters = []
-        for i in range(n_clusters):
-            cluster_points = points[labels == i]
-            if len(cluster_points) >= 4:  # Need at least 4 points for sphere fitting
-                clusters.append(cluster_points)
-
-        return clusters
-
-    else:
-        raise ValueError(f"Unknown clustering method: {method}")
 
 
 def sphere_from_picks(
@@ -189,7 +151,7 @@ def sphere_from_picks(
     clustering_method: str = "dbscan",
     clustering_params: Optional[Dict[str, Any]] = None,
     subdivisions: int = 2,
-    create_multiple: bool = False,
+    all_clusters: bool = False,
     deduplicate_spheres_flag: bool = True,
     min_sphere_distance: Optional[float] = None,
     individual_meshes: bool = False,
@@ -210,7 +172,7 @@ def sphere_from_picks(
                 - {'eps': 5.0, 'min_samples': 3} for DBSCAN
                 - {'n_clusters': 3} for KMeans
         subdivisions: Number of subdivisions for sphere resolution.
-        create_multiple: If True and clustering is used, create separate meshes for each cluster.
+        all_clusters: If True and clustering is used, use all clusters. If False, use only largest cluster.
         deduplicate_spheres_flag: Whether to merge overlapping spheres.
         min_sphere_distance: Minimum distance between sphere centers for deduplication.
         individual_meshes: If True, create separate mesh objects for each sphere.
@@ -220,16 +182,15 @@ def sphere_from_picks(
         Tuple of (CopickMesh object, stats dict) or None if creation failed.
         Stats dict contains 'vertices_created' and 'faces_created' totals.
     """
-    if len(points) < 4:
-        logger.warning(f"Need at least 4 points to fit a sphere, got {len(points)}")
+    if not validate_points(points, 4, "sphere"):
         return None
 
     if clustering_params is None:
         clustering_params = {}
 
-    # Cluster points if requested
+    # Handle clustering workflow with special sphere logic
     if use_clustering:
-        point_clusters = cluster(points, clustering_method, **clustering_params)
+        point_clusters = cluster(points, clustering_method, 4, **clustering_params)
 
         if not point_clusters:
             logger.warning("No valid clusters found")
@@ -237,7 +198,7 @@ def sphere_from_picks(
 
         logger.info(f"Found {len(point_clusters)} clusters")
 
-        if create_multiple and len(point_clusters) > 1:
+        if all_clusters and len(point_clusters) > 1:
             # Create sphere parameters from all clusters
             sphere_params = []
             for i, cluster_points in enumerate(point_clusters):
@@ -319,167 +280,20 @@ def sphere_from_picks(
         combined_mesh = create_sphere_mesh(center, radius, subdivisions)
         logger.info(f"Fitted sphere at {center} with radius {radius:.2f}")
 
-    # Create copick mesh
+    # Store mesh and return stats
     try:
-        copick_mesh = run.new_mesh(object_name, session_id, user_id, exist_ok=True)
-        copick_mesh.mesh = combined_mesh
-        copick_mesh.store()
-
-        stats = {
-            "vertices_created": len(combined_mesh.vertices),
-            "faces_created": len(combined_mesh.faces),
-        }
-        logger.info(
-            f"Created sphere mesh with {len(combined_mesh.vertices)} vertices and {len(combined_mesh.faces)} faces",
-        )
-        return copick_mesh, stats
-
+        return store_mesh_with_stats(run, combined_mesh, object_name, session_id, user_id, "sphere")
     except Exception as e:
         logger.critical(f"Error creating mesh: {e}")
         return None
 
 
-def _sphere_from_picks_worker(
-    run: "CopickRun",
-    pick_object_name: str,
-    pick_user_id: str,
-    pick_session_id: str,
-    mesh_object_name: str,
-    mesh_session_id: str,
-    mesh_user_id: str,
-    use_clustering: bool,
-    clustering_method: str,
-    clustering_params: Dict[str, Any],
-    subdivisions: int,
-    create_multiple: bool,
-    deduplicate_spheres_flag: bool,
-    min_sphere_distance: Optional[float],
-    individual_meshes: bool,
-    session_id_template: Optional[str],
-) -> Dict[str, Any]:
-    """Worker function for batch conversion of picks to sphere meshes."""
-    try:
-        # Get picks
-        picks_list = run.get_picks(object_name=pick_object_name, user_id=pick_user_id, session_id=pick_session_id)
-
-        if not picks_list:
-            return {"processed": 0, "errors": [f"No picks found for {run.name}"]}
-
-        picks = picks_list[0]
-        points, _ = picks.numpy()
-
-        if points is None or len(points) == 0:
-            return {"processed": 0, "errors": [f"Could not load pick data for {run.name}"]}
-
-        # Use points directly - copick coordinates are already in angstroms
-        positions = points[:, :3]
-
-        result = sphere_from_picks(
-            points=positions,
-            use_clustering=use_clustering,
-            clustering_method=clustering_method,
-            clustering_params=clustering_params,
-            subdivisions=subdivisions,
-            create_multiple=create_multiple,
-            deduplicate_spheres_flag=deduplicate_spheres_flag,
-            min_sphere_distance=min_sphere_distance,
-            individual_meshes=individual_meshes,
-            session_id_template=session_id_template,
-            run=run,
-            object_name=mesh_object_name,
-            session_id=mesh_session_id,
-            user_id=mesh_user_id,
-        )
-
-        if result:
-            mesh_obj, stats = result
-            return {
-                "processed": 1,
-                "errors": [],
-                "result": mesh_obj,
-                "vertices_created": stats["vertices_created"],
-                "faces_created": stats["faces_created"],
-            }
-        else:
-            return {"processed": 0, "errors": [f"No sphere mesh generated for {run.name}"]}
-
-    except Exception as e:
-        return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"]}
+# Create worker function using common infrastructure
+_sphere_from_picks_worker = create_batch_worker(sphere_from_picks, "sphere", min_points=4)
 
 
-def sphere_from_picks_batch(
-    root: "CopickRoot",
-    pick_object_name: str,
-    pick_user_id: str,
-    pick_session_id: str,
-    mesh_object_name: str,
-    mesh_session_id: str,
-    mesh_user_id: str,
-    use_clustering: bool = False,
-    clustering_method: str = "dbscan",
-    clustering_params: Optional[Dict[str, Any]] = None,
-    subdivisions: int = 2,
-    create_multiple: bool = False,
-    deduplicate_spheres: bool = True,
-    min_sphere_distance: Optional[float] = None,
-    individual_meshes: bool = False,
-    session_id_template: Optional[str] = None,
-    run_names: Optional[List[str]] = None,
-    workers: int = 8,
-) -> Dict[str, Any]:
-    """Batch convert picks to sphere meshes across multiple runs.
-
-    Args:
-        root: The copick root containing runs to process.
-        pick_object_name: Name of the pick object to convert.
-        pick_user_id: User ID of the picks to convert.
-        pick_session_id: Session ID of the picks to convert.
-        mesh_object_name: Name of the mesh object to create.
-        mesh_session_id: Session ID for created mesh.
-        mesh_user_id: User ID for created mesh.
-        use_clustering: Whether to cluster points first. Default is False.
-        clustering_method: Clustering method ('dbscan', 'kmeans'). Default is 'dbscan'.
-        clustering_params: Parameters for clustering method.
-        subdivisions: Number of subdivisions for sphere resolution. Default is 2.
-        create_multiple: Create separate meshes for each cluster. Default is False.
-        deduplicate_spheres: Whether to merge overlapping spheres. Default is True.
-        min_sphere_distance: Minimum distance between sphere centers for deduplication.
-        individual_meshes: If True, create separate mesh objects for each sphere. Default is False.
-        session_id_template: Template for individual mesh session IDs.
-        run_names: List of run names to process. If None, processes all runs.
-        workers: Number of worker processes. Default is 8.
-
-    Returns:
-        Dictionary with processing results and statistics.
-    """
-    from copick.ops.run import map_runs
-
-    if clustering_params is None:
-        clustering_params = {}
-
-    runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-
-    results = map_runs(
-        callback=_sphere_from_picks_worker,
-        root=root,
-        runs=runs_to_process,
-        workers=workers,
-        task_desc="Converting picks to sphere meshes",
-        pick_object_name=pick_object_name,
-        pick_user_id=pick_user_id,
-        pick_session_id=pick_session_id,
-        mesh_object_name=mesh_object_name,
-        mesh_session_id=mesh_session_id,
-        mesh_user_id=mesh_user_id,
-        use_clustering=use_clustering,
-        clustering_method=clustering_method,
-        clustering_params=clustering_params,
-        subdivisions=subdivisions,
-        create_multiple=create_multiple,
-        deduplicate_spheres_flag=deduplicate_spheres,
-        min_sphere_distance=min_sphere_distance,
-        individual_meshes=individual_meshes,
-        session_id_template=session_id_template,
-    )
-
-    return results
+# Create batch converter using common infrastructure
+sphere_from_picks_batch = create_batch_converter(
+    _sphere_from_picks_worker,
+    "Converting picks to sphere meshes"
+)

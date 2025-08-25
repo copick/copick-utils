@@ -1,13 +1,20 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
 import trimesh as tm
 from copick.util.log import get_logger
 from scipy.spatial import ConvexHull
-from sklearn.cluster import DBSCAN, KMeans
+
+from copick_utils.converters.converter_common import (
+    create_batch_converter,
+    create_batch_worker,
+    handle_clustering_workflow,
+    store_mesh_with_stats,
+    validate_points,
+)
 
 if TYPE_CHECKING:
-    from copick.models import CopickMesh, CopickRoot, CopickRun
+    from copick.models import CopickMesh, CopickRun
 
 logger = get_logger(__name__)
 
@@ -146,53 +153,6 @@ def calculate_circumradius_3d(tetra_points: np.ndarray) -> float:
         return float("inf")
 
 
-def cluster(points: np.ndarray, method: str = "dbscan", **kwargs) -> List[np.ndarray]:
-    """Cluster points using the specified method.
-
-    Args:
-        points: Nx3 array of points.
-        method: Clustering method ('dbscan', 'kmeans').
-        **kwargs: Additional parameters for clustering.
-
-    Returns:
-        List of point arrays, one per cluster.
-    """
-    if method == "dbscan":
-        eps = kwargs.get("eps", 1.0)
-        min_samples = kwargs.get("min_samples", 3)
-
-        clustering = DBSCAN(eps=eps, min_samples=min_samples)
-        labels = clustering.fit_predict(points)
-
-        # Group points by cluster label (excluding noise points labeled as -1)
-        clusters = []
-        unique_labels = set(labels)
-        for label in unique_labels:
-            if label != -1:  # Skip noise points
-                cluster_points = points[labels == label]
-                if len(cluster_points) >= 4:  # Need at least 4 points for 3D mesh
-                    clusters.append(cluster_points)
-
-        return clusters
-
-    elif method == "kmeans":
-        n_clusters = kwargs.get("n_clusters", 1)
-
-        clustering = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        labels = clustering.fit_predict(points)
-
-        clusters = []
-        for i in range(n_clusters):
-            cluster_points = points[labels == i]
-            if len(cluster_points) >= 4:  # Need at least 4 points for 3D mesh
-                clusters.append(cluster_points)
-
-        return clusters
-
-    else:
-        raise ValueError(f"Unknown clustering method: {method}")
-
-
 def mesh_from_picks(
     points: np.ndarray,
     run: "CopickRun",
@@ -204,7 +164,7 @@ def mesh_from_picks(
     use_clustering: bool = False,
     clustering_method: str = "dbscan",
     clustering_params: Optional[Dict[str, Any]] = None,
-    create_multiple: bool = False,
+    all_clusters: bool = False,
     individual_meshes: bool = False,
     session_id_template: Optional[str] = None,
 ) -> Optional[Tuple["CopickMesh", Dict[str, int]]]:
@@ -221,7 +181,7 @@ def mesh_from_picks(
         use_clustering: Whether to cluster points first.
         clustering_method: Clustering method ('dbscan', 'kmeans').
         clustering_params: Parameters for clustering.
-        create_multiple: If True and clustering is used, create separate meshes for each cluster.
+        all_clusters: If True, use all clusters; if False, use only the largest cluster.
         individual_meshes: If True, create separate mesh objects for each mesh.
         session_id_template: Template for individual mesh session IDs.
 
@@ -229,16 +189,33 @@ def mesh_from_picks(
         Tuple of (CopickMesh object, stats dict) or None if creation failed.
         Stats dict contains 'vertices_created' and 'faces_created' totals.
     """
-    if len(points) < 4:
-        logger.warning(f"Need at least 4 points to create a mesh, got {len(points)}")
+    if not validate_points(points, 4, "mesh"):
         return None
 
     if clustering_params is None:
         clustering_params = {}
 
-    # Cluster points if requested
-    if use_clustering:
-        point_clusters = cluster(points, clustering_method, **clustering_params)
+    # Define mesh creation function for clustering workflow
+    def create_mesh_from_points(cluster_points):
+        if mesh_type == "convex_hull":
+            return convex_hull_mesh(cluster_points)
+        elif mesh_type == "alpha_shape":
+            if alpha is None:
+                raise ValueError("Alpha parameter is required for alpha shapes")
+            return alpha_shape_mesh(cluster_points, alpha)
+        else:
+            raise ValueError(f"Unknown mesh type: {mesh_type}")
+
+    # Handle clustering workflow with special mesh logic for individual meshes
+    if use_clustering and individual_meshes and all_clusters:
+        from copick_utils.converters.converter_common import cluster
+        
+        point_clusters = cluster(
+            points,
+            clustering_method,
+            min_points_per_cluster=4,
+            **clustering_params,
+        )
 
         if not point_clusters:
             logger.warning("No valid clusters found")
@@ -246,199 +223,72 @@ def mesh_from_picks(
 
         logger.info(f"Found {len(point_clusters)} clusters")
 
-        # For now, use the largest cluster
-        # TODO: Could create separate meshes for each cluster
-        cluster_sizes = [len(cluster) for cluster in point_clusters]
-        largest_cluster_idx = np.argmax(cluster_sizes)
-        points_to_use = point_clusters[largest_cluster_idx]
+        # Create separate mesh objects for each cluster
+        created_meshes = []
+        total_vertices = 0
+        total_faces = 0
 
-        logger.info(f"Using largest cluster with {len(points_to_use)} points")
-    else:
-        points_to_use = points
+        for i, cluster_points in enumerate(point_clusters):
+            try:
+                cluster_mesh = create_mesh_from_points(cluster_points)
 
-    # Create mesh based on type
-    try:
-        if mesh_type == "convex_hull":
-            mesh = convex_hull_mesh(points_to_use)
-        elif mesh_type == "alpha_shape":
-            if alpha is None:
-                raise ValueError("Alpha parameter is required for alpha shapes")
-            mesh = alpha_shape_mesh(points_to_use, alpha)
+                # Generate session ID using template if provided
+                if session_id_template:
+                    mesh_session_id = session_id_template.format(
+                        base_session_id=session_id,
+                        mesh_id=i,
+                    )
+                else:
+                    mesh_session_id = f"{session_id}-{i:03d}"
+
+                try:
+                    copick_mesh = run.new_mesh(object_name, mesh_session_id, user_id, exist_ok=True)
+                    copick_mesh.mesh = cluster_mesh
+                    copick_mesh.store()
+                    created_meshes.append(copick_mesh)
+                    total_vertices += len(cluster_mesh.vertices)
+                    total_faces += len(cluster_mesh.faces)
+                    logger.info(f"Created individual mesh {i} with {len(cluster_mesh.vertices)} vertices")
+                except Exception as e:
+                    logger.error(f"Failed to create mesh {i}: {e}")
+                    continue
+            except Exception as e:
+                logger.critical(f"Failed to create mesh from cluster {i}: {e}")
+                continue
+
+        # Return the first mesh and total stats
+        if created_meshes:
+            stats = {"vertices_created": total_vertices, "faces_created": total_faces}
+            return created_meshes[0], stats
         else:
-            raise ValueError(f"Unknown mesh type: {mesh_type}")
-
-        # Create copick mesh
-        copick_mesh = run.new_mesh(object_name, session_id, user_id, exist_ok=True)
-        copick_mesh.mesh = mesh
-        copick_mesh.store()
-
-        stats = {
-            "vertices_created": len(mesh.vertices),
-            "faces_created": len(mesh.faces),
-        }
-        logger.info(
-            f"Created {mesh_type} mesh with {len(mesh.vertices)} vertices and {len(mesh.faces)} faces",
-        )
-        return copick_mesh, stats
-
-    except Exception as e:
-        logger.critical(f"Error creating mesh: {e}")
-        return None
-
-
-def _mesh_from_picks_worker(
-    run: "CopickRun",
-    pick_object_name: str,
-    pick_user_id: str,
-    pick_session_id: str,
-    mesh_object_name: str,
-    mesh_session_id: str,
-    mesh_user_id: str,
-    mesh_type: str,
-    alpha: Optional[float],
-    use_clustering: bool,
-    clustering_method: str,
-    clustering_params: Dict[str, Any],
-    create_multiple: bool,
-    individual_meshes: bool,
-    session_id_template: Optional[str],
-) -> Dict[str, Any]:
-    """Worker function for batch conversion of picks to meshes."""
-    try:
-        # Get picks
-        picks_list = run.get_picks(object_name=pick_object_name, user_id=pick_user_id, session_id=pick_session_id)
-
-        if not picks_list:
-            return {"processed": 0, "errors": [f"No picks found for {run.name}"]}
-
-        picks = picks_list[0]
-        points = picks.numpy()
-
-        if points is None or len(points) == 0:
-            return {"processed": 0, "errors": [f"Could not load pick data for {run.name}"]}
-
-        # Use points directly - copick coordinates are already in angstroms
-        positions = points[:, :3]
-
-        mesh_obj = mesh_from_picks(
-            points=positions,
-            mesh_type=mesh_type,
-            alpha=alpha,
+            return None
+    else:
+        # Use standard clustering workflow
+        combined_mesh, points_used = handle_clustering_workflow(
+            points=points,
             use_clustering=use_clustering,
             clustering_method=clustering_method,
             clustering_params=clustering_params,
-            create_multiple=create_multiple,
-            individual_meshes=individual_meshes,
-            session_id_template=session_id_template,
-            run=run,
-            object_name=mesh_object_name,
-            session_id=mesh_session_id,
-            user_id=mesh_user_id,
+            all_clusters=all_clusters,
+            min_points_per_cluster=4,
+            shape_creation_func=create_mesh_from_points,
+            shape_name="mesh",
         )
 
-        if mesh_obj:
-            copick_mesh, stats = mesh_obj
-            return {
-                "processed": 1,
-                "errors": [],
-                "result": copick_mesh,
-                "vertices_created": stats["vertices_created"],
-                "faces_created": stats["faces_created"],
-            }
-        else:
-            return {"processed": 0, "errors": [f"No mesh generated for {run.name}"]}
+        if combined_mesh is None:
+            return None
 
-    except Exception as e:
-        return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"]}
+        # Store mesh and return stats
+        try:
+            return store_mesh_with_stats(run, combined_mesh, object_name, session_id, user_id, "mesh")
+        except Exception as e:
+            logger.critical(f"Error creating mesh: {e}")
+            return None
 
 
-def mesh_from_picks_batch(
-    root: "CopickRoot",
-    pick_object_name: str,
-    pick_user_id: str,
-    pick_session_id: str,
-    mesh_object_name: str,
-    mesh_session_id: str,
-    mesh_user_id: str,
-    mesh_type: str = "convex_hull",
-    alpha: Optional[float] = None,
-    use_clustering: bool = False,
-    clustering_method: str = "dbscan",
-    clustering_params: Optional[Dict[str, Any]] = None,
-    create_multiple: bool = False,
-    individual_meshes: bool = False,
-    session_id_template: Optional[str] = None,
-    run_names: Optional[List[str]] = None,
-    workers: int = 8,
-) -> Dict[str, Any]:
-    """
-    Batch convert picks to meshes across multiple runs.
+# Create worker function using common infrastructure
+_mesh_from_picks_worker = create_batch_worker(mesh_from_picks, "mesh", min_points=4)
 
-    Parameters:
-    -----------
-    root : copick.Root
-        The copick root containing runs to process.
-    pick_object_name : str
-        Name of the pick object to convert.
-    pick_user_id : str
-        User ID of the picks to convert.
-    pick_session_id : str
-        Session ID of the picks to convert.
-    mesh_object_name : str
-        Name of the mesh object to create.
-    mesh_session_id : str
-        Session ID for created mesh.
-    mesh_user_id : str
-        User ID for created mesh.
-    mesh_type : str, optional
-        Type of mesh ('convex_hull', 'alpha_shape'). Default is 'convex_hull'.
-    alpha : float, optional
-        Alpha parameter for alpha shapes.
-    use_clustering : bool, optional
-        Whether to cluster points first. Default is False.
-    clustering_method : str, optional
-        Clustering method ('dbscan', 'kmeans'). Default is 'dbscan'.
-    clustering_params : dict, optional
-        Parameters for clustering method.
-    voxel_spacing : float, optional
-        Voxel spacing for coordinate scaling. Default is 1.0.
-    run_names : list, optional
-        List of run names to process. If None, processes all runs.
-    workers : int, optional
-        Number of worker processes. Default is 8.
 
-    Returns:
-    --------
-    dict
-        Dictionary with processing results and statistics.
-    """
-    from copick.ops.run import map_runs
-
-    if clustering_params is None:
-        clustering_params = {}
-
-    runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-
-    results = map_runs(
-        callback=_mesh_from_picks_worker,
-        root=root,
-        runs=runs_to_process,
-        workers=workers,
-        task_desc="Converting picks to meshes",
-        pick_object_name=pick_object_name,
-        pick_user_id=pick_user_id,
-        pick_session_id=pick_session_id,
-        mesh_object_name=mesh_object_name,
-        mesh_session_id=mesh_session_id,
-        mesh_user_id=mesh_user_id,
-        mesh_type=mesh_type,
-        alpha=alpha,
-        use_clustering=use_clustering,
-        clustering_method=clustering_method,
-        clustering_params=clustering_params,
-        create_multiple=create_multiple,
-        individual_meshes=individual_meshes,
-        session_id_template=session_id_template,
-    )
-
-    return results
+# Create batch converter using common infrastructure
+mesh_from_picks_batch = create_batch_converter(_mesh_from_picks_worker, "Converting picks to meshes")

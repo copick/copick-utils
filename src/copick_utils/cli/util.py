@@ -1,5 +1,7 @@
 """CLI utilities for copick-utils commands."""
 
+from typing import Callable
+
 import click
 from click_option_group import optgroup
 
@@ -84,11 +86,11 @@ def add_clustering_options(func: click.Command) -> click.Command:
             help="K-means n_clusters parameter.",
         ),
         optgroup.option(
-            "--create-multiple/--no-create-multiple",
+            "--all-clusters/--largest-cluster-only",
             "-mm",
             is_flag=True,
-            default=False,
-            help="Create separate meshes for each cluster.",
+            default=True,
+            help="Use all clusters (True) or only the largest cluster (False).",
         ),
     ]
 
@@ -124,45 +126,62 @@ def add_workers_option(func: click.Command) -> click.Command:
     return func
 
 
-def add_mesh_output_options(func: click.Command) -> click.Command:
+def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "from-picks") -> Callable:
     """
     Add common output options for picks-to-mesh conversion commands.
 
     Args:
         func (click.Command): The Click command to which the options will be added.
+        default_tool (str): Default user ID for created mesh.
 
     Returns:
         click.Command: The Click command with the output options added.
     """
-    opts = [
-        optgroup.option(
-            "--mesh-object-name",
-            "-mo",
-            required=True,
-            help="Name of the mesh object to create.",
-        ),
-        optgroup.option(
-            "--mesh-user-id",
-            "-mu",
-            default="from-picks",
-            help="User ID for created mesh.",
-        ),
-        optgroup.option(
-            "--mesh-session-id",
-            "-ms",
-            default="0",
-            help="Session ID for created mesh. When using --individual-meshes, can contain placeholders.",
-        ),
-        optgroup.option(
-            "--individual-meshes/--no-individual-meshes",
-            "-im",
-            is_flag=True,
-            default=False,
-            help="Create individual mesh files for each mesh instead of combining them.",
-        ),
-    ]
 
-    for opt in reversed(opts):
-        func = opt(func)
+    def add_mesh_output_options_decorator(func: click.Command) -> click.Command:
+        """
+        Add common output options for picks-to-mesh conversion commands.
 
-    return func
+        Args:
+            func (click.Command): The Click command to which the options will be added.
+
+        Returns:
+            click.Command: The Click command with the output options added.
+        """
+        opts = [
+            optgroup.option(
+                "--mesh-object-name",
+                "-mo",
+                required=True,
+                help="Name of the mesh object to create.",
+            ),
+            optgroup.option(
+                "--mesh-user-id",
+                "-mu",
+                default=default_tool,
+                help="User ID for created mesh.",
+            ),
+            optgroup.option(
+                "--mesh-session-id",
+                "-ms",
+                default="0",
+                help="Session ID for created mesh. When using --individual-meshes, can contain placeholders.",
+            ),
+            optgroup.option(
+                "--individual-meshes/--no-individual-meshes",
+                "-im",
+                is_flag=True,
+                default=False,
+                help="Create individual mesh files for each mesh instead of combining them.",
+            ),
+        ]
+
+        for opt in reversed(opts):
+            func = opt(func)
+
+        return func
+
+    if func is None:
+        return add_mesh_output_options_decorator
+    else:
+        return add_mesh_output_options_decorator(func)
