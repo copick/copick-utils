@@ -63,10 +63,7 @@ def create_plane_mesh(center: np.ndarray, normal: np.ndarray, points: np.ndarray
     """
     # Create two orthogonal vectors in the plane
     # Find a vector that's not parallel to the normal
-    if abs(normal[2]) < 0.9:
-        temp_vector = np.array([0, 0, 1])
-    else:
-        temp_vector = np.array([1, 0, 0])
+    temp_vector = np.array([0, 0, 1]) if abs(normal[2]) < 0.9 else np.array([1, 0, 0])
 
     # Create two orthogonal vectors in the plane
     u = np.cross(normal, temp_vector)
@@ -177,6 +174,8 @@ _plane_from_picks_worker = create_batch_worker(plane_from_picks, "plane", min_po
 
 # Create batch converter using common infrastructure
 plane_from_picks_batch = create_batch_converter(
-    _plane_from_picks_worker,
+    plane_from_picks,
     "Converting picks to plane meshes",
+    "plane",
+    min_points=3,
 )

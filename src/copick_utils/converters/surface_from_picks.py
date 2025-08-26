@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
 import trimesh as tm
@@ -8,16 +8,15 @@ from scipy.spatial import Delaunay
 from sklearn.decomposition import PCA
 
 from copick_utils.converters.converter_common import (
-    cluster,
-    create_batch_worker,
     create_batch_converter,
+    create_batch_worker,
+    handle_clustering_workflow,
     store_mesh_with_stats,
     validate_points,
-    handle_clustering_workflow,
 )
 
 if TYPE_CHECKING:
-    from copick.models import CopickMesh, CopickRoot, CopickRun
+    from copick.models import CopickMesh, CopickRun
 
 logger = get_logger(__name__)
 
@@ -101,7 +100,7 @@ def rbf_surface(points: np.ndarray, grid_resolution: int) -> tm.Trimesh:
     x_min, x_max = projected_2d[:, 0].min(), projected_2d[:, 0].max()
     y_min, y_max = projected_2d[:, 1].min(), projected_2d[:, 1].max()
 
-    xi = np.linspace(x_min, y_min, grid_resolution)
+    xi = np.linspace(x_min, x_max, grid_resolution)
     yi = np.linspace(y_min, y_max, grid_resolution)
     xi_grid, yi_grid = np.meshgrid(xi, yi)
 
@@ -114,7 +113,7 @@ def rbf_surface(points: np.ndarray, grid_resolution: int) -> tm.Trimesh:
     grid_points_3d = pca.inverse_transform(grid_points_2d) + center
 
     # Create triangulation for the grid
-    vertices = grid_points_3d.reshape((grid_resolution, grid_resolution, 3))
+    grid_points_3d.reshape((grid_resolution, grid_resolution, 3))
     faces = []
 
     for i in range(grid_resolution - 1):
@@ -186,8 +185,6 @@ def grid_surface(points: np.ndarray, grid_resolution: int) -> tm.Trimesh:
     return tm.Trimesh(vertices=vertices, faces=faces)
 
 
-
-
 def surface_from_picks(
     points: np.ndarray,
     run: "CopickRun",
@@ -243,7 +240,7 @@ def surface_from_picks(
         all_clusters=all_clusters,
         min_points_per_cluster=3,
         shape_creation_func=create_surface_from_points,
-        shape_name="surface"
+        shape_name="surface",
     )
 
     if combined_mesh is None:
@@ -263,6 +260,8 @@ _surface_from_picks_worker = create_batch_worker(surface_from_picks, "surface", 
 
 # Create batch converter using common infrastructure
 surface_from_picks_batch = create_batch_converter(
-    _surface_from_picks_worker,
-    "Converting picks to surface meshes"
+    surface_from_picks,
+    "Converting picks to surface meshes",
+    "surface",
+    min_points=3,
 )

@@ -7,15 +7,14 @@ from sklearn.decomposition import PCA
 
 from copick_utils.converters.converter_common import (
     cluster,
-    create_batch_worker,
     create_batch_converter,
+    create_batch_worker,
     store_mesh_with_stats,
     validate_points,
-    handle_clustering_workflow,
 )
 
 if TYPE_CHECKING:
-    from copick.models import CopickMesh, CopickRoot, CopickRun
+    from copick.models import CopickMesh, CopickRun
 
 logger = get_logger(__name__)
 
@@ -159,8 +158,6 @@ def create_ellipsoid_mesh(
     return ellipsoid
 
 
-
-
 def ellipsoid_from_picks(
     points: np.ndarray,
     run: "CopickRun",
@@ -216,10 +213,10 @@ def ellipsoid_from_picks(
     # Handle clustering workflow with special ellipsoid logic
     if use_clustering:
         point_clusters = cluster(
-            points, 
-            clustering_method, 
+            points,
+            clustering_method,
             min_points_per_cluster=6,  # Ellipsoids need at least 6 points
-            **clustering_params
+            **clustering_params,
         )
 
         if not point_clusters:
@@ -323,6 +320,8 @@ _ellipsoid_from_picks_worker = create_batch_worker(ellipsoid_from_picks, "ellips
 
 # Create batch converter using common infrastructure
 ellipsoid_from_picks_batch = create_batch_converter(
-    _ellipsoid_from_picks_worker,
-    "Converting picks to ellipsoid meshes"
+    ellipsoid_from_picks,
+    "Converting picks to ellipsoid meshes",
+    "ellipsoid",
+    min_points=6,
 )

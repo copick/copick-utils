@@ -7,14 +7,14 @@ from scipy.optimize import minimize
 
 from copick_utils.converters.converter_common import (
     cluster,
-    create_batch_worker,
     create_batch_converter,
+    create_batch_worker,
     store_mesh_with_stats,
     validate_points,
 )
 
 if TYPE_CHECKING:
-    from copick.models import CopickMesh, CopickRoot, CopickRun
+    from copick.models import CopickMesh, CopickRun
 
 logger = get_logger(__name__)
 
@@ -137,8 +137,6 @@ def create_sphere_mesh(center: np.ndarray, radius: float, subdivisions: int = 2)
     sphere = tm.creation.icosphere(subdivisions=subdivisions, radius=radius)
     sphere.apply_translation(center)
     return sphere
-
-
 
 
 def sphere_from_picks(
@@ -294,6 +292,8 @@ _sphere_from_picks_worker = create_batch_worker(sphere_from_picks, "sphere", min
 
 # Create batch converter using common infrastructure
 sphere_from_picks_batch = create_batch_converter(
-    _sphere_from_picks_worker,
-    "Converting picks to sphere meshes"
+    sphere_from_picks,
+    "Converting picks to sphere meshes",
+    "sphere",
+    min_points=4,
 )

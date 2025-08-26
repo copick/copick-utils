@@ -10,6 +10,10 @@ def add_pick_input_options(func: click.Command) -> click.Command:
     """
     Add common input options for picks-to-mesh conversion commands.
 
+    Supports flexible input selection:
+    - For exact match: provide exact session ID
+    - For pattern match: provide regex pattern (enables many-to-many mode)
+
     Args:
         func (click.Command): The Click command to which the options will be added.
 
@@ -33,7 +37,7 @@ def add_pick_input_options(func: click.Command) -> click.Command:
             "--pick-session-id",
             "-ps",
             required=True,
-            help="Session ID of the picks to convert.",
+            help="Session ID or regex pattern of the picks to convert. Use regex for many-to-many mode.",
         ),
     ]
 
@@ -130,6 +134,11 @@ def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "
     """
     Add common output options for picks-to-mesh conversion commands.
 
+    Supports flexible output selection:
+    - One-to-one: exact session ID for single output
+    - One-to-many: session ID template with {instance_id} for individual meshes
+    - Many-to-many: session ID template with {input_session_id} and {instance_id}
+
     Args:
         func (click.Command): The Click command to which the options will be added.
         default_tool (str): Default user ID for created mesh.
@@ -152,20 +161,19 @@ def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "
             optgroup.option(
                 "--mesh-object-name",
                 "-mo",
-                required=True,
-                help="Name of the mesh object to create.",
+                help="Name of the mesh object to create. If not specified, defaults to pick object name.",
             ),
             optgroup.option(
                 "--mesh-user-id",
                 "-mu",
                 default=default_tool,
-                help="User ID for created mesh.",
+                help="User ID for created mesh. Defaults to tool name.",
             ),
             optgroup.option(
                 "--mesh-session-id",
                 "-ms",
                 default="0",
-                help="Session ID for created mesh. When using --individual-meshes, can contain placeholders.",
+                help="Session ID or template for created mesh. Supports placeholders: {input_session_id} for many-to-many, {instance_id} for individual meshes.",
             ),
             optgroup.option(
                 "--individual-meshes/--no-individual-meshes",

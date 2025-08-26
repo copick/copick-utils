@@ -149,7 +149,7 @@ def calculate_circumradius_3d(tetra_points: np.ndarray) -> float:
 
         return numerator / denominator
 
-    except:
+    except Exception:
         return float("inf")
 
 
@@ -209,7 +209,7 @@ def mesh_from_picks(
     # Handle clustering workflow with special mesh logic for individual meshes
     if use_clustering and individual_meshes and all_clusters:
         from copick_utils.converters.converter_common import cluster
-        
+
         point_clusters = cluster(
             points,
             clustering_method,
@@ -291,4 +291,4 @@ _mesh_from_picks_worker = create_batch_worker(mesh_from_picks, "mesh", min_point
 
 
 # Create batch converter using common infrastructure
-mesh_from_picks_batch = create_batch_converter(_mesh_from_picks_worker, "Converting picks to meshes")
+mesh_from_picks_batch = create_batch_converter(mesh_from_picks, "Converting picks to meshes", "mesh", min_points=4)
