@@ -8,9 +8,9 @@ from scipy.spatial import Delaunay
 from sklearn.decomposition import PCA
 
 from copick_utils.converters.converter_common import (
+    cluster,
     create_batch_converter,
     create_batch_worker,
-    handle_clustering_workflow,
     store_mesh_with_stats,
     validate_points,
 )
@@ -213,7 +213,10 @@ def surface_from_picks(
         use_clustering: Whether to cluster points first.
         clustering_method: Clustering method ('dbscan', 'kmeans').
         clustering_params: Parameters for clustering.
-        all_clusters: If True and clustering is used, use all clusters. If False, use only largest cluster.
+            e.g.
+                - {'eps': 5.0, 'min_samples': 3} for DBSCAN
+                - {'n_clusters': 3} for KMeans
+        all_clusters: If True, use all clusters; if False, use only the largest cluster.
         individual_meshes: If True, create separate mesh objects for each surface.
         session_id_template: Template for individual mesh session IDs.
 
@@ -227,24 +230,84 @@ def surface_from_picks(
     if clustering_params is None:
         clustering_params = {}
 
-    # Define surface creation function for clustering workflow
+    # Define surface creation function
     def create_surface_from_points(cluster_points):
         return fit_2d_surface_to_points(cluster_points, surface_method, grid_resolution)
 
-    # Handle clustering workflow
-    combined_mesh, points_used = handle_clustering_workflow(
-        points=points,
-        use_clustering=use_clustering,
-        clustering_method=clustering_method,
-        clustering_params=clustering_params,
-        all_clusters=all_clusters,
-        min_points_per_cluster=3,
-        shape_creation_func=create_surface_from_points,
-        shape_name="surface",
-    )
+    # Handle clustering workflow with special surface logic
+    if use_clustering:
+        point_clusters = cluster(
+            points,
+            clustering_method,
+            min_points_per_cluster=3,  # Surfaces need at least 3 points
+            **clustering_params,
+        )
 
-    if combined_mesh is None:
-        return None
+        if not point_clusters:
+            logger.warning("No valid clusters found")
+            return None
+
+        logger.info(f"Found {len(point_clusters)} clusters")
+
+        if all_clusters and len(point_clusters) > 1:
+            if individual_meshes:
+                # Create separate mesh objects for each surface
+                created_meshes = []
+                total_vertices = 0
+                total_faces = 0
+
+                for i, cluster_points in enumerate(point_clusters):
+                    try:
+                        surface_mesh = create_surface_from_points(cluster_points)
+
+                        # Generate session ID using template if provided
+                        if session_id_template:
+                            surface_session_id = session_id_template.format(
+                                base_session_id=session_id,
+                                instance_id=i,
+                            )
+                        else:
+                            surface_session_id = f"{session_id}-{i:03d}"
+
+                        copick_mesh = run.new_mesh(object_name, surface_session_id, user_id, exist_ok=True)
+                        copick_mesh.mesh = surface_mesh
+                        copick_mesh.store()
+                        created_meshes.append(copick_mesh)
+                        total_vertices += len(surface_mesh.vertices)
+                        total_faces += len(surface_mesh.faces)
+                        logger.info(
+                            f"Created individual surface mesh {i} with {len(surface_mesh.vertices)} vertices",
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to create mesh {i}: {e}")
+                        continue
+
+                # Return the first mesh and total stats
+                if created_meshes:
+                    stats = {"vertices_created": total_vertices, "faces_created": total_faces}
+                    return created_meshes[0], stats
+                else:
+                    return None
+            else:
+                # Create meshes from all clusters and combine them
+                all_meshes = []
+                for cluster_points in point_clusters:
+                    surface_mesh = create_surface_from_points(cluster_points)
+                    all_meshes.append(surface_mesh)
+
+                # Combine all meshes
+                combined_mesh = tm.util.concatenate(all_meshes)
+        else:
+            # Use largest cluster
+            cluster_sizes = [len(cluster) for cluster in point_clusters]
+            largest_cluster_idx = np.argmax(cluster_sizes)
+            points_to_use = point_clusters[largest_cluster_idx]
+            logger.info(f"Using largest cluster with {len(points_to_use)} points")
+
+            combined_mesh = create_surface_from_points(points_to_use)
+    else:
+        # Use all points without clustering
+        combined_mesh = create_surface_from_points(points)
 
     # Store mesh and return stats
     try:

@@ -38,19 +38,18 @@ class TestBatchOperations:
         # Get actual picks from the test data
         run.get_picks("sphere-points", "test", "single")[0]
 
-        from copick_utils.cli.input_output_selection import ConversionTask
+        from copick_utils.cli.input_output_selection import InputOutputSelector
 
-        tasks = [
-            ConversionTask(
-                run=run,
-                input_pick_object_name="sphere-points",
-                input_pick_user_id="test",
-                input_pick_session_id="single",
-                output_mesh_object_name="sphere",
-                output_mesh_user_id="test",
-                output_mesh_session_id="batch-test",
-            ),
-        ]
+        selector = InputOutputSelector(
+            pick_object_name="sphere-points",
+            pick_user_id="test",
+            pick_session_id="single",
+            mesh_object_name="sphere",
+            mesh_user_id="test",
+            mesh_session_id="batch-test",
+        )
+
+        tasks = selector.get_conversion_tasks(run)
 
         # Run batch conversion
         results = batch_func(root=root, conversion_tasks=tasks, run_names=["test_run"], workers=1, subdivisions=1)
@@ -71,19 +70,18 @@ class TestBatchOperations:
 
         run = root.get_run("test_run")
 
-        from copick_utils.cli.input_output_selection import ConversionTask
+        from copick_utils.cli.input_output_selection import InputOutputSelector
 
-        tasks = [
-            ConversionTask(
-                run=run,
-                input_pick_object_name="sphere-points",
-                input_pick_user_id="test",
-                input_pick_session_id="single",
-                output_mesh_object_name="fail",
-                output_mesh_user_id="test",
-                output_mesh_session_id="fail-test",
-            ),
-        ]
+        selector = InputOutputSelector(
+            pick_object_name="sphere-points",
+            pick_user_id="test",
+            pick_session_id="single",
+            mesh_object_name="fail",
+            mesh_user_id="test",
+            mesh_session_id="fail-test",
+        )
+
+        tasks = selector.get_conversion_tasks(run)
 
         # Run batch conversion - should handle errors gracefully
         results = batch_func(root=root, conversion_tasks=tasks, run_names=["test_run"], workers=1)
@@ -120,28 +118,30 @@ class TestBatchOperations:
 
         batch_func = create_batch_converter(sphere_from_picks, "Multi-run test", "sphere", min_points=4)
 
-        from copick_utils.cli.input_output_selection import ConversionTask
+        from copick_utils.cli.input_output_selection import InputOutputSelector
 
-        tasks = [
-            ConversionTask(
-                run=root.get_run("test_run"),
-                input_pick_object_name="sphere-points",
-                input_pick_user_id="test",
-                input_pick_session_id="single",
-                output_mesh_object_name="sphere",
-                output_mesh_user_id="test",
-                output_mesh_session_id="multi-1",
-            ),
-            ConversionTask(
-                run=run2,
-                input_pick_object_name="sphere-points",
-                input_pick_user_id="test",
-                input_pick_session_id="single",
-                output_mesh_object_name="sphere",
-                output_mesh_user_id="test",
-                output_mesh_session_id="multi-2",
-            ),
-        ]
+        # Create tasks for both runs
+        selector1 = InputOutputSelector(
+            pick_object_name="sphere-points",
+            pick_user_id="test",
+            pick_session_id="single",
+            mesh_object_name="sphere",
+            mesh_user_id="test",
+            mesh_session_id="multi-1",
+        )
+
+        selector2 = InputOutputSelector(
+            pick_object_name="sphere-points",
+            pick_user_id="test",
+            pick_session_id="single",
+            mesh_object_name="sphere",
+            mesh_user_id="test",
+            mesh_session_id="multi-2",
+        )
+
+        tasks1 = selector1.get_conversion_tasks(root.get_run("test_run"))
+        tasks2 = selector2.get_conversion_tasks(run2)
+        tasks = tasks1 + tasks2
 
         results = batch_func(
             root=root,
@@ -166,19 +166,18 @@ class TestBatchOperations:
 
         run = root.get_run("test_run")
 
-        from copick_utils.cli.input_output_selection import ConversionTask
+        from copick_utils.cli.input_output_selection import InputOutputSelector
 
-        tasks = [
-            ConversionTask(
-                run=run,
-                input_pick_object_name="sphere-points",
-                input_pick_user_id="test",
-                input_pick_session_id="single",
-                output_mesh_object_name="sphere",
-                output_mesh_user_id="test",
-                output_mesh_session_id="log-test",
-            ),
-        ]
+        selector = InputOutputSelector(
+            pick_object_name="sphere-points",
+            pick_user_id="test",
+            pick_session_id="single",
+            mesh_object_name="sphere",
+            mesh_user_id="test",
+            mesh_session_id="log-test",
+        )
+
+        tasks = selector.get_conversion_tasks(run)
 
         batch_func(root=root, conversion_tasks=tasks, run_names=["test_run"], workers=1, subdivisions=1)
 

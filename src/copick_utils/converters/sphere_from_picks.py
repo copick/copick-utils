@@ -231,7 +231,7 @@ def sphere_from_picks(
                     if session_id_template:
                         sphere_session_id = session_id_template.format(
                             base_session_id=session_id,
-                            sphere_id=i,
+                            instance_id=i,
                         )
                     else:
                         sphere_session_id = f"{session_id}-{i:03d}"

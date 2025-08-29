@@ -248,6 +248,8 @@ def create_batch_converter(
                 tasks_by_run[run_name] = []
             tasks_by_run[run_name].append(task)
 
+        print(tasks_by_run)
+
         # Create a modified worker that processes multiple tasks per run
         def multi_task_worker(
             run: "CopickRun",
@@ -302,6 +304,9 @@ def create_batch_converter(
                         all_errors.append(f"No {shape_name} mesh generated for {picks.session_id} in {run.name}")
 
                 except Exception as e:
+                    import traceback
+
+                    traceback.print_exc()
                     all_errors.append(f"Error processing task in {run.name}: {e}")
 
             return {

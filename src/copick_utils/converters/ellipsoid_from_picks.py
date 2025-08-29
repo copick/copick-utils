@@ -260,7 +260,7 @@ def ellipsoid_from_picks(
                     if session_id_template:
                         ellipsoid_session_id = session_id_template.format(
                             base_session_id=session_id,
-                            ellipsoid_id=i,
+                            instance_id=i,
                         )
                     else:
                         ellipsoid_session_id = f"{session_id}-{i:03d}"

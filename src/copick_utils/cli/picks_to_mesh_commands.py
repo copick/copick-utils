@@ -88,11 +88,13 @@ def picks2mesh(
     """
     Convert picks to meshes using convex hull or alpha shapes.
 
+    \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
     - One-to-many: exact session ID → template with {instance_id}
     - Many-to-many: regex pattern → template with {input_session_id} and {instance_id}
 
+    \b
     Examples:
         # Convert single pick set to single mesh
         picks2mesh --pick-session-id "manual-001" --mesh-session-id "mesh-001"
@@ -167,8 +169,8 @@ def picks2mesh(
         clustering_method=clustering_method,
         clustering_params=clustering_params,
         all_clusters=all_clusters,
-        individual_meshes=individual_meshes,
-        session_id_template=mesh_session_id,
+        # individual_meshes=individual_meshes,
+        # session_id_template=mesh_session_id,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
@@ -257,20 +259,24 @@ def picks2sphere(
     """
     Convert picks to sphere meshes.
 
+    \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
     - One-to-many: exact session ID → template with {instance_id}
     - Many-to-many: regex pattern → template with {input_session_id} and {instance_id}
 
+    \b
     Examples:
         # Convert single pick set to single sphere mesh
         picks2sphere --pick-session-id "manual-001" --mesh-session-id "sphere-001"
 
-        # Create individual sphere meshes from clusters
-        picks2sphere --pick-session-id "manual-001" --mesh-session-id "sphere-{instance_id}" --individual-meshes
+        \b
+    # Create individual sphere meshes from clusters
+    picks2sphere --pick-session-id "manual-001" --mesh-session-id "sphere-{instance_id}" --individual-meshes
 
-        # Convert all manual picks using pattern matching
-        picks2sphere --pick-session-id "manual-.*" --mesh-session-id "sphere-{input_session_id}"
+        \b
+    # Convert all manual picks using pattern matching
+    picks2sphere --pick-session-id "manual-.*" --mesh-session-id "sphere-{input_session_id}"
     """
     from copick_utils.converters.sphere_from_picks import sphere_from_picks_batch
 
@@ -332,10 +338,10 @@ def picks2sphere(
         clustering_params=clustering_params,
         subdivisions=subdivisions,
         all_clusters=all_clusters,
-        deduplicate_spheres=deduplicate_spheres,
+        deduplicate_spheres_flag=deduplicate_spheres,
         min_sphere_distance=min_sphere_distance,
-        individual_meshes=individual_meshes,
-        session_id_template=mesh_session_id,
+        # individual_meshes=individual_meshes,
+        # session_id_template=mesh_session_id,
     )
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
     total_vertices = sum(result.get("vertices_created", 0) for result in results.values() if result)
@@ -423,20 +429,24 @@ def picks2ellipsoid(
     """
     Convert picks to ellipsoid meshes.
 
+    \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
     - One-to-many: exact session ID → template with {instance_id}
     - Many-to-many: regex pattern → template with {input_session_id} and {instance_id}
 
+    \b
     Examples:
         # Convert single pick set to single ellipsoid mesh
         picks2ellipsoid --pick-session-id "manual-001" --mesh-session-id "ellipsoid-001"
 
-        # Create individual ellipsoid meshes from clusters
-        picks2ellipsoid --pick-session-id "manual-001" --mesh-session-id "ellipsoid-{instance_id}" --individual-meshes
+        \b
+    # Create individual ellipsoid meshes from clusters
+    picks2ellipsoid --pick-session-id "manual-001" --mesh-session-id "ellipsoid-{instance_id}" --individual-meshes
 
-        # Convert all manual picks using pattern matching
-        picks2ellipsoid --pick-session-id "manual-.*" --mesh-session-id "ellipsoid-{input_session_id}"
+        \b
+    # Convert all manual picks using pattern matching
+    picks2ellipsoid --pick-session-id "manual-.*" --mesh-session-id "ellipsoid-{input_session_id}"
     """
     from copick_utils.converters.ellipsoid_from_picks import ellipsoid_from_picks_batch
 
@@ -498,10 +508,10 @@ def picks2ellipsoid(
         clustering_params=clustering_params,
         subdivisions=subdivisions,
         all_clusters=all_clusters,
-        deduplicate_ellipsoids=deduplicate_ellipsoids,
+        deduplicate_ellipsoids_flag=deduplicate_ellipsoids,
         min_ellipsoid_distance=min_ellipsoid_distance,
-        individual_meshes=individual_meshes,
-        session_id_template=mesh_session_id,
+        # individual_meshes=individual_meshes,
+        # session_id_template=mesh_session_id,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
@@ -577,20 +587,25 @@ def picks2plane(
     """
     Convert picks to plane meshes.
 
+    \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
     - One-to-many: exact session ID → template with {instance_id}
     - Many-to-many: regex pattern → template with {input_session_id} and {instance_id}
 
+    \b
     Examples:
+        \b
         # Convert single pick set to single plane mesh
         picks2plane --pick-session-id "manual-001" --mesh-session-id "plane-001"
 
-        # Create individual plane meshes from clusters
-        picks2plane --pick-session-id "manual-001" --mesh-session-id "plane-{instance_id}" --individual-meshes
+        \b
+    # Create individual plane meshes from clusters
+    picks2plane --pick-session-id "manual-001" --mesh-session-id "plane-{instance_id}" --individual-meshes
 
-        # Convert all manual picks using pattern matching
-        picks2plane --pick-session-id "manual-.*" --mesh-session-id "plane-{input_session_id}"
+        \b
+    # Convert all manual picks using pattern matching
+    picks2plane --pick-session-id "manual-.*" --mesh-session-id "plane-{input_session_id}"
     """
     from copick_utils.converters.plane_from_picks import plane_from_picks_batch
 
@@ -652,8 +667,8 @@ def picks2plane(
         clustering_params=clustering_params,
         padding=padding,
         all_clusters=all_clusters,
-        individual_meshes=individual_meshes,
-        session_id_template=mesh_session_id,
+        # individual_meshes=individual_meshes,
+        # session_id_template=mesh_session_id,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
@@ -812,8 +827,8 @@ def picks2surface(
         clustering_method=clustering_method,
         clustering_params=clustering_params,
         all_clusters=all_clusters,
-        individual_meshes=individual_meshes,
-        session_id_template=mesh_session_id,
+        # individual_meshes=individual_meshes,
+        # session_id_template=mesh_session_id,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
