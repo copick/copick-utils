@@ -189,8 +189,14 @@ def mesh_from_picks(
 
 
 # Create worker function using common infrastructure
-_mesh_from_picks_worker = create_batch_worker(mesh_from_picks, "mesh", min_points=4)
+_mesh_from_picks_worker = create_batch_worker(mesh_from_picks, "mesh", "picks", min_points=4)
 
 
 # Create batch converter using common infrastructure
-mesh_from_picks_batch = create_batch_converter(mesh_from_picks, "Converting picks to meshes", "mesh", min_points=4)
+mesh_from_picks_batch = create_batch_converter(
+    mesh_from_picks,
+    "Converting picks to meshes",
+    "mesh",
+    "picks",
+    min_points=4,
+)

@@ -114,7 +114,7 @@ class TestBatchOperations:
         # Copy some picks to the second run
         original_picks = root.get_run("test_run").get_picks("sphere-points", "test", "single")[0]
         new_picks = run2.new_picks("sphere-points", "test", "single", exist_ok=True)
-        new_picks.from_numpy(original_picks.numpy())
+        new_picks.from_numpy(*original_picks.numpy())
 
         batch_func = create_batch_converter(sphere_from_picks, "Multi-run test", "sphere", min_points=4)
 

@@ -121,15 +121,17 @@ def store_mesh_with_stats(
 
 def create_batch_worker(
     converter_func: Callable,
-    shape_name: str,
+    output_type: str,
+    input_type: str = "picks",
     min_points: int = 3,
 ) -> Callable:
     """Create a batch worker function for a specific converter.
 
     Args:
         converter_func: The main converter function to call.
-        shape_name: Name of the shape for error messages.
-        min_points: Minimum points required for this shape type.
+        output_type: Type of output being created (e.g., "mesh", "segmentation").
+        input_type: Type of input being processed (e.g., "picks", "mesh", "segmentation").
+        min_points: Minimum points required (only relevant for picks input).
 
     Returns:
         Worker function that can be used with map_runs.
@@ -137,59 +139,104 @@ def create_batch_worker(
 
     def worker(
         run: "CopickRun",
-        pick_object_name: str,
-        pick_user_id: str,
-        pick_session_id: str,
-        mesh_object_name: str,
-        mesh_session_id: str,
-        mesh_user_id: str,
+        input_object_name: str,
+        input_user_id: str,
+        input_session_id: str,
+        output_object_name: str,
+        output_session_id: str,
+        output_user_id: str,
         **converter_kwargs,
     ) -> Dict[str, Any]:
-        """Worker function for batch conversion of picks to meshes."""
+        """Worker function for batch conversion."""
         try:
-            # Get picks
-            picks_list = run.get_picks(
-                object_name=pick_object_name,
-                user_id=pick_user_id,
-                session_id=pick_session_id,
-            )
+            # Get input data based on input type
+            if input_type == "picks":
+                input_list = run.get_picks(
+                    object_name=input_object_name,
+                    user_id=input_user_id,
+                    session_id=input_session_id,
+                )
+                if not input_list:
+                    return {"processed": 0, "errors": [f"No picks found for {run.name}"]}
 
-            if not picks_list:
-                return {"processed": 0, "errors": [f"No picks found for {run.name}"]}
+                input_obj = input_list[0]
+                points, transforms = input_obj.numpy()
 
-            picks = picks_list[0]
-            points, transforms = picks.numpy()
+                if points is None or len(points) == 0:
+                    return {"processed": 0, "errors": [f"Could not load pick data for {run.name}"]}
 
-            if points is None or len(points) == 0:
-                return {"processed": 0, "errors": [f"Could not load pick data for {run.name}"]}
+                # Use points directly - copick coordinates are already in angstroms
+                positions = points[:, :3]
 
-            # Use points directly - copick coordinates are already in angstroms
-            positions = points[:, :3]
+                # Validate minimum points
+                if not validate_points(positions, min_points, output_type):
+                    return {"processed": 0, "errors": [f"Insufficient points for {run.name}"]}
 
-            # Validate minimum points
-            if not validate_points(positions, min_points, shape_name):
-                return {"processed": 0, "errors": [f"Insufficient points for {run.name}"]}
+                # Call converter with points
+                result = converter_func(
+                    points=positions,
+                    run=run,
+                    object_name=output_object_name,
+                    session_id=output_session_id,
+                    user_id=output_user_id,
+                    **converter_kwargs,
+                )
 
-            result = converter_func(
-                points=positions,
-                run=run,
-                object_name=mesh_object_name,
-                session_id=mesh_session_id,
-                user_id=mesh_user_id,
-                **converter_kwargs,
-            )
+            elif input_type == "mesh":
+                input_list = run.get_meshes(
+                    object_name=input_object_name,
+                    user_id=input_user_id,
+                    session_id=input_session_id,
+                )
+                if not input_list:
+                    return {"processed": 0, "errors": [f"No meshes found for {run.name}"]}
+
+                input_obj = input_list[0]
+
+                # Call converter with mesh object
+                result = converter_func(
+                    mesh=input_obj,
+                    run=run,
+                    object_name=output_object_name,
+                    session_id=output_session_id,
+                    user_id=output_user_id,
+                    **converter_kwargs,
+                )
+
+            elif input_type == "segmentation":
+                input_list = run.get_segmentations(
+                    name=input_object_name,
+                    user_id=input_user_id,
+                    session_id=input_session_id,
+                    **converter_kwargs,  # Pass through voxel_size, is_multilabel, etc.
+                )
+                if not input_list:
+                    return {"processed": 0, "errors": [f"No segmentations found for {run.name}"]}
+
+                input_obj = input_list[0]
+
+                # Call converter with segmentation object
+                result = converter_func(
+                    segmentation=input_obj,
+                    run=run,
+                    object_name=output_object_name,
+                    session_id=output_session_id,
+                    user_id=output_user_id,
+                    **converter_kwargs,
+                )
+            else:
+                return {"processed": 0, "errors": [f"Unknown input type: {input_type}"]}
 
             if result:
-                mesh_obj, stats = result
+                output_obj, stats = result
                 return {
                     "processed": 1,
                     "errors": [],
-                    "result": mesh_obj,
-                    "vertices_created": stats["vertices_created"],
-                    "faces_created": stats["faces_created"],
+                    "result": output_obj,
+                    **stats,  # Include all stats (vertices_created, faces_created, voxels_created, etc.)
                 }
             else:
-                return {"processed": 0, "errors": [f"No {shape_name} mesh generated for {run.name}"]}
+                return {"processed": 0, "errors": [f"No {output_type} generated for {run.name}"]}
 
         except Exception as e:
             return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"]}
@@ -200,7 +247,8 @@ def create_batch_worker(
 def create_batch_converter(
     converter_func: Callable,
     task_description: str,
-    shape_name: str,
+    output_type: str,
+    input_type: str = "picks",
     min_points: int = 3,
 ) -> Callable:
     """
@@ -209,8 +257,9 @@ def create_batch_converter(
     Args:
         converter_func: The main converter function to call.
         task_description: Description for the progress bar.
-        shape_name: Name of the shape for error messages.
-        min_points: Minimum points required for this shape type.
+        output_type: Type of output being created (e.g., "mesh", "segmentation").
+        input_type: Type of input being processed (e.g., "picks", "mesh", "segmentation").
+        min_points: Minimum points required (only relevant for picks input).
 
     Returns:
         Batch converter function.
@@ -224,7 +273,7 @@ def create_batch_converter(
         **converter_kwargs,
     ) -> Dict[str, Any]:
         """
-        Batch convert picks to meshes with flexible input/output selection.
+        Batch convert with flexible input/output selection.
 
         Args:
             root: The copick root containing runs to process.
@@ -240,15 +289,28 @@ def create_batch_converter(
 
         runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
 
-        # Group tasks by run
+        # Group tasks by run - determine input object key dynamically
+        input_key = f"input_{input_type}"
+        if input_type == "picks":
+            input_key = "input_picks"  # backward compatibility
+        elif input_type == "mesh":
+            input_key = "input_mesh"
+        elif input_type == "segmentation":
+            input_key = "input_segmentation"
+
         tasks_by_run = {}
         for task in conversion_tasks:
-            run_name = task["input_picks"].run.name
-            if run_name not in tasks_by_run:
-                tasks_by_run[run_name] = []
-            tasks_by_run[run_name].append(task)
+            # Get run name from input object
+            input_obj = task.get(input_key)
+            if input_obj is None:
+                # Try alternate keys for backward compatibility
+                input_obj = task.get("input_picks") or task.get("input_mesh") or task.get("input_segmentation")
 
-        print(tasks_by_run)
+            if input_obj:
+                run_name = input_obj.run.name
+                if run_name not in tasks_by_run:
+                    tasks_by_run[run_name] = []
+                tasks_by_run[run_name].append(task)
 
         # Create a modified worker that processes multiple tasks per run
         def multi_task_worker(
@@ -262,46 +324,79 @@ def create_batch_converter(
                 return {"processed": 0, "errors": [f"No tasks for {run.name}"]}
 
             total_processed = 0
-            total_vertices = 0
-            total_faces = 0
             all_errors = []
+            accumulated_stats = {}
 
             for task in run_tasks:
                 try:
-                    picks = task["input_picks"]
-                    points, transforms = picks.numpy()
+                    input_obj = task.get(input_key)
+                    if input_obj is None:
+                        # Try alternate keys for backward compatibility
+                        input_obj = task.get("input_picks") or task.get("input_mesh") or task.get("input_segmentation")
 
-                    if points is None or len(points) == 0:
-                        all_errors.append(f"Could not load pick data from {picks.session_id} in {run.name}")
+                    if not input_obj:
+                        all_errors.append(f"No input object found in task for {run.name}")
                         continue
 
-                    # Use points directly - copick coordinates are already in angstroms
-                    positions = points[:, :3]
+                    # Handle different input types
+                    if input_type == "picks":
+                        points, transforms = input_obj.numpy()
+                        if points is None or len(points) == 0:
+                            all_errors.append(f"Could not load pick data from {input_obj.session_id} in {run.name}")
+                            continue
 
-                    # Validate minimum points
-                    if not validate_points(positions, min_points, shape_name):
-                        all_errors.append(f"Insufficient points for {shape_name} in {picks.session_id}/{run.name}")
-                        continue
+                        positions = points[:, :3]
+                        if not validate_points(positions, min_points, output_type):
+                            all_errors.append(
+                                f"Insufficient points for {output_type} in {input_obj.session_id}/{run.name}",
+                            )
+                            continue
 
-                    # Call the converter function directly
-                    result = converter_func(
-                        points=positions,
-                        run=run,
-                        object_name=task["mesh_object_name"],
-                        session_id=task["mesh_session_id"],
-                        user_id=task["mesh_user_id"],
-                        individual_meshes=task.get("individual_meshes", False),
-                        session_id_template=task.get("session_id_template"),
-                        **converter_kwargs,
-                    )
+                        # Call converter with points
+                        result = converter_func(
+                            points=positions,
+                            run=run,
+                            object_name=task.get(f"{output_type}_object_name", task.get("mesh_object_name")),
+                            session_id=task.get(f"{output_type}_session_id", task.get("mesh_session_id")),
+                            user_id=task.get(f"{output_type}_user_id", task.get("mesh_user_id")),
+                            individual_meshes=task.get("individual_meshes", False),
+                            session_id_template=task.get("session_id_template"),
+                            **converter_kwargs,
+                        )
+
+                    else:
+                        # For mesh or segmentation input, pass the object directly
+                        if input_type == "mesh":
+                            result = converter_func(
+                                mesh=input_obj,
+                                run=run,
+                                object_name=task.get(f"{output_type}_object_name"),
+                                session_id=task.get(f"{output_type}_session_id"),
+                                user_id=task.get(f"{output_type}_user_id"),
+                                **converter_kwargs,
+                            )
+                        elif input_type == "segmentation":
+                            result = converter_func(
+                                segmentation=input_obj,
+                                run=run,
+                                object_name=task.get(f"{output_type}_object_name"),
+                                session_id=task.get(f"{output_type}_session_id"),
+                                user_id=task.get(f"{output_type}_user_id"),
+                                **converter_kwargs,
+                            )
 
                     if result:
-                        mesh_obj, stats = result
+                        output_obj, stats = result
                         total_processed += 1
-                        total_vertices += stats["vertices_created"]
-                        total_faces += stats["faces_created"]
+
+                        # Accumulate stats dynamically
+                        for key, value in stats.items():
+                            if key not in accumulated_stats:
+                                accumulated_stats[key] = 0
+                            accumulated_stats[key] += value
                     else:
-                        all_errors.append(f"No {shape_name} mesh generated for {picks.session_id} in {run.name}")
+                        session_id = getattr(input_obj, "session_id", "unknown")
+                        all_errors.append(f"No {output_type} generated for {session_id} in {run.name}")
 
                 except Exception as e:
                     import traceback
@@ -312,15 +407,15 @@ def create_batch_converter(
             return {
                 "processed": total_processed,
                 "errors": all_errors,
-                "vertices_created": total_vertices,
-                "faces_created": total_faces,
+                **accumulated_stats,
             }
 
         # Only process runs that have tasks
         relevant_runs = [run for run in runs_to_process if run in tasks_by_run]
 
         if not relevant_runs:
-            return {"processed": 0, "errors": ["No relevant runs found with matching picks"]}
+            input_type_name = input_type + "s" if not input_type.endswith("s") else input_type
+            return {"processed": 0, "errors": [f"No relevant runs found with matching {input_type_name}"]}
 
         results = map_runs(
             callback=multi_task_worker,

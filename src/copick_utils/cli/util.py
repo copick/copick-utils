@@ -130,6 +130,165 @@ def add_workers_option(func: click.Command) -> click.Command:
     return func
 
 
+def add_mesh_input_options(func: click.Command) -> click.Command:
+    """
+    Add common input options for mesh-to-segmentation conversion commands.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with the input options added.
+    """
+    opts = [
+        optgroup.option(
+            "--mesh-object-name",
+            "-mo",
+            required=True,
+            help="Name of the mesh object to convert.",
+        ),
+        optgroup.option(
+            "--mesh-user-id",
+            "-mu",
+            required=True,
+            help="User ID of the mesh to convert.",
+        ),
+        optgroup.option(
+            "--mesh-session-id",
+            "-ms",
+            required=True,
+            help="Session ID or regex pattern of the mesh to convert.",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
+
+
+def add_segmentation_input_options(func: click.Command) -> click.Command:
+    """
+    Add common input options for segmentation-to-mesh conversion commands.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with the input options added.
+    """
+    opts = [
+        optgroup.option(
+            "--seg-name",
+            "-sn",
+            required=True,
+            help="Name of the segmentation to convert.",
+        ),
+        optgroup.option(
+            "--seg-user-id",
+            "-su",
+            required=True,
+            help="User ID of the segmentation to convert.",
+        ),
+        optgroup.option(
+            "--seg-session-id",
+            "-ss",
+            required=True,
+            help="Session ID or regex pattern of the segmentation to convert.",
+        ),
+        optgroup.option(
+            "--voxel-spacing",
+            "-vs",
+            type=float,
+            required=True,
+            help="Voxel spacing of the segmentation.",
+        ),
+        optgroup.option(
+            "--multilabel/--no-multilabel",
+            is_flag=True,
+            default=False,
+            help="Source is multilabel segmentation.",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
+
+
+def add_segmentation_output_options(func: click.Command = None, *, default_tool: str = "from-mesh") -> Callable:
+    """
+    Add common output options for mesh-to-segmentation conversion commands.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+        default_tool (str): Default user ID for created segmentation.
+
+    Returns:
+        click.Command: The Click command with the output options added.
+    """
+
+    def add_segmentation_output_options_decorator(func: click.Command) -> click.Command:
+        """
+        Add common output options for segmentation creation commands.
+
+        Args:
+            func (click.Command): The Click command to which the options will be added.
+
+        Returns:
+            click.Command: The Click command with the output options added.
+        """
+        opts = [
+            optgroup.option(
+                "--seg-name",
+                "-sn",
+                required=True,
+                help="Name of the segmentation to create.",
+            ),
+            optgroup.option(
+                "--seg-user-id",
+                "-su",
+                default=default_tool,
+                help="User ID for created segmentation. Defaults to tool name.",
+            ),
+            optgroup.option(
+                "--seg-session-id",
+                "-ss",
+                default="0",
+                help="Session ID for created segmentation.",
+            ),
+            optgroup.option(
+                "--voxel-spacing",
+                "-vs",
+                type=float,
+                required=True,
+                help="Voxel spacing for the segmentation.",
+            ),
+            optgroup.option(
+                "--multilabel/--no-multilabel",
+                is_flag=True,
+                default=False,
+                help="Create multilabel segmentation.",
+            ),
+            optgroup.option(
+                "--tomo-type",
+                default="wbp",
+                help="Type of tomogram to use as reference.",
+            ),
+        ]
+
+        for opt in reversed(opts):
+            func = opt(func)
+
+        return func
+
+    if func is None:
+        return add_segmentation_output_options_decorator
+    else:
+        return add_segmentation_output_options_decorator(func)
+
+
 def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "from-picks") -> Callable:
     """
     Add common output options for picks-to-mesh conversion commands.
@@ -193,3 +352,34 @@ def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "
         return add_mesh_output_options_decorator
     else:
         return add_mesh_output_options_decorator(func)
+
+
+def add_marching_cubes_options(func: click.Command) -> click.Command:
+    """
+    Add marching cubes options for segmentation-to-mesh conversion commands.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with the marching cubes options added.
+    """
+    opts = [
+        optgroup.option(
+            "--level",
+            type=float,
+            default=0.5,
+            help="Isosurface level for marching cubes.",
+        ),
+        optgroup.option(
+            "--step-size",
+            type=int,
+            default=1,
+            help="Step size for marching cubes (higher = coarser mesh).",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
