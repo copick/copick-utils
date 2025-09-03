@@ -383,3 +383,126 @@ def add_marching_cubes_options(func: click.Command) -> click.Command:
         func = opt(func)
 
     return func
+
+
+def add_picks_output_options(func: click.Command = None, *, default_tool: str = "from-segmentation") -> Callable:
+    """
+    Add common output options for segmentation-to-picks conversion commands.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+        default_tool (str): Default user ID for created picks.
+
+    Returns:
+        click.Command: The Click command with the output options added.
+    """
+
+    def add_picks_output_options_decorator(func: click.Command) -> click.Command:
+        """
+        Add common output options for picks creation commands.
+
+        Args:
+            func (click.Command): The Click command to which the options will be added.
+
+        Returns:
+            click.Command: The Click command with the output options added.
+        """
+        opts = [
+            optgroup.option(
+                "--pick-object-name",
+                "-po",
+                required=True,
+                help="Name of the pick object to create.",
+            ),
+            optgroup.option(
+                "--pick-user-id",
+                "-pu",
+                default=default_tool,
+                help="User ID for created picks. Defaults to tool name.",
+            ),
+            optgroup.option(
+                "--pick-session-id",
+                "-ps",
+                default="0",
+                help="Session ID for created picks.",
+            ),
+        ]
+
+        for opt in reversed(opts):
+            func = opt(func)
+
+        return func
+
+    if func is None:
+        return add_picks_output_options_decorator
+    else:
+        return add_picks_output_options_decorator(func)
+
+
+def add_segmentation_processing_options(func: click.Command) -> click.Command:
+    """
+    Add segmentation processing options for segmentation-to-picks conversion commands.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with the segmentation processing options added.
+    """
+    opts = [
+        optgroup.option(
+            "--segmentation-idx",
+            "-si",
+            type=int,
+            required=True,
+            help="Label index to extract from segmentation.",
+        ),
+        optgroup.option(
+            "--maxima-filter-size",
+            type=int,
+            default=9,
+            help="Size of maximum detection filter.",
+        ),
+        optgroup.option(
+            "--min-particle-size",
+            type=int,
+            default=1000,
+            help="Minimum particle size threshold.",
+        ),
+        optgroup.option(
+            "--max-particle-size",
+            type=int,
+            default=50000,
+            help="Maximum particle size threshold.",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
+
+
+def add_picks_painting_options(func: click.Command) -> click.Command:
+    """
+    Add picks painting options for picks-to-segmentation conversion commands.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with the picks painting options added.
+    """
+    opts = [
+        optgroup.option(
+            "--radius",
+            type=float,
+            default=10.0,
+            help="Radius of spheres to paint at pick locations (in angstroms).",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func

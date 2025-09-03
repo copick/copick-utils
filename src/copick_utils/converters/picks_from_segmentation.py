@@ -1,49 +1,52 @@
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Union
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import numpy as np
 import scipy.ndimage as ndi
+from copick.util.log import get_logger
 from skimage.measure import regionprops
 from skimage.morphology import ball, binary_dilation, binary_erosion
 from skimage.segmentation import watershed
 
+from copick_utils.converters.converter_common import (
+    create_batch_converter,
+    create_batch_worker,
+)
+
 if TYPE_CHECKING:
-    from copick.models import CopickRun, CopickPicks, CopickRoot
+    from copick.models import CopickPicks, CopickRun, CopickSegmentation
+
+logger = get_logger(__name__)
 
 
-def picks_from_segmentation(
+def _extract_centroids_from_segmentation_array(
     segmentation: np.ndarray,
     segmentation_idx: int,
     maxima_filter_size: int,
     min_particle_size: int,
     max_particle_size: int,
-    session_id: str,
-    user_id: str,
-    pickable_object: str,
-    run: "CopickRun",
-    voxel_spacing: float = 1,
-) -> Optional["CopickPicks"]:
+    voxel_spacing: float,
+) -> Optional[np.ndarray]:
     """
-    Process a specific label in the segmentation, extract centroids, and save them as picks.
+    Extract centroids from a segmentation array.
 
     Args:
-        segmentation (np.ndarray): Multilabel segmentation array.
-        segmentation_idx (int): The specific label from the segmentation to process.
-        maxima_filter_size (int): Size of the maximum detection filter.
-        min_particle_size (int): Minimum size threshold for particles.
-        max_particle_size (int): Maximum size threshold for particles.
-        session_id (str): Session ID for pick saving.
-        user_id (str): User ID for pick saving.
-        pickable_object (str): The name of the object to save picks for.
-        run: A Copick run object that manages pick saving.
-        voxel_spacing (int): The voxel spacing used to scale pick locations (default 1).
+        segmentation: Multilabel segmentation array.
+        segmentation_idx: The specific label from the segmentation to process.
+        maxima_filter_size: Size of the maximum detection filter.
+        min_particle_size: Minimum size threshold for particles.
+        max_particle_size: Maximum size threshold for particles.
+        voxel_spacing: The voxel spacing used to scale pick locations.
+
+    Returns:
+        Array of centroid positions or None if no centroids found.
     """
     # Create a binary mask for the specific segmentation label
     binary_mask = (segmentation == segmentation_idx).astype(int)
 
     # Skip if the segmentation label is not present
     if np.sum(binary_mask) == 0:
-        print(f"No segmentation with label {segmentation_idx} found.")
-        return
+        logger.warning(f"No segmentation with label {segmentation_idx} found")
+        return None
 
     # Structuring element for erosion and dilation
     struct_elem = ball(1)
@@ -67,160 +70,94 @@ def picks_from_segmentation(
         if min_particle_size <= region.area <= max_particle_size:
             all_centroids.append(region.centroid)
 
-    # Save centroids as picks
     if all_centroids:
-        pick_set = run.new_picks(pickable_object, session_id, user_id)
-
+        # Convert to positions (Z, Y, X) -> (X, Y, Z) and scale by voxel spacing
         positions = np.array(all_centroids)[:, [2, 1, 0]] * voxel_spacing
-        pick_set.from_numpy(positions=positions)
-        pick_set.store()
-
-        print(f"Centroids for label {segmentation_idx} saved successfully.")
-        return pick_set
+        return positions
     else:
-        print(f"No valid centroids found for label {segmentation_idx}.")
+        logger.warning(f"No valid centroids found for label {segmentation_idx}")
         return None
 
 
-def _picks_from_segmentation_worker(
+def picks_from_segmentation(
+    segmentation: "CopickSegmentation",
     run: "CopickRun",
     object_name: str,
-    seg_user_id: str,
-    seg_session_id: str,
-    segmentation_name: str,
+    session_id: str,
+    user_id: str,
     segmentation_idx: int,
-    maxima_filter_size: int,
-    min_particle_size: int,
-    max_particle_size: int,
-    pick_user_id: str,
-    pick_session_id: str,
-    voxel_spacing: float,
-    root: "CopickRoot",
-) -> Dict[str, Any]:
-    """Worker function for batch conversion of segmentations to picks."""
-    try:
-        pickable_object = root.get_object(object_name)
-        if not pickable_object:
-            return {"processed": 0, "errors": [f"Object '{object_name}' not found in config"]}
-
-        segs = run.get_segmentations(
-            name=segmentation_name,
-            user_id=seg_user_id,
-            session_id=seg_session_id,
-            voxel_size=voxel_spacing,
-        )
-        
-        if not segs:
-            return {"processed": 0, "errors": [f"No segmentations found for {run.name}"]}
-            
-        seg = segs[0]
-        segmentation_array = seg.numpy()
-        
-        if segmentation_array is None:
-            return {"processed": 0, "errors": [f"Could not load segmentation data for {run.name}"]}
-        
-        pick_set = picks_from_segmentation(
-            segmentation=segmentation_array,
-            segmentation_idx=segmentation_idx,
-            maxima_filter_size=maxima_filter_size,
-            min_particle_size=min_particle_size,
-            max_particle_size=max_particle_size,
-            session_id=pick_session_id,
-            user_id=pick_user_id,
-            pickable_object=object_name,
-            run=run,
-            voxel_spacing=voxel_spacing,
-        )
-        
-        if pick_set and pick_set.points:
-            return {"processed": 1, "errors": [], "result": pick_set, "points_created": len(pick_set.points)}
-        else:
-            return {"processed": 0, "errors": [f"No picks generated for {run.name}"]}
-        
-    except Exception as e:
-        return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"]}
-
-
-def picks_from_segmentation_batch(
-    root: "CopickRoot",
-    object_name: str,
-    seg_user_id: str,
-    seg_session_id: str,
-    segmentation_name: str,
-    segmentation_idx: int,
-    maxima_filter_size: int,
-    min_particle_size: int,
-    max_particle_size: int,
-    pick_user_id: str,
-    pick_session_id: str,
-    voxel_spacing: float,
-    run_names: Optional[List[str]] = None,
-    workers: int = 8,
-) -> Dict[str, Any]:
+    maxima_filter_size: int = 9,
+    min_particle_size: int = 1000,
+    max_particle_size: int = 50000,
+    **kwargs,
+) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
     """
-    Batch convert segmentations to picks across multiple runs.
+    Convert a CopickSegmentation to picks by extracting centroids.
 
-    Parameters:
-    -----------
-    root : copick.Root
-        The copick root containing runs to process.
-    object_name : str
-        Name of the object to process segmentations for.
-    seg_user_id : str
-        User ID of the segmentations to convert.
-    seg_session_id : str
-        Session ID of the segmentations to convert.
-    segmentation_name : str
-        Name of the segmentation to process.
-    segmentation_idx : int
-        The specific label from the segmentation to process.
-    maxima_filter_size : int
-        Size of the maximum detection filter.
-    min_particle_size : int
-        Minimum size threshold for particles.
-    max_particle_size : int
-        Maximum size threshold for particles.
-    pick_user_id : str
-        User ID for the created picks.
-    pick_session_id : str
-        Session ID for the created picks.
-    voxel_spacing : float
-        Voxel spacing for scaling pick locations.
-    run_names : list, optional
-        List of run names to process. If None, processes all runs.
-    workers : int, optional
-        Number of worker processes. Default is 8.
+    Args:
+        segmentation: CopickSegmentation object to convert
+        run: CopickRun object
+        object_name: Name for the output pick object
+        session_id: Session ID for the output picks
+        user_id: User ID for the output picks
+        segmentation_idx: The specific label from the segmentation to process
+        maxima_filter_size: Size of the maximum detection filter
+        min_particle_size: Minimum size threshold for particles
+        max_particle_size: Maximum size threshold for particles
+        **kwargs: Additional keyword arguments
 
     Returns:
-    --------
-    dict
-        Dictionary with processing results and statistics.
+        Tuple of (CopickPicks object, stats dict) or None if creation failed.
+        Stats dict contains 'points_created'.
     """
-    from copick.ops.run import map_runs
-    
-    runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-    
-    results = map_runs(
-        callback=_picks_from_segmentation_worker,
-        root=root,
-        runs=runs_to_process,
-        workers=workers,
-        task_desc="Converting segmentations to picks",
-        object_name=object_name,
-        seg_user_id=seg_user_id,
-        seg_session_id=seg_session_id,
-        segmentation_name=segmentation_name,
-        segmentation_idx=segmentation_idx,
-        maxima_filter_size=maxima_filter_size,
-        min_particle_size=min_particle_size,
-        max_particle_size=max_particle_size,
-        pick_user_id=pick_user_id,
-        pick_session_id=pick_session_id,
-        voxel_spacing=voxel_spacing,
-    )
-    
-    return results
+    try:
+        # Load the segmentation array
+        segmentation_array = segmentation.numpy()
+
+        if segmentation_array is None or segmentation_array.size == 0:
+            logger.error("Empty or invalid segmentation volume")
+            return None
+
+        # Get voxel spacing from segmentation
+        voxel_spacing = segmentation.voxel_size
+
+        # Extract centroids
+        positions = _extract_centroids_from_segmentation_array(
+            segmentation_array,
+            segmentation_idx,
+            maxima_filter_size,
+            min_particle_size,
+            max_particle_size,
+            voxel_spacing,
+        )
+
+        if positions is None:
+            logger.error("No centroids extracted from segmentation")
+            return None
+
+        # Create pick set and store positions
+        pick_set = run.new_picks(object_name, session_id, user_id, exist_ok=True)
+        pick_set.from_numpy(positions=positions)
+        pick_set.store()
+
+        stats = {"points_created": len(positions)}
+        logger.info(f"Created {stats['points_created']} picks from segmentation")
+        return pick_set, stats
+
+    except Exception as e:
+        logger.error(f"Error creating picks: {e}")
+        return None
 
 
-# Example call to the function
-# picks_from_segmentation(segmentation_array, label_id, 9, 1000, 50000, session_id, user_id, pickable_object_name, run_object)
+# Create worker function using common infrastructure
+_picks_from_segmentation_worker = create_batch_worker(picks_from_segmentation, "picks", "segmentation", min_points=0)
+
+
+# Create batch converter using common infrastructure
+picks_from_segmentation_batch = create_batch_converter(
+    picks_from_segmentation,
+    "Converting segmentations to picks",
+    "picks",
+    "segmentation",
+    min_points=0,
+)

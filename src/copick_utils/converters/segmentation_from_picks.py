@@ -1,11 +1,19 @@
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Union
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import numpy as np
 import zarr
+from copick.util.log import get_logger
 from scipy.ndimage import zoom
 
+from copick_utils.converters.converter_common import (
+    create_batch_converter,
+    create_batch_worker,
+)
+
 if TYPE_CHECKING:
-    from copick.models import CopickRun, CopickObject, CopickPicks, CopickSegmentation, CopickRoot
+    from copick.models import CopickObject, CopickPicks, CopickRun, CopickSegmentation
+
+logger = get_logger(__name__)
 
 
 def from_picks(
@@ -94,7 +102,7 @@ def downsample_to_exact_shape(array: np.ndarray, target_shape: tuple) -> np.ndar
     return zoom(array, zoom_factors, order=0)
 
 
-def segmentation_from_picks(
+def _create_segmentation_from_picks_legacy(
     radius: float,
     painting_segmentation_name: str,
     run: "CopickRun",
@@ -198,121 +206,87 @@ def segmentation_from_picks(
     return seg
 
 
-def _segmentation_from_picks_worker(
+def segmentation_from_picks(
+    picks: "CopickPicks",
     run: "CopickRun",
     object_name: str,
-    pick_user_id: str,
-    pick_session_id: str,
-    radius: float,
-    painting_segmentation_name: str,
-    voxel_spacing: float,
-    tomo_type: str,
-    user_id: str,
     session_id: str,
-    **kwargs: Any,
-) -> Dict[str, Any]:
-    """Worker function for batch conversion of picks to segmentations."""
-    try:
-        root = run.root
-        pickable_object = root.get_object(object_name)
-        if not pickable_object:
-            return {"processed": 0, "errors": [f"Object '{object_name}' not found in config"]}
+    user_id: str,
+    radius: float,
+    voxel_spacing: float,
+    tomo_type: str = "wbp",
+    **kwargs,
+) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
+    """
+    Convert CopickPicks to a segmentation by painting spheres.
 
-        pick_sets = run.get_picks(object_name=object_name, user_id=pick_user_id, session_id=pick_session_id)
-        
-        if not pick_sets:
-            return {"processed": 0, "errors": [f"No picks found for {run.name}"]}
-            
-        pick_set = pick_sets[0]
-        if not pick_set.points:
-            return {"processed": 0, "errors": [f"No points found in pick set for {run.name}"]}
-        
-        seg = segmentation_from_picks(
+    Args:
+        picks: CopickPicks object to convert
+        run: CopickRun object
+        object_name: Name for the output segmentation
+        session_id: Session ID for the output segmentation
+        user_id: User ID for the output segmentation
+        radius: Radius of the spheres in physical units
+        voxel_spacing: Voxel spacing for the segmentation
+        tomo_type: Type of tomogram to use as reference
+        **kwargs: Additional keyword arguments
+
+    Returns:
+        Tuple of (CopickSegmentation object, stats dict) or None if creation failed.
+        Stats dict contains 'points_converted' and 'voxels_created'.
+    """
+    try:
+        # Get the pickable object for label information
+        root = run.root
+        pickable_object = root.get_object(picks.pickable_object_name)
+        if not pickable_object:
+            logger.error(f"Object '{picks.pickable_object_name}' not found in config")
+            return None
+
+        if not picks.points:
+            logger.error("No points found in pick set")
+            return None
+
+        # Create segmentation using the legacy function
+        seg = _create_segmentation_from_picks_legacy(
             radius=radius,
-            painting_segmentation_name=painting_segmentation_name,
+            painting_segmentation_name=object_name,
             run=run,
             voxel_spacing=voxel_spacing,
             tomo_type=tomo_type,
             pickable_object=pickable_object,
-            pick_set=pick_set,
+            pick_set=picks,
             user_id=user_id,
             session_id=session_id,
         )
-        
-        return {"processed": 1, "errors": [], "result": seg, "points_converted": len(pick_set.points)}
-        
+
+        # Calculate statistics
+        # For now, we don't have easy access to the actual voxel count, so we estimate
+        # based on number of spheres and their volume
+        sphere_volume_voxels = (4 / 3) * np.pi * (radius / voxel_spacing) ** 3
+        estimated_voxels = int(len(picks.points) * sphere_volume_voxels)
+
+        stats = {
+            "points_converted": len(picks.points),
+            "voxels_created": estimated_voxels,
+        }
+        logger.info(f"Created segmentation from {stats['points_converted']} picks")
+        return seg, stats
+
     except Exception as e:
-        return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"]}
+        logger.error(f"Error creating segmentation: {e}")
+        return None
 
 
-def segmentation_from_picks_batch(
-    root: "CopickRoot",
-    object_name: str,
-    pick_user_id: str,
-    pick_session_id: str,
-    radius: float,
-    painting_segmentation_name: str,
-    voxel_spacing: float,
-    tomo_type: str,
-    user_id: str = "paintedPicks",
-    session_id: str = "0",
-    run_names: Optional[List[str]] = None,
-    workers: int = 8,
-) -> Dict[str, Any]:
-    """
-    Batch convert picks to segmentations across multiple runs.
+# Create worker function using common infrastructure
+_segmentation_from_picks_worker = create_batch_worker(segmentation_from_picks, "segmentation", "picks", min_points=1)
 
-    Parameters:
-    -----------
-    root : copick.Root
-        The copick root containing runs to process.
-    object_name : str
-        Name of the object to process picks for.
-    pick_user_id : str
-        User ID of the picks to convert.
-    pick_session_id : str
-        Session ID of the picks to convert.
-    radius : float
-        Radius of the spheres in physical units.
-    painting_segmentation_name : str
-        Name of the segmentation to create.
-    voxel_spacing : float
-        Voxel spacing for the segmentation.
-    tomo_type : str
-        Type of tomogram to use as reference.
-    user_id : str, optional
-        User ID for the created segmentation. Default is "paintedPicks".
-    session_id : str, optional
-        Session ID for the created segmentation. Default is "0".
-    run_names : list, optional
-        List of run names to process. If None, processes all runs.
-    workers : int, optional
-        Number of worker processes. Default is 8.
 
-    Returns:
-    --------
-    dict
-        Dictionary with processing results and statistics.
-    """
-    from copick.ops.run import map_runs
-    
-    runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-    
-    results = map_runs(
-        callback=_segmentation_from_picks_worker,
-        root=root,
-        runs=runs_to_process,
-        workers=workers,
-        task_desc="Converting picks to segmentations",
-        object_name=object_name,
-        pick_user_id=pick_user_id,
-        pick_session_id=pick_session_id,
-        radius=radius,
-        painting_segmentation_name=painting_segmentation_name,
-        voxel_spacing=voxel_spacing,
-        tomo_type=tomo_type,
-        user_id=user_id,
-        session_id=session_id,
-    )
-    
-    return results
+# Create batch converter using common infrastructure
+segmentation_from_picks_batch = create_batch_converter(
+    segmentation_from_picks,
+    "Converting picks to segmentations",
+    "segmentation",
+    "picks",
+    min_points=1,
+)
