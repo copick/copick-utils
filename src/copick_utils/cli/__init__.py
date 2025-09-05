@@ -15,6 +15,7 @@ from .conversion_commands import (
 from .processing_commands import fit_spline, separate_components, skeletonize
 
 __all__ = [
+    # Conversion commands
     "picks2seg",
     "seg2picks",
     "mesh2seg",
@@ -25,6 +26,7 @@ __all__ = [
     "picks2plane",
     "picks2sphere",
     "picks2ellipsoid",
+    # Processing commands
     "separate_components",
     "skeletonize",
     "fit_spline",

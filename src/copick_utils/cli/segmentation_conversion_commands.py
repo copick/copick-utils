@@ -11,6 +11,7 @@ from copick_utils.cli.util import (
     add_marching_cubes_options,
     add_mesh_input_options,
     add_mesh_output_options,
+    add_mesh_voxelization_options,
     add_pick_input_options,
     add_picks_output_options,
     add_picks_painting_options,
@@ -309,6 +310,7 @@ def seg2picks(
 )
 @add_mesh_input_options
 @optgroup.group("\nTool Options", help="Options related to this tool.")
+@add_mesh_voxelization_options
 @optgroup.option(
     "--tomo-type",
     default="wbp",
@@ -324,6 +326,9 @@ def mesh2seg(
     mesh_object_name,
     mesh_user_id,
     mesh_session_id,
+    mode,
+    boundary_sampling_density,
+    invert,
     tomo_type,
     workers,
     seg_name,
@@ -334,15 +339,29 @@ def mesh2seg(
     debug,
 ):
     """
-    Convert watertight meshes to segmentation volumes.
+    Convert meshes to segmentation volumes with multiple voxelization modes.
+
+    Voxelization modes:
+    - watertight: Fill entire interior volume using ray casting
+    - boundary: Voxelize only the surface with controllable sampling density
+
+    Additional options:
+    - --invert: Fill outside instead of inside (watertight mode)
+    - --boundary-sampling-density: Surface sampling density (boundary mode)
 
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
     - Many-to-many: regex pattern → template with {input_session_id}
 
     Examples:
-        # Convert single mesh to segmentation
+        # Convert mesh interior to segmentation (default)
         mesh2seg --mesh-session-id "manual-001" --seg-session-id "from-mesh-001"
+
+        # Convert mesh boundary only with high sampling density
+        mesh2seg --mode boundary --boundary-sampling-density 2.0 --mesh-session-id "manual-001" --seg-session-id "boundary-001"
+
+        # Invert watertight mesh (fill outside)
+        mesh2seg --invert --mesh-session-id "manual-001" --seg-session-id "inverted-001"
 
         # Convert all manual meshes using pattern matching
         mesh2seg --mesh-session-id "manual-.*" --seg-session-id "from-mesh-{input_session_id}"
@@ -377,7 +396,11 @@ def mesh2seg(
     logger.info(f"Selection mode: {selector.get_mode_description()}")
     logger.info(f"Source mesh pattern: {mesh_user_id}/{mesh_session_id}")
     logger.info(f"Target segmentation template: {seg_name} ({seg_user_id}/{seg_session_id})")
-    logger.info(f"Voxel spacing: {voxel_spacing}, multilabel: {multilabel}")
+    logger.info(f"Mode: {mode}, voxel spacing: {voxel_spacing}, multilabel: {multilabel}")
+    if mode == "boundary":
+        logger.info(f"Boundary sampling density: {boundary_sampling_density}")
+    if invert:
+        logger.info("Volume inversion: enabled")
 
     # Collect all conversion tasks across runs
     all_tasks = []
@@ -400,6 +423,9 @@ def mesh2seg(
         workers=workers,
         tomo_type=tomo_type,
         is_multilabel=multilabel,
+        mode=mode,
+        boundary_sampling_density=boundary_sampling_density,
+        invert=invert,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)

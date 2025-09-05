@@ -19,7 +19,7 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "copick>=1.11.0",
+    "copick>=1.13.0",
     "click",
     "click-option-group",
     "numpy",
@@ -68,6 +68,15 @@ picks2surface = "copick_utils.cli.conversion_commands:picks2surface"
 separate_components = "copick_utils.cli.processing_commands:separate_components"
 skeletonize = "copick_utils.cli.processing_commands:skeletonize"
 fit_spline = "copick_utils.cli.processing_commands:fit_spline"
+
+[project.entry-points."copick.logical.commands"]
+meshop = "copick_utils.cli.logical_commands:meshop"
+segop = "copick_utils.cli.logical_commands:segop"
+clipmesh = "copick_utils.cli.logical_commands:clipmesh"
+clipseg = "copick_utils.cli.logical_commands:clipseg"
+clippicks = "copick_utils.cli.logical_commands:clippicks"
+picksin = "copick_utils.cli.logical_commands:picksin"
+picksout = "copick_utils.cli.logical_commands:picksout"
 
 [tool.hatch.version]
 path = "src/copick_utils/__init__.py"

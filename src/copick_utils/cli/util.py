@@ -289,6 +289,109 @@ def add_segmentation_output_options(func: click.Command = None, *, default_tool:
         return add_segmentation_output_options_decorator(func)
 
 
+def add_segmentation_boolean_output_options(
+    func: click.Command = None,
+    *,
+    default_tool: str = "seg-boolean",
+) -> Callable:
+    """
+    Add output options for segmentation boolean operations with distinct parameter names.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+        default_tool (str): Default tool name for user ID.
+    Returns:
+        click.Command: The Click command with the output options added.
+    """
+
+    def add_segmentation_boolean_output_options_decorator(func: click.Command) -> click.Command:
+        opts = [
+            optgroup.option(
+                "--seg-name-output",
+                "-sno",
+                required=True,
+                help="Name of the output segmentation to create.",
+            ),
+            optgroup.option(
+                "--seg-user-id-output",
+                "-suo",
+                default=default_tool,
+                help="User ID for created segmentation. Defaults to tool name.",
+            ),
+            optgroup.option(
+                "--seg-session-id-output",
+                "-sso",
+                default="0",
+                help="Session ID for created segmentation.",
+            ),
+            optgroup.option(
+                "--voxel-spacing-output",
+                "-vso",
+                type=float,
+                required=True,
+                help="Voxel spacing for the output segmentation.",
+            ),
+            optgroup.option(
+                "--tomo-type",
+                "-tt",
+                default="wbp",
+                help="Type of tomogram to use as reference.",
+            ),
+        ]
+
+        for opt in reversed(opts):
+            func = opt(func)
+
+        return func
+
+    if func is None:
+        return add_segmentation_boolean_output_options_decorator
+    else:
+        return add_segmentation_boolean_output_options_decorator(func)
+
+
+def add_segmentation_boolean_input_options(func: click.Command) -> click.Command:
+    """
+    Add input options for segmentation boolean operations (no multilabel support).
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+    Returns:
+        click.Command: The Click command with the input options added.
+    """
+    opts = [
+        optgroup.option(
+            "--seg-name",
+            "-sn",
+            required=True,
+            help="Name of the segmentation to convert.",
+        ),
+        optgroup.option(
+            "--seg-user-id",
+            "-su",
+            required=True,
+            help="User ID of the segmentation to convert.",
+        ),
+        optgroup.option(
+            "--seg-session-id",
+            "-ss",
+            required=True,
+            help="Session ID or regex pattern of the segmentation to convert.",
+        ),
+        optgroup.option(
+            "--voxel-spacing",
+            "-vs",
+            type=float,
+            required=True,
+            help="Voxel spacing of the segmentation.",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
+
+
 def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "from-picks") -> Callable:
     """
     Add common output options for picks-to-mesh conversion commands.
@@ -483,6 +586,43 @@ def add_segmentation_processing_options(func: click.Command) -> click.Command:
     return func
 
 
+def add_mesh_voxelization_options(func: click.Command) -> click.Command:
+    """
+    Add mesh voxelization options for mesh-to-segmentation conversion commands.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with the mesh voxelization options added.
+    """
+    opts = [
+        optgroup.option(
+            "--mode",
+            type=click.Choice(["watertight", "boundary"]),
+            default="watertight",
+            help="Voxelization mode: 'watertight' fills the entire mesh interior, 'boundary' only voxelizes the surface.",
+        ),
+        optgroup.option(
+            "--boundary-sampling-density",
+            type=float,
+            default=1.0,
+            help="Surface sampling density for boundary mode (samples per voxel edge length).",
+        ),
+        optgroup.option(
+            "--invert/--no-invert",
+            is_flag=True,
+            default=False,
+            help="Invert the volume (fill outside instead of inside for watertight mode).",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
+
+
 def add_picks_painting_options(func: click.Command) -> click.Command:
     """
     Add picks painting options for picks-to-segmentation conversion commands.
@@ -499,6 +639,213 @@ def add_picks_painting_options(func: click.Command) -> click.Command:
             type=float,
             default=10.0,
             help="Radius of spheres to paint at pick locations (in angstroms).",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
+
+
+def add_boolean_operation_option(func: click.Command) -> click.Command:
+    """
+    Add boolean operation option for logical operation commands.
+
+    Args:
+        func (click.Command): The Click command to which the option will be added.
+
+    Returns:
+        click.Command: The Click command with the boolean operation option added.
+    """
+    opts = [
+        optgroup.option(
+            "--operation",
+            "-op",
+            type=click.Choice(["union", "difference", "intersection", "exclusion"]),
+            required=True,
+            help="Boolean operation to perform.",
+        ),
+    ]
+
+    for opt in opts:
+        func = opt(func)
+
+    return func
+
+
+def add_distance_options(func: click.Command) -> click.Command:
+    """
+    Add distance-related options for distance-based logical operations.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with the distance options added.
+    """
+    opts = [
+        optgroup.option(
+            "--max-distance",
+            "-d",
+            type=float,
+            default=100.0,
+            help="Maximum distance from reference surface (in angstroms).",
+        ),
+        optgroup.option(
+            "--sampling-density",
+            "-sd",
+            type=float,
+            default=1.0,
+            help="Surface sampling density for distance calculations.",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
+
+
+def add_reference_mesh_options(func: click.Command) -> click.Command:
+    """
+    Add reference mesh input options for logical operations.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with the reference mesh options added.
+    """
+    opts = [
+        optgroup.option(
+            "--ref-mesh-object-name",
+            "-rmo",
+            help="Name of the reference mesh object.",
+        ),
+        optgroup.option(
+            "--ref-mesh-user-id",
+            "-rmu",
+            help="User ID of the reference mesh.",
+        ),
+        optgroup.option(
+            "--ref-mesh-session-id",
+            "-rms",
+            help="Session ID of the reference mesh.",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
+
+
+def add_reference_segmentation_options(func: click.Command) -> click.Command:
+    """
+    Add reference segmentation input options for logical operations.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with the reference segmentation options added.
+    """
+    opts = [
+        optgroup.option(
+            "--ref-seg-name",
+            "-rsn",
+            help="Name of the reference segmentation.",
+        ),
+        optgroup.option(
+            "--ref-seg-user-id",
+            "-rsu",
+            help="User ID of the reference segmentation.",
+        ),
+        optgroup.option(
+            "--ref-seg-session-id",
+            "-rss",
+            help="Session ID of the reference segmentation.",
+        ),
+        optgroup.option(
+            "--ref-voxel-spacing",
+            "-rvs",
+            type=float,
+            help="Voxel spacing of the reference segmentation.",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
+
+
+def add_dual_segmentation_input_options(func: click.Command) -> click.Command:
+    """
+    Add dual segmentation input options for operations requiring two segmentation inputs.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with dual segmentation input options added.
+    """
+    opts = [
+        optgroup.option(
+            "--seg-name2",
+            "-sn2",
+            required=True,
+            help="Name of the second input segmentation.",
+        ),
+        optgroup.option(
+            "--seg-user-id2",
+            "-su2",
+            required=True,
+            help="User ID of the second input segmentation.",
+        ),
+        optgroup.option(
+            "--seg-session-id2",
+            "-ss2",
+            required=True,
+            help="Session ID or regex pattern of the second input segmentation.",
+        ),
+    ]
+
+    for opt in reversed(opts):
+        func = opt(func)
+
+    return func
+
+
+def add_dual_mesh_input_options(func: click.Command) -> click.Command:
+    """
+    Add dual mesh input options for operations requiring two mesh inputs.
+
+    Args:
+        func (click.Command): The Click command to which the options will be added.
+
+    Returns:
+        click.Command: The Click command with dual mesh input options added.
+    """
+    opts = [
+        optgroup.option(
+            "--mesh-object-name2",
+            "-mo2",
+            required=True,
+            help="Name of the second input mesh object.",
+        ),
+        optgroup.option(
+            "--mesh-user-id2",
+            "-mu2",
+            required=True,
+            help="User ID of the second input mesh.",
+        ),
+        optgroup.option(
+            "--mesh-session-id2",
+            "-ms2",
+            required=True,
+            help="Session ID or regex pattern of the second input mesh.",
         ),
     ]
 

@@ -126,6 +126,59 @@ def mesh_to_volume(mesh: tm.Trimesh, voxel_dims: Tuple[int, int, int], voxel_spa
     return np.logical_and(vols[0], vols[1])
 
 
+def mesh_to_boundary_volume(
+    mesh: tm.Trimesh,
+    voxel_dims: Tuple[int, int, int],
+    voxel_spacing: float,
+    sampling_density: float = 1.0,
+) -> np.ndarray:
+    """
+    Convert a mesh to a binary volume by voxelizing only the surface/boundary.
+
+    Args:
+        mesh: Trimesh object representing the mesh
+        voxel_dims: Dimensions of the output volume (x, y, z)
+        voxel_spacing: Spacing between voxels in physical units
+        sampling_density: Density of surface sampling (samples per voxel edge length)
+
+    Returns:
+        Binary volume as numpy array with shape (z, y, x)
+    """
+    # Sample points on the mesh surface
+    # Calculate number of points based on surface area and sampling density
+    surface_area = mesh.area
+    # Estimate points per unit area based on voxel spacing and density
+    points_per_area = (sampling_density / voxel_spacing) ** 2
+    n_points = max(int(surface_area * points_per_area), 1000)  # Minimum 1000 points
+
+    # Sample points uniformly on the surface
+    surface_points, _ = tm.sample.sample_surface(mesh, n_points)
+
+    # Convert surface points to voxel coordinates
+    voxel_coords = np.round(surface_points / voxel_spacing).astype(int)
+
+    # Create binary volume
+    vol = np.zeros((voxel_dims[2], voxel_dims[1], voxel_dims[0]), dtype=bool)
+
+    # Filter coordinates to be within bounds
+    valid_mask = (
+        (voxel_coords[:, 0] >= 0)
+        & (voxel_coords[:, 0] < voxel_dims[0])
+        & (voxel_coords[:, 1] >= 0)
+        & (voxel_coords[:, 1] < voxel_dims[1])
+        & (voxel_coords[:, 2] >= 0)
+        & (voxel_coords[:, 2] < voxel_dims[2])
+    )
+    voxel_coords = voxel_coords[valid_mask]
+
+    # Set voxels at surface points
+    if len(voxel_coords) > 0:
+        # Convert from (x,y,z) to (z,y,x) indexing for the volume
+        vol[voxel_coords[:, 2], voxel_coords[:, 1], voxel_coords[:, 0]] = True
+
+    return vol
+
+
 def segmentation_from_mesh(
     mesh: "CopickMesh",
     run: "CopickRun",
@@ -135,6 +188,9 @@ def segmentation_from_mesh(
     voxel_spacing: float,
     tomo_type: str = "wbp",
     is_multilabel: bool = False,
+    mode: str = "watertight",
+    boundary_sampling_density: float = 1.0,
+    invert: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
     """
@@ -149,6 +205,9 @@ def segmentation_from_mesh(
         voxel_spacing: Voxel spacing for the segmentation
         tomo_type: Type of tomogram to use for reference dimensions
         is_multilabel: Whether the segmentation is multilabel
+        mode: Voxelization mode ('watertight' or 'boundary')
+        boundary_sampling_density: Surface sampling density for boundary mode (samples per voxel edge length)
+        invert: Whether to invert the volume (fill outside instead of inside)
         **kwargs: Additional keyword arguments
 
     Returns:
@@ -179,8 +238,17 @@ def segmentation_from_mesh(
         tomo_array = zarr.open(tomos[0].zarr())["0"]
         vox_dim = tomo_array.shape[::-1]  # zarr is (z,y,x), we want (x,y,z)
 
-        # Convert mesh to volume
-        vol = mesh_to_volume(mesh_obj, vox_dim, voxel_spacing)
+        # Convert mesh to volume based on mode
+        if mode == "watertight":
+            vol = mesh_to_volume(mesh_obj, vox_dim, voxel_spacing)
+        elif mode == "boundary":
+            vol = mesh_to_boundary_volume(mesh_obj, vox_dim, voxel_spacing, boundary_sampling_density)
+        else:
+            raise ValueError(f"Unknown voxelization mode: {mode}. Must be 'watertight' or 'boundary'.")
+
+        # Apply inversion if requested
+        if invert:
+            vol = ~vol
 
         # Create or get segmentation
         seg = run.new_segmentation(
