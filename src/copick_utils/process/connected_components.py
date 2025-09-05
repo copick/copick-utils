@@ -1,18 +1,19 @@
 """Connected components processing for segmentation volumes."""
 
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
 import numpy as np
 from scipy import ndimage
 from skimage import measure
 
 if TYPE_CHECKING:
-    from copick.models import CopickRun, CopickSegmentation, CopickRoot
+    from copick.models import CopickRoot, CopickRun, CopickSegmentation
 
 
 def separate_connected_components_3d(
-    volume: np.ndarray, 
-    connectivity: int = 26, 
-    min_size: int = 0
+    volume: np.ndarray,
+    connectivity: int = 26,
+    min_size: int = 0,
 ) -> Tuple[np.ndarray, int, Dict[int, Dict[str, Any]]]:
     """
     Separate connected components in a 3D binary or labeled volume.
@@ -24,7 +25,7 @@ def separate_connected_components_3d(
     connectivity : int
         Connectivity for connected components (6, 18, or 26 for 3D)
         - 6: faces only (6-connected)
-        - 18: faces and edges (18-connected)  
+        - 18: faces and edges (18-connected)
         - 26: faces, edges, and corners (26-connected, default)
     min_size : int
         Minimum size of components to keep (default: 0, keep all)
@@ -39,10 +40,7 @@ def separate_connected_components_3d(
         Dictionary with information about each component
     """
     # Convert to binary if not already
-    if volume.dtype != bool:
-        binary_volume = volume > 0
-    else:
-        binary_volume = volume.copy()
+    binary_volume = volume > 0 if volume.dtype != bool else volume.copy()
 
     # Define connectivity structure
     if connectivity == 6:
@@ -77,12 +75,12 @@ def separate_connected_components_3d(
         print(f"After filtering by size (min={min_size}): {num_components} components")
 
     # Store component information
-    for i, prop in enumerate(props, 1):
+    for _i, prop in enumerate(props, 1):
         component_info[prop.label] = {
-            'volume': prop.area,  # number of voxels
-            'centroid': prop.centroid,
-            'bbox': prop.bbox,  # (min_z, min_y, min_x, max_z, max_y, max_x)
-            'extent': prop.extent  # ratio of component area to bounding box area
+            "volume": prop.area,  # number of voxels
+            "centroid": prop.centroid,
+            "bbox": prop.bbox,  # (min_z, min_y, min_x, max_z, max_y, max_x)
+            "extent": prop.extent,  # ratio of component area to bounding box area
         }
 
     return labeled_volume, num_components, component_info
@@ -135,14 +133,14 @@ def separate_segmentation_components(
 ) -> List["CopickSegmentation"]:
     """
     Separate connected components in a segmentation into individual segmentations.
-    
+
     Parameters:
     -----------
     segmentation : CopickSegmentation
         Input segmentation to process
     connectivity : int
         Connectivity for connected components (6, 18, or 26)
-    min_size : int  
+    min_size : int
         Minimum size of components to keep
     session_id_prefix : str
         Prefix for output segmentation session IDs
@@ -150,7 +148,7 @@ def separate_segmentation_components(
         User ID for output segmentations
     multilabel : bool
         Whether to treat input as multilabel segmentation
-        
+
     Returns:
     --------
     output_segmentations : list
@@ -160,85 +158,89 @@ def separate_segmentation_components(
     volume = segmentation.numpy()
     if volume is None:
         raise ValueError("Could not load segmentation data")
-    
+
     run = segmentation.run
     voxel_size = segmentation.voxel_size
     name = segmentation.name
-    
+
     output_segmentations = []
     component_count = 0
-    
+
     if multilabel:
         # Process each label separately
         unique_labels = np.unique(volume)
         unique_labels = unique_labels[unique_labels > 0]  # skip background
-        
+
         print(f"Processing multilabel segmentation with {len(unique_labels)} labels")
-        
+
         for label_value in unique_labels:
             print(f"Processing label {label_value}")
-            
+
             # Extract binary volume for this label
-            binary_vol = (volume == label_value)
-            
+            binary_vol = volume == label_value
+
             # Separate connected components
             labeled_vol, n_components, component_info = separate_connected_components_3d(
-                binary_vol, connectivity=connectivity, min_size=min_size
+                binary_vol,
+                connectivity=connectivity,
+                min_size=min_size,
             )
-            
+
             # Extract individual components
             individual_components = extract_individual_components(labeled_vol)
-            
+
             # Create segmentations for each component
             for component_vol in individual_components:
                 session_id = f"{session_id_prefix}{component_count}"
-                
+
                 # Create new segmentation
                 output_seg = run.new_segmentation(
                     voxel_size=voxel_size,
-                    name=name, 
+                    name=name,
                     session_id=session_id,
                     is_multilabel=False,
                     user_id=output_user_id,
-                    exist_ok=True
+                    exist_ok=True,
                 )
-                
+
                 # Store the component volume
                 output_seg.from_numpy(component_vol)
                 output_segmentations.append(output_seg)
                 component_count += 1
-                
+
     else:
         # Process as binary segmentation
         print("Processing binary segmentation")
-        
+
         # Separate connected components
         labeled_vol, n_components, component_info = separate_connected_components_3d(
-            volume, connectivity=connectivity, min_size=min_size
+            volume,
+            connectivity=connectivity,
+            min_size=min_size,
         )
-        
-        # Extract individual components  
+
+        # Extract individual components
         individual_components = extract_individual_components(labeled_vol)
-        
+
         # Create segmentations for each component
         for component_vol in individual_components:
             session_id = f"{session_id_prefix}{component_count}"
-            
+
             # Create new segmentation
             output_seg = run.new_segmentation(
                 voxel_size=voxel_size,
                 name=name,
-                session_id=session_id, 
+                session_id=session_id,
                 is_multilabel=False,
                 user_id=output_user_id,
-                exist_ok=True
+                exist_ok=True,
             )
-            
+
             # Store the component volume
             output_seg.from_numpy(component_vol)
             output_segmentations.append(output_seg)
             component_count += 1
-    
+
     print(f"Created {len(output_segmentations)} component segmentations")
     return output_segmentations
 
@@ -246,7 +248,7 @@ def separate_segmentation_components(
 def _separate_components_worker(
     run: "CopickRun",
     segmentation_name: str,
-    segmentation_user_id: str, 
+    segmentation_user_id: str,
     segmentation_session_id: str,
     connectivity: int,
     min_size: int,
@@ -261,14 +263,14 @@ def _separate_components_worker(
         segmentations = run.get_segmentations(
             name=segmentation_name,
             user_id=segmentation_user_id,
-            session_id=segmentation_session_id
+            session_id=segmentation_session_id,
         )
-        
+
         if not segmentations:
             return {"processed": 0, "errors": [f"No segmentation found for {run.name}"]}
-            
+
         segmentation = segmentations[0]
-        
+
         # Separate components
         output_segmentations = separate_segmentation_components(
             segmentation=segmentation,
@@ -276,16 +278,16 @@ def _separate_components_worker(
             min_size=min_size,
             session_id_prefix=session_id_prefix,
             output_user_id=output_user_id,
-            multilabel=multilabel
+            multilabel=multilabel,
         )
-        
+
         return {
             "processed": 1,
             "errors": [],
             "components_created": len(output_segmentations),
-            "segmentations": output_segmentations
+            "segmentations": output_segmentations,
         }
-        
+
     except Exception as e:
         return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"]}
 
@@ -305,7 +307,7 @@ def separate_components_batch(
 ) -> Dict[str, Any]:
     """
     Batch separate connected components across multiple runs.
-    
+
     Parameters:
     -----------
     root : copick.Root
@@ -330,16 +332,16 @@ def separate_components_batch(
         List of run names to process. If None, processes all runs.
     workers : int, optional
         Number of worker processes. Default is 8.
-        
+
     Returns:
     --------
     dict
         Dictionary with processing results and statistics
     """
     from copick.ops.run import map_runs
-    
+
     runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-    
+
     results = map_runs(
         callback=_separate_components_worker,
         root=root,
@@ -355,5 +357,5 @@ def separate_components_batch(
         output_user_id=output_user_id,
         multilabel=multilabel,
     )
-    
+
     return results

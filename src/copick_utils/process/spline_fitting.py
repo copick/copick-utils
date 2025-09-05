@@ -1,19 +1,20 @@
 """3D spline fitting to skeleton volumes for pick generation with orientations."""
 
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple
-import numpy as np
-from scipy import interpolate
-from scipy.spatial.distance import pdist, squareform
-from sklearn.neighbors import NearestNeighbors
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
 import networkx as nx
+import numpy as np
+from scipy.spatial.distance import pdist, squareform
+
+from copick_utils.util.pattern_matching import find_matching_segmentations
 
 if TYPE_CHECKING:
-    from copick.models import CopickRun, CopickSegmentation, CopickPicks, CopickRoot
+    from copick.models import CopickPicks, CopickRoot, CopickRun, CopickSegmentation
 
 
 class SkeletonSplineFitter:
     """3D spline fitting to skeleton coordinates with point sampling and orientation computation."""
-    
+
     def __init__(self):
         self.skeleton_coords = None
         self.ordered_path = None
@@ -52,7 +53,7 @@ class SkeletonSplineFitter:
         max_length = 0
 
         for i, start in enumerate(endpoints):
-            for end in endpoints[i+1:]:
+            for end in endpoints[i + 1 :]:
                 try:
                     path = nx.shortest_path(G, start, end)
                     if len(path) > max_length:
@@ -64,7 +65,7 @@ class SkeletonSplineFitter:
         # If no path found, try all pairs of nodes
         if not longest_path:
             for i in range(len(coords)):
-                for j in range(i+1, len(coords)):
+                for j in range(i + 1, len(coords)):
                     try:
                         path = nx.shortest_path(G, i, j)
                         if len(path) > max_length:
@@ -99,7 +100,12 @@ class SkeletonSplineFitter:
 
         return coords[ordered]
 
-    def fit_regularized_spline(self, coords: np.ndarray, smoothing_factor: Optional[float] = None, degree: int = 3) -> Tuple[np.ndarray, Dict[str, Any]]:
+    def fit_regularized_spline(
+        self,
+        coords: np.ndarray,
+        smoothing_factor: Optional[float] = None,
+        degree: int = 3,
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """Fit regularized 3D parametric spline using scipy.interpolate.splprep."""
         if len(coords) < degree + 1:
             raise ValueError(f"Need at least {degree + 1} points for degree {degree} spline")
@@ -116,11 +122,7 @@ class SkeletonSplineFitter:
         tck, u = splprep([coords[:, 2], coords[:, 1], coords[:, 0]], s=smoothing_factor, k=k)
         print(f"Successfully fitted parametric spline with degree {k}, smoothing {smoothing_factor}")
 
-        self.spline_functions = {
-            'tck': tck,
-            'u_original': u,
-            'degree': k
-        }
+        self.spline_functions = {"tck": tck, "u_original": u, "degree": k}
 
         return u, self.spline_functions
 
@@ -131,7 +133,8 @@ class SkeletonSplineFitter:
 
         # Get the spline representation
         from scipy.interpolate import splev
-        tck = self.spline_functions['tck']
+
+        tck = self.spline_functions["tck"]
 
         # Estimate total length by sampling densely along the parameter
         u_dense = np.linspace(0, 1, 1000)
@@ -188,10 +191,10 @@ class SkeletonSplineFitter:
         for i in range(1, n_points):
             curr_pos = self.regularized_points[i]
             last_pos = self.regularized_points[i - 1]
-            
+
             # z_align(last_pos, curr_pos).zero_translation().inverse()
             rotation_matrix = self._z_align_inverse(last_pos, curr_pos)
-            
+
             # Apply rotation to the PREVIOUS particle (i-1)
             transforms[i - 1][:3, :3] = rotation_matrix
 
@@ -206,18 +209,18 @@ class SkeletonSplineFitter:
         Create the inverse of the z_align transformation.
         This rotates the z-axis to align with the pt1->pt2 direction.
         Based on the z_align algorithm but returns the inverse matrix.
-        
+
         Parameters:
         -----------
         pt1, pt2 : np.ndarray
             Two 3D points defining the direction vector
-            
+
         Returns:
         --------
         np.ndarray : 3x3 rotation matrix (inverse of z_align)
         """
         a, b, c = pt2 - pt1
-        l = a * a + c * c
+        l = a * a + c * c  # noqa
         d = l + b * b
         epsilon = 1e-10
 
@@ -226,7 +229,8 @@ class SkeletonSplineFitter:
             return np.eye(3)
 
         from math import sqrt
-        l = sqrt(l)
+
+        l = sqrt(l)  # noqa
         d = sqrt(d)
 
         # Create the z_align rotation matrix
@@ -261,7 +265,7 @@ class SkeletonSplineFitter:
         curvatures = []
         if len(self.regularized_points) >= 3:
             for i in range(1, len(self.regularized_points) - 1):
-                p1, p2, p3 = self.regularized_points[i-1:i+2]
+                p1, p2, p3 = self.regularized_points[i - 1 : i + 2]
                 v1 = p2 - p1
                 v2 = p3 - p2
                 # Approximate curvature
@@ -271,23 +275,25 @@ class SkeletonSplineFitter:
                     curvatures.append(curvature)
 
         return {
-            'n_points': len(self.regularized_points),
-            'total_length': total_length,
-            'average_spacing': total_length / (len(self.regularized_points) - 1) if len(self.regularized_points) > 1 else 0,
-            'mean_curvature': np.mean(curvatures) if curvatures else 0,
-            'max_curvature': np.max(curvatures) if curvatures else 0,
-            'curvatures': curvatures
+            "n_points": len(self.regularized_points),
+            "total_length": total_length,
+            "average_spacing": total_length / (len(self.regularized_points) - 1)
+            if len(self.regularized_points) > 1
+            else 0,
+            "mean_curvature": np.mean(curvatures) if curvatures else 0,
+            "max_curvature": np.max(curvatures) if curvatures else 0,
+            "curvatures": curvatures,
         }
 
     def detect_high_curvature_outliers(self, coords: np.ndarray, curvature_threshold: float = 0.2) -> np.ndarray:
         """Detect points that contribute to high curvature."""
         if len(coords) < 4:
             return coords
-            
+
         # Calculate curvature at each point
         curvatures = []
         for i in range(1, len(coords) - 1):
-            p1, p2, p3 = coords[i-1:i+2]
+            p1, p2, p3 = coords[i - 1 : i + 2]
             v1 = p2 - p1
             v2 = p3 - p2
             cross_prod = np.linalg.norm(np.cross(v1, v2))
@@ -296,33 +302,33 @@ class SkeletonSplineFitter:
                 curvatures.append(curvature)
             else:
                 curvatures.append(0)
-        
+
         # Find points with high curvature
         curvatures = np.array(curvatures)
         high_curvature_mask = curvatures > curvature_threshold
-        
+
         if not np.any(high_curvature_mask):
             return coords
-            
+
         # Remove points contributing to high curvature (keep first and last)
         points_to_keep = [True] + [not high_curvature_mask[i] for i in range(len(high_curvature_mask))] + [True]
-        
+
         filtered_coords = coords[points_to_keep]
         removed_count = len(coords) - len(filtered_coords)
-        
+
         print(f"Removed {removed_count} outlier points with high curvature")
         return filtered_coords
 
 
 def fit_spline_to_skeleton(
-    binary_volume: np.ndarray, 
+    binary_volume: np.ndarray,
     spacing_distance: float,
-    smoothing_factor: Optional[float] = None, 
+    smoothing_factor: Optional[float] = None,
     degree: int = 3,
-    connectivity_radius: float = 2.0, 
+    connectivity_radius: float = 2.0,
     compute_transforms: bool = True,
-    curvature_threshold: float = 0.2, 
-    max_iterations: int = 5
+    curvature_threshold: float = 0.2,
+    max_iterations: int = 5,
 ) -> Tuple[np.ndarray, Optional[np.ndarray], SkeletonSplineFitter, Dict[str, Any]]:
     """
     Main function to fit a regularized 3D spline to a skeleton and sample points.
@@ -364,9 +370,7 @@ def fit_spline_to_skeleton(
         raise ValueError("No skeleton points found in binary volume")
 
     # Order skeleton points
-    ordered_coords = fitter.order_skeleton_points_longest_path(
-        coords, connectivity_radius=connectivity_radius
-    )
+    ordered_coords = fitter.order_skeleton_points_longest_path(coords, connectivity_radius=connectivity_radius)
 
     if len(ordered_coords) < 2:
         raise ValueError("Not enough ordered points for spline fitting")
@@ -374,44 +378,42 @@ def fit_spline_to_skeleton(
     # Iterative fitting with outlier removal
     current_coords = ordered_coords.copy()
     iteration = 0
-    
+
     while iteration < max_iterations:
         # Fit regularized spline
-        fitter.fit_regularized_spline(current_coords,
-                                    smoothing_factor=smoothing_factor,
-                                    degree=degree)
+        fitter.fit_regularized_spline(current_coords, smoothing_factor=smoothing_factor, degree=degree)
 
         # Sample points along spline
         sampled_points = fitter.sample_points_along_spline(spacing_distance)
 
         # Get properties to check curvature
         properties = fitter.get_spline_properties()
-        max_curvature = properties.get('max_curvature', 0)
-        
+        max_curvature = properties.get("max_curvature", 0)
+
         print(f"Iteration {iteration + 1}: Max curvature = {max_curvature:.4f}")
-        
+
         # If curvature is acceptable, break
         if max_curvature <= curvature_threshold:
             print(f"Curvature acceptable after {iteration + 1} iterations")
             break
-            
+
         # Remove outliers and try again
         print(f"Max curvature {max_curvature:.4f} > {curvature_threshold}, removing outliers...")
         filtered_coords = fitter.detect_high_curvature_outliers(current_coords, curvature_threshold)
-        
+
         # If no points were removed, break to avoid infinite loop
         if len(filtered_coords) == len(current_coords):
             print("No outliers found to remove, stopping iterations")
             break
-            
+
         # If too few points remain, break
         if len(filtered_coords) < degree + 1:
             print(f"Too few points remaining ({len(filtered_coords)}), stopping iterations")
             break
-            
+
         current_coords = filtered_coords
         iteration += 1
-    
+
     if iteration >= max_iterations:
         print(f"Reached maximum iterations ({max_iterations}), final curvature: {max_curvature:.4f}")
 
@@ -441,7 +443,7 @@ def fit_spline_to_segmentation(
 ) -> Optional["CopickPicks"]:
     """
     Fit a spline to a segmentation (skeleton) volume and create picks with orientations.
-    
+
     Parameters:
     -----------
     segmentation : CopickSegmentation
@@ -466,7 +468,7 @@ def fit_spline_to_segmentation(
         User ID for output picks
     voxel_spacing : float
         Voxel spacing for coordinate scaling
-        
+
     Returns:
     --------
     output_picks : CopickPicks or None
@@ -477,16 +479,16 @@ def fit_spline_to_segmentation(
     if volume is None:
         print(f"Error: Could not load segmentation data for {segmentation.run.name}")
         return None
-    
+
     run = segmentation.run
     name = segmentation.name
-    
+
     # Use input session_id if no output session_id specified
     if output_session_id is None:
         output_session_id = segmentation.session_id
-    
+
     print(f"Fitting spline to segmentation {segmentation.session_id} in run {run.name}")
-    
+
     try:
         # Fit spline to skeleton
         sampled_points, transforms, fitter, properties = fit_spline_to_skeleton(
@@ -497,38 +499,35 @@ def fit_spline_to_segmentation(
             connectivity_radius=connectivity_radius,
             compute_transforms=compute_transforms,
             curvature_threshold=curvature_threshold,
-            max_iterations=max_iterations
+            max_iterations=max_iterations,
         )
-        
+
         # Scale points to physical coordinates
         scaled_points = sampled_points * voxel_spacing
-        
+
         print(f"Spline properties: {properties}")
-        
+
         # Create output picks
         output_picks = run.new_picks(
             object_name=name,
             session_id=output_session_id,
             user_id=output_user_id,
-            exist_ok=True
+            exist_ok=True,
         )
-        
+
         # Store the picks with transformations
         if compute_transforms and transforms is not None:
             output_picks.from_numpy(scaled_points, transforms)
         else:
             output_picks.from_numpy(scaled_points)
-        
+
         print(f"Created {len(scaled_points)} picks with session_id: {output_session_id}")
         return output_picks
-        
+
     except Exception as e:
         print(f"Error fitting spline to segmentation: {e}")
         return None
 
-
-# Import the function from the utility module  
-from copick_utils.util.pattern_matching import find_matching_segmentations
 
 # Alias for backwards compatibility
 find_matching_segmentations_for_spline = find_matching_segmentations
@@ -558,29 +557,27 @@ def _fit_spline_worker(
             run=run,
             segmentation_name=segmentation_name,
             segmentation_user_id=segmentation_user_id,
-            session_id_pattern=session_id_pattern
+            session_id_pattern=session_id_pattern,
         )
-        
+
         if not matching_segmentations:
             return {
-                "processed": 0, 
+                "processed": 0,
                 "errors": [f"No segmentations found matching pattern '{session_id_pattern}' in {run.name}"],
-                "picks_created": 0
+                "picks_created": 0,
             }
-        
+
         picks_created = 0
         errors = []
-        
+
         for segmentation in matching_segmentations:
             # Determine output session ID
             if output_session_id_template:
                 # Replace placeholders in template
-                output_session_id = output_session_id_template.replace(
-                    "{input_session_id}", segmentation.session_id
-                )
+                output_session_id = output_session_id_template.replace("{input_session_id}", segmentation.session_id)
             else:
                 output_session_id = segmentation.session_id
-            
+
             # Fit spline
             picks = fit_spline_to_segmentation(
                 segmentation=segmentation,
@@ -593,27 +590,23 @@ def _fit_spline_worker(
                 max_iterations=max_iterations,
                 output_session_id=output_session_id,
                 output_user_id=output_user_id,
-                voxel_spacing=voxel_spacing
+                voxel_spacing=voxel_spacing,
             )
-            
+
             if picks:
                 picks_created += 1
             else:
                 errors.append(f"Failed to fit spline to {segmentation.session_id}")
-        
+
         return {
             "processed": 1,
             "errors": errors,
             "picks_created": picks_created,
-            "segmentations_processed": len(matching_segmentations)
+            "segmentations_processed": len(matching_segmentations),
         }
-        
+
     except Exception as e:
-        return {
-            "processed": 0,
-            "errors": [f"Error processing {run.name}: {e}"],
-            "picks_created": 0
-        }
+        return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"], "picks_created": 0}
 
 
 def fit_spline_batch(
@@ -636,7 +629,7 @@ def fit_spline_batch(
 ) -> Dict[str, Any]:
     """
     Batch fit splines to segmentations across multiple runs.
-    
+
     Parameters:
     -----------
     root : copick.Root
@@ -672,16 +665,16 @@ def fit_spline_batch(
         List of run names to process. If None, processes all runs.
     workers : int, optional
         Number of worker processes. Default is 8.
-        
+
     Returns:
     --------
     dict
         Dictionary with processing results and statistics
     """
     from copick.ops.run import map_runs
-    
+
     runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-    
+
     results = map_runs(
         callback=_fit_spline_worker,
         root=root,
@@ -702,5 +695,5 @@ def fit_spline_batch(
         output_user_id=output_user_id,
         voxel_spacing=voxel_spacing,
     )
-    
+
     return results

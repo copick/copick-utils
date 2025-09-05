@@ -1,18 +1,21 @@
 """3D skeletonization processing for segmentation volumes."""
 
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 import numpy as np
 from scipy import ndimage
 from skimage import morphology
-from skimage.morphology import skeletonize, remove_small_objects
+from skimage.morphology import remove_small_objects, skeletonize
+
+from copick_utils.util.pattern_matching import find_matching_segmentations
 
 if TYPE_CHECKING:
-    from copick.models import CopickRun, CopickSegmentation, CopickRoot
+    from copick.models import CopickRoot, CopickRun, CopickSegmentation
 
 
 class TubeSkeletonizer3D:
     """3D tube skeletonization class based on scikit-image."""
-    
+
     def __init__(self):
         self.original_volume = None
         self.skeleton = None
@@ -41,11 +44,9 @@ class TubeSkeletonizer3D:
             Minimum size of objects to keep
         """
         if remove_noise and np.any(self.original_volume):
-            self.original_volume = remove_small_objects(
-                self.original_volume, min_size=min_object_size
-            )
+            self.original_volume = remove_small_objects(self.original_volume, min_size=min_object_size)
 
-    def skeletonize(self, method: str = 'skimage'):
+    def skeletonize(self, method: str = "skimage"):
         """
         Perform 3D skeletonization.
 
@@ -60,11 +61,11 @@ class TubeSkeletonizer3D:
             self.skeleton_coords = np.array([]).reshape(0, 3)
             return
 
-        if method == 'skimage':
+        if method == "skimage":
             # Use scikit-image's 3D skeletonization
             self.skeleton = skeletonize(self.original_volume)
 
-        elif method == 'distance_transform':
+        elif method == "distance_transform":
             # Alternative method using distance transform
             # Compute distance transform
             distance = ndimage.distance_transform_edt(self.original_volume)
@@ -94,9 +95,7 @@ class TubeSkeletonizer3D:
         """
         if remove_short_branches and len(self.skeleton_coords) > 0:
             # Remove small objects from skeleton
-            cleaned_skeleton = remove_small_objects(
-                self.skeleton, min_size=min_branch_length
-            )
+            cleaned_skeleton = remove_small_objects(self.skeleton, min_size=min_branch_length)
             self.skeleton = cleaned_skeleton
             self.skeleton_coords = np.array(np.where(self.skeleton)).T
 
@@ -109,17 +108,14 @@ class TubeSkeletonizer3D:
         dict : skeleton properties
         """
         if self.skeleton_coords is None or len(self.skeleton_coords) == 0:
-            return {
-                'n_voxels': 0,
-                'bounding_box': {'min': None, 'max': None}
-            }
+            return {"n_voxels": 0, "bounding_box": {"min": None, "max": None}}
 
         properties = {
-            'n_voxels': len(self.skeleton_coords),
-            'bounding_box': {
-                'min': np.min(self.skeleton_coords, axis=0).tolist(),
-                'max': np.max(self.skeleton_coords, axis=0).tolist()
-            }
+            "n_voxels": len(self.skeleton_coords),
+            "bounding_box": {
+                "min": np.min(self.skeleton_coords, axis=0).tolist(),
+                "max": np.max(self.skeleton_coords, axis=0).tolist(),
+            },
         }
 
         return properties
@@ -127,7 +123,7 @@ class TubeSkeletonizer3D:
 
 def skeletonize_segmentation(
     segmentation: "CopickSegmentation",
-    method: str = 'skimage',
+    method: str = "skimage",
     remove_noise: bool = True,
     min_object_size: int = 50,
     remove_short_branches: bool = True,
@@ -137,7 +133,7 @@ def skeletonize_segmentation(
 ) -> Optional["CopickSegmentation"]:
     """
     Skeletonize a segmentation volume.
-    
+
     Parameters:
     -----------
     segmentation : CopickSegmentation
@@ -156,7 +152,7 @@ def skeletonize_segmentation(
         Session ID for output segmentation (default: same as input)
     output_user_id : str
         User ID for output segmentation
-        
+
     Returns:
     --------
     output_segmentation : CopickSegmentation or None
@@ -167,42 +163,36 @@ def skeletonize_segmentation(
     if volume is None:
         print(f"Error: Could not load segmentation data for {segmentation.run.name}")
         return None
-    
+
     run = segmentation.run
     voxel_size = segmentation.voxel_size
     name = segmentation.name
-    
+
     # Use input session_id if no output session_id specified
     if output_session_id is None:
         output_session_id = segmentation.session_id
-    
+
     print(f"Skeletonizing segmentation {segmentation.session_id} in run {run.name}")
-    
+
     # Initialize skeletonizer
     skeletonizer = TubeSkeletonizer3D()
-    
+
     # Load volume
     skeletonizer.load_volume(volume)
-    
+
     # Preprocess
-    skeletonizer.preprocess_volume(
-        remove_noise=remove_noise, 
-        min_object_size=min_object_size
-    )
-    
+    skeletonizer.preprocess_volume(remove_noise=remove_noise, min_object_size=min_object_size)
+
     # Skeletonize
     skeletonizer.skeletonize(method=method)
-    
+
     # Post-process
-    skeletonizer.post_process_skeleton(
-        remove_short_branches=remove_short_branches,
-        min_branch_length=min_branch_length
-    )
-    
+    skeletonizer.post_process_skeleton(remove_short_branches=remove_short_branches, min_branch_length=min_branch_length)
+
     # Get properties
     properties = skeletonizer.get_skeleton_properties()
     print(f"Skeleton properties: {properties['n_voxels']} voxels")
-    
+
     # Create output segmentation
     try:
         output_seg = run.new_segmentation(
@@ -211,22 +201,18 @@ def skeletonize_segmentation(
             session_id=output_session_id,
             is_multilabel=False,
             user_id=output_user_id,
-            exist_ok=True
+            exist_ok=True,
         )
-        
+
         # Store the skeleton volume
         output_seg.from_numpy(skeletonizer.skeleton.astype(np.uint8))
-        
+
         print(f"Created skeleton segmentation with session_id: {output_session_id}")
         return output_seg
-        
+
     except Exception as e:
         print(f"Error creating skeleton segmentation: {e}")
         return None
-
-
-# Import the function from the utility module
-from copick_utils.util.pattern_matching import find_matching_segmentations
 
 
 def _skeletonize_worker(
@@ -250,29 +236,27 @@ def _skeletonize_worker(
             run=run,
             segmentation_name=segmentation_name,
             segmentation_user_id=segmentation_user_id,
-            session_id_pattern=session_id_pattern
+            session_id_pattern=session_id_pattern,
         )
-        
+
         if not matching_segmentations:
             return {
-                "processed": 0, 
+                "processed": 0,
                 "errors": [f"No segmentations found matching pattern '{session_id_pattern}' in {run.name}"],
-                "skeletons_created": 0
+                "skeletons_created": 0,
             }
-        
+
         skeletons_created = 0
         errors = []
-        
+
         for segmentation in matching_segmentations:
             # Determine output session ID
             if output_session_id_template:
                 # Replace placeholders in template
-                output_session_id = output_session_id_template.replace(
-                    "{input_session_id}", segmentation.session_id
-                )
+                output_session_id = output_session_id_template.replace("{input_session_id}", segmentation.session_id)
             else:
                 output_session_id = segmentation.session_id
-            
+
             # Skeletonize
             skeleton_seg = skeletonize_segmentation(
                 segmentation=segmentation,
@@ -282,27 +266,23 @@ def _skeletonize_worker(
                 remove_short_branches=remove_short_branches,
                 min_branch_length=min_branch_length,
                 output_session_id=output_session_id,
-                output_user_id=output_user_id
+                output_user_id=output_user_id,
             )
-            
+
             if skeleton_seg:
                 skeletons_created += 1
             else:
                 errors.append(f"Failed to skeletonize {segmentation.session_id}")
-        
+
         return {
             "processed": 1,
             "errors": errors,
             "skeletons_created": skeletons_created,
-            "segmentations_processed": len(matching_segmentations)
+            "segmentations_processed": len(matching_segmentations),
         }
-        
+
     except Exception as e:
-        return {
-            "processed": 0,
-            "errors": [f"Error processing {run.name}: {e}"],
-            "skeletons_created": 0
-        }
+        return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"], "skeletons_created": 0}
 
 
 def skeletonize_batch(
@@ -310,7 +290,7 @@ def skeletonize_batch(
     segmentation_name: str,
     segmentation_user_id: str,
     session_id_pattern: str,
-    method: str = 'skimage',
+    method: str = "skimage",
     remove_noise: bool = True,
     min_object_size: int = 50,
     remove_short_branches: bool = True,
@@ -322,7 +302,7 @@ def skeletonize_batch(
 ) -> Dict[str, Any]:
     """
     Batch skeletonize segmentations across multiple runs.
-    
+
     Parameters:
     -----------
     root : copick.Root
@@ -352,16 +332,16 @@ def skeletonize_batch(
         List of run names to process. If None, processes all runs.
     workers : int, optional
         Number of worker processes. Default is 8.
-        
+
     Returns:
     --------
     dict
         Dictionary with processing results and statistics
     """
     from copick.ops.run import map_runs
-    
+
     runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-    
+
     results = map_runs(
         callback=_skeletonize_worker,
         root=root,
@@ -379,5 +359,5 @@ def skeletonize_batch(
         output_session_id_template=output_session_id_template,
         output_user_id=output_user_id,
     )
-    
+
     return results
