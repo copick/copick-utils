@@ -18,26 +18,19 @@ def separate_connected_components_3d(
     """
     Separate connected components in a 3D binary or labeled volume.
 
-    Parameters:
-    -----------
-    volume : numpy.ndarray
-        3D binary or labeled segmentation volume
-    connectivity : int
-        Connectivity for connected components (6, 18, or 26 for 3D)
-        - 6: faces only (6-connected)
-        - 18: faces and edges (18-connected)
-        - 26: faces, edges, and corners (26-connected, default)
-    min_size : int
-        Minimum size of components to keep (default: 0, keep all)
+    Args:
+        volume: 3D binary or labeled segmentation volume
+        connectivity: Connectivity for connected components (6, 18, or 26 for 3D)
+            - 6: faces only (6-connected)
+            - 18: faces and edges (18-connected)
+            - 26: faces, edges, and corners (26-connected, default)
+        min_size: Minimum size of components to keep (default: 0, keep all)
 
     Returns:
-    --------
-    labeled_volume : numpy.ndarray
-        Volume with each connected component labeled with unique integer
-    num_components : int
-        Number of connected components found
-    component_info : dict
-        Dictionary with information about each component
+        Tuple of (labeled_volume, num_components, component_info):
+            - labeled_volume: Volume with each connected component labeled with unique integer
+            - num_components: Number of connected components found
+            - component_info: Dictionary with information about each component
     """
     # Convert to binary if not already
     binary_volume = volume > 0 if volume.dtype != bool else volume.copy()
@@ -90,14 +83,10 @@ def extract_individual_components(labeled_volume: np.ndarray) -> List[np.ndarray
     """
     Extract each connected component as a separate binary volume.
 
-    Parameters:
-    -----------
-    labeled_volume : numpy.ndarray
-        Volume with labeled connected components
+    Args:
+        labeled_volume: Volume with labeled connected components
 
     Returns:
-    --------
-    components : list
         List of binary volumes, each containing one component
     """
     unique_labels = np.unique(labeled_volume)
@@ -134,24 +123,15 @@ def separate_segmentation_components(
     """
     Separate connected components in a segmentation into individual segmentations.
 
-    Parameters:
-    -----------
-    segmentation : CopickSegmentation
-        Input segmentation to process
-    connectivity : int
-        Connectivity for connected components (6, 18, or 26)
-    min_size : int
-        Minimum size of components to keep
-    session_id_prefix : str
-        Prefix for output segmentation session IDs
-    output_user_id : str
-        User ID for output segmentations
-    multilabel : bool
-        Whether to treat input as multilabel segmentation
+    Args:
+        segmentation: Input segmentation to process
+        connectivity: Connectivity for connected components (6, 18, or 26)
+        min_size: Minimum size of components to keep
+        session_id_prefix: Prefix for output segmentation session IDs
+        output_user_id: User ID for output segmentations
+        multilabel: Whether to treat input as multilabel segmentation
 
     Returns:
-    --------
-    output_segmentations : list
         List of created segmentations, one per component
     """
     # Get the segmentation volume
@@ -308,34 +288,20 @@ def separate_components_batch(
     """
     Batch separate connected components across multiple runs.
 
-    Parameters:
-    -----------
-    root : copick.Root
-        The copick root containing runs to process
-    segmentation_name : str
-        Name of the segmentation to process
-    segmentation_user_id : str
-        User ID of the segmentation to process
-    segmentation_session_id : str
-        Session ID of the segmentation to process
-    connectivity : int, optional
-        Connectivity for connected components (6, 18, or 26). Default is 26.
-    min_size : int, optional
-        Minimum size of components to keep. Default is 0.
-    session_id_prefix : str, optional
-        Prefix for output segmentation session IDs. Default is "inst-".
-    output_user_id : str, optional
-        User ID for output segmentations. Default is "components".
-    multilabel : bool, optional
-        Whether to treat input as multilabel segmentation. Default is True.
-    run_names : list, optional
-        List of run names to process. If None, processes all runs.
-    workers : int, optional
-        Number of worker processes. Default is 8.
+    Args:
+        root: The copick root containing runs to process
+        segmentation_name: Name of the segmentation to process
+        segmentation_user_id: User ID of the segmentation to process
+        segmentation_session_id: Session ID of the segmentation to process
+        connectivity: Connectivity for connected components (6, 18, or 26). Default is 26.
+        min_size: Minimum size of components to keep. Default is 0.
+        session_id_prefix: Prefix for output segmentation session IDs. Default is "inst-".
+        output_user_id: User ID for output segmentations. Default is "components".
+        multilabel: Whether to treat input as multilabel segmentation. Default is True.
+        run_names: List of run names to process. If None, processes all runs.
+        workers: Number of worker processes. Default is 8.
 
     Returns:
-    --------
-    dict
         Dictionary with processing results and statistics
     """
     from copick.ops.run import map_runs

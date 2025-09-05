@@ -172,8 +172,7 @@ class SkeletonSplineFitter:
         The rotation from particle i-1 to particle i is applied to particle i-1.
 
         Returns:
-        --------
-        np.ndarray : [N, 4, 4] array of transformation matrices
+            np.ndarray: [N, 4, 4] array of transformation matrices
         """
         if self.regularized_points is None:
             raise ValueError("Must sample points first before computing transforms")
@@ -210,14 +209,12 @@ class SkeletonSplineFitter:
         This rotates the z-axis to align with the pt1->pt2 direction.
         Based on the z_align algorithm but returns the inverse matrix.
 
-        Parameters:
-        -----------
-        pt1, pt2 : np.ndarray
-            Two 3D points defining the direction vector
+        Args:
+            pt1: Two 3D points defining the direction vector
+            pt2: Two 3D points defining the direction vector
 
         Returns:
-        --------
-        np.ndarray : 3x3 rotation matrix (inverse of z_align)
+            np.ndarray: 3x3 rotation matrix (inverse of z_align)
         """
         a, b, c = pt2 - pt1
         l = a * a + c * c  # noqa
@@ -333,32 +330,22 @@ def fit_spline_to_skeleton(
     """
     Main function to fit a regularized 3D spline to a skeleton and sample points.
 
-    Parameters:
-    -----------
-    binary_volume : np.ndarray
-        3D binary volume where skeleton is True/1
-    spacing_distance : float
-        Distance between consecutive sampled points along the spline
-    smoothing_factor : float, optional
-        Smoothing parameter for spline fitting (auto if None)
-    degree : int
-        Degree of the spline (1-5)
-    connectivity_radius : float
-        Maximum distance to consider skeleton points as connected
-    compute_transforms : bool
-        Whether to compute 4x4 transformation matrices for each point
-    curvature_threshold : float
-        Maximum allowed curvature before outlier removal (default 0.2)
-    max_iterations : int
-        Maximum number of outlier removal iterations (default 5)
+    Args:
+        binary_volume: 3D binary volume where skeleton is True/1
+        spacing_distance: Distance between consecutive sampled points along the spline
+        smoothing_factor: Smoothing parameter for spline fitting (auto if None)
+        degree: Degree of the spline (1-5)
+        connectivity_radius: Maximum distance to consider skeleton points as connected
+        compute_transforms: Whether to compute 4x4 transformation matrices for each point
+        curvature_threshold: Maximum allowed curvature before outlier removal (default 0.2)
+        max_iterations: Maximum number of outlier removal iterations (default 5)
 
     Returns:
-    --------
-    tuple : (sampled_points, transforms, spline_fitter, properties)
-        - sampled_points: Nx3 array of evenly spaced points along spline
-        - transforms: [N, 4, 4] array of transformation matrices (or None if compute_transforms=False)
-        - spline_fitter: SkeletonSplineFitter object for further analysis
-        - properties: dict with spline properties
+        Tuple of (sampled_points, transforms, spline_fitter, properties):
+            - sampled_points: Nx3 array of evenly spaced points along spline
+            - transforms: [N, 4, 4] array of transformation matrices (or None if compute_transforms=False)
+            - spline_fitter: SkeletonSplineFitter object for further analysis
+            - properties: dict with spline properties
     """
     # Initialize fitter
     fitter = SkeletonSplineFitter()
@@ -444,34 +431,20 @@ def fit_spline_to_segmentation(
     """
     Fit a spline to a segmentation (skeleton) volume and create picks with orientations.
 
-    Parameters:
-    -----------
-    segmentation : CopickSegmentation
-        Input segmentation containing skeleton to fit spline to
-    spacing_distance : float
-        Distance between consecutive sampled points along the spline
-    smoothing_factor : float, optional
-        Smoothing parameter for spline fitting (auto if None)
-    degree : int
-        Degree of the spline (1-5)
-    connectivity_radius : float
-        Maximum distance to consider skeleton points as connected
-    compute_transforms : bool
-        Whether to compute orientations for picks
-    curvature_threshold : float
-        Maximum allowed curvature before outlier removal
-    max_iterations : int
-        Maximum number of outlier removal iterations
-    output_session_id : str, optional
-        Session ID for output picks (default: same as input)
-    output_user_id : str
-        User ID for output picks
-    voxel_spacing : float
-        Voxel spacing for coordinate scaling
+    Args:
+        segmentation: Input segmentation containing skeleton to fit spline to
+        spacing_distance: Distance between consecutive sampled points along the spline
+        smoothing_factor: Smoothing parameter for spline fitting (auto if None)
+        degree: Degree of the spline (1-5)
+        connectivity_radius: Maximum distance to consider skeleton points as connected
+        compute_transforms: Whether to compute orientations for picks
+        curvature_threshold: Maximum allowed curvature before outlier removal
+        max_iterations: Maximum number of outlier removal iterations
+        output_session_id: Session ID for output picks (default: same as input)
+        output_user_id: User ID for output picks
+        voxel_spacing: Voxel spacing for coordinate scaling
 
     Returns:
-    --------
-    output_picks : CopickPicks or None
         Created picks object or None if failed
     """
     # Get the segmentation volume
@@ -630,45 +603,26 @@ def fit_spline_batch(
     """
     Batch fit splines to segmentations across multiple runs.
 
-    Parameters:
-    -----------
-    root : copick.Root
-        The copick root containing runs to process
-    segmentation_name : str
-        Name of the segmentations to process
-    segmentation_user_id : str
-        User ID of the segmentations to process
-    session_id_pattern : str
-        Regex pattern or exact session ID to match segmentations
-    spacing_distance : float
-        Distance between consecutive sampled points along the spline
-    smoothing_factor : float, optional
-        Smoothing parameter for spline fitting (auto if None)
-    degree : int, optional
-        Degree of the spline (1-5). Default is 3.
-    connectivity_radius : float, optional
-        Maximum distance to consider skeleton points as connected. Default is 2.0.
-    compute_transforms : bool, optional
-        Whether to compute orientations for picks. Default is True.
-    curvature_threshold : float, optional
-        Maximum allowed curvature before outlier removal. Default is 0.2.
-    max_iterations : int, optional
-        Maximum number of outlier removal iterations. Default is 5.
-    output_session_id_template : str, optional
-        Template for output session IDs. Use {input_session_id} as placeholder.
-        If None, uses the same session ID as input.
-    output_user_id : str, optional
-        User ID for output picks. Default is "spline".
-    voxel_spacing : float, optional
-        Voxel spacing for coordinate scaling. Default is 1.0.
-    run_names : list, optional
-        List of run names to process. If None, processes all runs.
-    workers : int, optional
-        Number of worker processes. Default is 8.
+    Args:
+        root: The copick root containing runs to process
+        segmentation_name: Name of the segmentations to process
+        segmentation_user_id: User ID of the segmentations to process
+        session_id_pattern: Regex pattern or exact session ID to match segmentations
+        spacing_distance: Distance between consecutive sampled points along the spline
+        smoothing_factor: Smoothing parameter for spline fitting (auto if None)
+        degree: Degree of the spline (1-5). Default is 3.
+        connectivity_radius: Maximum distance to consider skeleton points as connected. Default is 2.0.
+        compute_transforms: Whether to compute orientations for picks. Default is True.
+        curvature_threshold: Maximum allowed curvature before outlier removal. Default is 0.2.
+        max_iterations: Maximum number of outlier removal iterations. Default is 5.
+        output_session_id_template: Template for output session IDs. Use {input_session_id} as placeholder.
+            If None, uses the same session ID as input.
+        output_user_id: User ID for output picks. Default is "spline".
+        voxel_spacing: Voxel spacing for coordinate scaling. Default is 1.0.
+        run_names: List of run names to process. If None, processes all runs.
+        workers: Number of worker processes. Default is 8.
 
     Returns:
-    --------
-    dict
         Dictionary with processing results and statistics
     """
     from copick.ops.run import map_runs

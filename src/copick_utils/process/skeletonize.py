@@ -25,10 +25,8 @@ class TubeSkeletonizer3D:
         """
         Load 3D volume from array.
 
-        Parameters:
-        -----------
-        volume_array : np.ndarray
-            3D binary array where tube is 1, background is 0
+        Args:
+            volume_array: 3D binary array where tube is 1, background is 0
         """
         self.original_volume = volume_array.astype(bool)
 
@@ -36,12 +34,9 @@ class TubeSkeletonizer3D:
         """
         Preprocess the volume before skeletonization.
 
-        Parameters:
-        -----------
-        remove_noise : bool
-            Whether to remove small objects (noise)
-        min_object_size : int
-            Minimum size of objects to keep
+        Args:
+            remove_noise: Whether to remove small objects (noise)
+            min_object_size: Minimum size of objects to keep
         """
         if remove_noise and np.any(self.original_volume):
             self.original_volume = remove_small_objects(self.original_volume, min_size=min_object_size)
@@ -50,10 +45,8 @@ class TubeSkeletonizer3D:
         """
         Perform 3D skeletonization.
 
-        Parameters:
-        -----------
-        method : str
-            Method to use ('skimage', 'distance_transform')
+        Args:
+            method: Method to use ('skimage', 'distance_transform')
         """
         if not np.any(self.original_volume):
             print("Warning: Volume is empty, creating empty skeleton")
@@ -86,12 +79,9 @@ class TubeSkeletonizer3D:
         """
         Post-process the skeleton to remove artifacts.
 
-        Parameters:
-        -----------
-        remove_short_branches : bool
-            Whether to remove short branches
-        min_branch_length : int
-            Minimum length of branches to keep
+        Args:
+            remove_short_branches: Whether to remove short branches
+            min_branch_length: Minimum length of branches to keep
         """
         if remove_short_branches and len(self.skeleton_coords) > 0:
             # Remove small objects from skeleton
@@ -104,8 +94,7 @@ class TubeSkeletonizer3D:
         Calculate properties of the skeleton.
 
         Returns:
-        --------
-        dict : skeleton properties
+            Dict of skeleton properties
         """
         if self.skeleton_coords is None or len(self.skeleton_coords) == 0:
             return {"n_voxels": 0, "bounding_box": {"min": None, "max": None}}
@@ -134,28 +123,17 @@ def skeletonize_segmentation(
     """
     Skeletonize a segmentation volume.
 
-    Parameters:
-    -----------
-    segmentation : CopickSegmentation
-        Input segmentation to skeletonize
-    method : str
-        Skeletonization method ('skimage', 'distance_transform')
-    remove_noise : bool
-        Whether to remove small objects before skeletonization
-    min_object_size : int
-        Minimum size of objects to keep during preprocessing
-    remove_short_branches : bool
-        Whether to remove short branches from skeleton
-    min_branch_length : int
-        Minimum length of branches to keep
-    output_session_id : str, optional
-        Session ID for output segmentation (default: same as input)
-    output_user_id : str
-        User ID for output segmentation
+    Args:
+        segmentation: Input segmentation to skeletonize
+        method: Skeletonization method ('skimage', 'distance_transform')
+        remove_noise: Whether to remove small objects before skeletonization
+        min_object_size: Minimum size of objects to keep during preprocessing
+        remove_short_branches: Whether to remove short branches from skeleton
+        min_branch_length: Minimum length of branches to keep
+        output_session_id: Session ID for output segmentation (default: same as input)
+        output_user_id: User ID for output segmentation
 
     Returns:
-    --------
-    output_segmentation : CopickSegmentation or None
         Created skeleton segmentation or None if failed
     """
     # Get the segmentation volume
@@ -303,39 +281,23 @@ def skeletonize_batch(
     """
     Batch skeletonize segmentations across multiple runs.
 
-    Parameters:
-    -----------
-    root : copick.Root
-        The copick root containing runs to process
-    segmentation_name : str
-        Name of the segmentations to process
-    segmentation_user_id : str
-        User ID of the segmentations to process
-    session_id_pattern : str
-        Regex pattern or exact session ID to match segmentations
-    method : str, optional
-        Skeletonization method ('skimage', 'distance_transform'). Default is 'skimage'.
-    remove_noise : bool, optional
-        Whether to remove small objects before skeletonization. Default is True.
-    min_object_size : int, optional
-        Minimum size of objects to keep during preprocessing. Default is 50.
-    remove_short_branches : bool, optional
-        Whether to remove short branches from skeleton. Default is True.
-    min_branch_length : int, optional
-        Minimum length of branches to keep. Default is 5.
-    output_session_id_template : str, optional
-        Template for output session IDs. Use {input_session_id} as placeholder.
-        If None, uses the same session ID as input.
-    output_user_id : str, optional
-        User ID for output segmentations. Default is "skel".
-    run_names : list, optional
-        List of run names to process. If None, processes all runs.
-    workers : int, optional
-        Number of worker processes. Default is 8.
+    Args:
+        root: The copick root containing runs to process
+        segmentation_name: Name of the segmentations to process
+        segmentation_user_id: User ID of the segmentations to process
+        session_id_pattern: Regex pattern or exact session ID to match segmentations
+        method: Skeletonization method ('skimage', 'distance_transform'). Default is 'skimage'.
+        remove_noise: Whether to remove small objects before skeletonization. Default is True.
+        min_object_size: Minimum size of objects to keep during preprocessing. Default is 50.
+        remove_short_branches: Whether to remove short branches from skeleton. Default is True.
+        min_branch_length: Minimum length of branches to keep. Default is 5.
+        output_session_id_template: Template for output session IDs. Use {input_session_id} as placeholder.
+            If None, uses the same session ID as input.
+        output_user_id: User ID for output segmentations. Default is "skel".
+        run_names: List of run names to process. If None, processes all runs.
+        workers: Number of worker processes. Default is 8.
 
     Returns:
-    --------
-    dict
         Dictionary with processing results and statistics
     """
     from copick.ops.run import map_runs
