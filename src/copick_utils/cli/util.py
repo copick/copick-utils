@@ -512,20 +512,20 @@ def add_picks_output_options(func: click.Command = None, *, default_tool: str = 
         """
         opts = [
             optgroup.option(
-                "--pick-object-name",
-                "-po",
+                "--pick-object-name-output",
+                "--output-pick-object-name",
                 required=True,
                 help="Name of the pick object to create.",
             ),
             optgroup.option(
-                "--pick-user-id",
-                "-pu",
+                "--pick-user-id-output",
+                "--output-pick-user-id",
                 default=default_tool,
                 help="User ID for created picks. Defaults to tool name.",
             ),
             optgroup.option(
-                "--pick-session-id",
-                "-ps",
+                "--pick-session-id-output",
+                "--output-pick-session-id",
                 default="0",
                 help="Session ID for created picks.",
             ),
