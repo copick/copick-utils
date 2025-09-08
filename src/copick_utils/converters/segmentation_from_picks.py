@@ -215,7 +215,6 @@ def segmentation_from_picks(
     radius: float,
     voxel_spacing: float,
     tomo_type: str = "wbp",
-    **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
     """
     Convert CopickPicks to a segmentation by painting spheres.
@@ -229,7 +228,6 @@ def segmentation_from_picks(
         radius: Radius of the spheres in physical units
         voxel_spacing: Voxel spacing for the segmentation
         tomo_type: Type of tomogram to use as reference
-        **kwargs: Additional keyword arguments
 
     Returns:
         Tuple of (CopickSegmentation object, stats dict) or None if creation failed.

@@ -89,7 +89,6 @@ def picks_from_segmentation(
     maxima_filter_size: int = 9,
     min_particle_size: int = 1000,
     max_particle_size: int = 50000,
-    **kwargs,
 ) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
     """
     Convert a CopickSegmentation to picks by extracting centroids.
@@ -104,7 +103,6 @@ def picks_from_segmentation(
         maxima_filter_size: Size of the maximum detection filter
         min_particle_size: Minimum size threshold for particles
         max_particle_size: Maximum size threshold for particles
-        **kwargs: Additional keyword arguments
 
     Returns:
         Tuple of (CopickPicks object, stats dict) or None if creation failed.

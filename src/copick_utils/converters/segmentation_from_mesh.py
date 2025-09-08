@@ -191,7 +191,6 @@ def segmentation_from_mesh(
     mode: str = "watertight",
     boundary_sampling_density: float = 1.0,
     invert: bool = False,
-    **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
     """
     Convert a CopickMesh to a segmentation volume.
@@ -208,7 +207,6 @@ def segmentation_from_mesh(
         mode: Voxelization mode ('watertight' or 'boundary')
         boundary_sampling_density: Surface sampling density for boundary mode (samples per voxel edge length)
         invert: Whether to invert the volume (fill outside instead of inside)
-        **kwargs: Additional keyword arguments
 
     Returns:
         Tuple of (CopickSegmentation object, stats dict) or None if creation failed.

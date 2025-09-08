@@ -55,7 +55,6 @@ def mesh_from_segmentation(
     user_id: str,
     level: float = 0.5,
     step_size: int = 1,
-    **kwargs,
 ) -> Optional[Tuple["CopickMesh", Dict[str, int]]]:
     """
     Convert a CopickSegmentation to a mesh.
@@ -68,7 +67,6 @@ def mesh_from_segmentation(
         user_id: User ID for the output mesh
         level: Isosurface level for marching cubes
         step_size: Step size for marching cubes
-        **kwargs: Additional keyword arguments
 
     Returns:
         Tuple of (CopickMesh object, stats dict) or None if creation failed.

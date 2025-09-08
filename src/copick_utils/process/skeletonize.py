@@ -205,7 +205,6 @@ def _skeletonize_worker(
     min_branch_length: int,
     output_session_id_template: Optional[str],
     output_user_id: str,
-    root: "CopickRoot",
 ) -> Dict[str, Any]:
     """Worker function for batch skeletonization."""
     try:

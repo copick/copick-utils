@@ -326,15 +326,9 @@ def _picks_from_mesh_worker(
     include_normals: bool,
     random_orientations: bool,
     seed: Optional[int],
-    root: "CopickRoot",
 ) -> Dict[str, Any]:
     """Worker function for batch conversion of meshes to picks."""
     try:
-        # Check if pick object exists in config
-        pick_object = root.get_object(pick_object_name)
-        if not pick_object:
-            return {"processed": 0, "errors": [f"Pick object '{pick_object_name}' not found in config"]}
-
         # Get mesh
         meshes = run.get_meshes(object_name=mesh_object_name, user_id=mesh_user_id, session_id=mesh_session_id)
 
@@ -397,48 +391,27 @@ def picks_from_mesh_batch(
     """
     Batch convert meshes to picks across multiple runs.
 
-    Parameters:
-    -----------
-    root : copick.Root
-        The copick root containing runs to process.
-    mesh_object_name : str
-        Name of the mesh object to sample from.
-    mesh_user_id : str
-        User ID of the mesh to convert.
-    mesh_session_id : str
-        Session ID of the mesh to convert.
-    sampling_type : str
-        Type of sampling ('inside', 'surface', 'outside', 'vertices').
-    n_points : int
-        Number of points to sample (ignored for 'vertices' type).
-    pick_object_name : str
-        Name of the object for created picks.
-    pick_session_id : str
-        Session ID for created picks.
-    pick_user_id : str
-        User ID for created picks.
-    voxel_spacing : float
-        Voxel spacing for coordinate scaling.
-    tomo_type : str, optional
-        Tomogram type for getting volume dimensions. Default is 'wbp'.
-    min_dist : float, optional
-        Minimum distance between points. If None, uses 2 * voxel_spacing.
-    edge_dist : float, optional
-        Distance from volume edges in voxels. Default is 32.0.
-    include_normals : bool, optional
-        Include surface normals as orientations (surface sampling only). Default is False.
-    random_orientations : bool, optional
-        Generate random orientations for points. Default is False.
-    seed : int, optional
-        Random seed for reproducible results.
-    run_names : list, optional
-        List of run names to process. If None, processes all runs.
-    workers : int, optional
-        Number of worker processes. Default is 8.
+    Args:
+        root: The copick root containing runs to process.
+        mesh_object_name: Name of the mesh object to sample from.
+        mesh_user_id: User ID of the mesh to convert.
+        mesh_session_id: Session ID of the mesh to convert.
+        sampling_type: Type of sampling ('inside', 'surface', 'outside', 'vertices').
+        n_points: Number of points to sample (ignored for 'vertices' type).
+        pick_object_name: Name of the object for created picks.
+        pick_session_id: Session ID for created picks.
+        pick_user_id: User ID for created picks.
+        voxel_spacing: Voxel spacing for coordinate scaling.
+        tomo_type: Tomogram type for getting volume dimensions. Default is 'wbp'.
+        min_dist: Minimum distance between points. If None, uses 2 * voxel_spacing.
+        edge_dist: Distance from volume edges in voxels. Default is 32.0.
+        include_normals: Include surface normals as orientations (surface sampling only). Default is False.
+        random_orientations: Generate random orientations for points. Default is False.
+        seed: Random seed for reproducible results.
+        run_names: List of run names to process. If None, processes all runs.
+        workers: Number of worker processes. Default is 8.
 
     Returns:
-    --------
-    dict
         Dictionary with processing results and statistics.
     """
     from copick.ops.run import map_runs
