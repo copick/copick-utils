@@ -59,23 +59,23 @@ def segop(
     """
     Perform boolean operations between two segmentations.
 
-    \\b
+    \b
     Supports the following boolean operations:
     - union: Combine both segmentations (logical OR)
     - difference: First segmentation minus second segmentation
     - intersection: Common voxels of both segmentations (logical AND)
     - exclusion: Exclusive or (XOR) of both segmentations
 
-    \\b
+    \b
     Note: Both input segmentations should be binary (non-multilabel) for meaningful results.
 
-    \\b
+    \b
     Examples:
         # Union of two segmentation sets
-        segmentation-boolean --operation union --seg-session-id "manual-001" --input2-session-id "auto-001" --seg-session-id "union-001" --voxel-spacing 10.0
-
+        copick segop --operation union --seg-session-id "manual-001" --input2-session-id "auto-001" --seg-session-id "union-001" --voxel-spacing 10.0
+        \b
         # Difference operation with pattern matching
-        segmentation-boolean --operation difference --seg-session-id "manual-.*" --input2-session-id "mask-.*" --seg-session-id "diff-{input_session_id}" --voxel-spacing 10.0
+        copick segop --operation difference --seg-session-id "manual-.*" --input2-session-id "mask-.*" --seg-session-id "diff-{input_session_id}" --voxel-spacing 10.0
     """
     from copick_utils.logical.segmentation_operations import (
         segmentation_difference_batch,

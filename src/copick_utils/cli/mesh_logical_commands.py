@@ -57,25 +57,25 @@ def meshop(
     """
     Perform boolean operations between two meshes.
 
-    \\b
+    \b
     Supports the following boolean operations:
     - union: Combine both meshes
     - difference: First mesh minus second mesh
     - intersection: Common volume of both meshes
     - exclusion: Exclusive or (XOR) of both meshes
 
-    \\b
+    \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session IDs → exact session ID
     - Many-to-many: regex patterns → template with {input_session_id}
 
-    \\b
+    \b
     Examples:
         # Union of two mesh sets
-        mesh-boolean --operation union --mesh-session-id "manual-001" --input2-session-id "auto-001" --mesh-session-id "union-001"
-
+        copick meshop --operation union --mesh-session-id "manual-001" --input2-session-id "auto-001" --mesh-session-id "union-001"
+        \b
         # Difference operation with pattern matching
-        mesh-boolean --operation difference --mesh-session-id "manual-.*" --input2-session-id "mask-.*" --mesh-session-id "diff-{input_session_id}"
+        copick meshop --operation difference --mesh-session-id "manual-.*" --input2-session-id "mask-.*" --mesh-session-id "diff-{input_session_id}"
     """
     from copick_utils.logical.mesh_operations import (
         mesh_difference_batch,

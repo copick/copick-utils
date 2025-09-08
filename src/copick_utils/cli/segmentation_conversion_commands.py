@@ -340,29 +340,30 @@ def mesh2seg(
 ):
     """
     Convert meshes to segmentation volumes with multiple voxelization modes.
-
+    \b
     Voxelization modes:
     - watertight: Fill entire interior volume using ray casting
     - boundary: Voxelize only the surface with controllable sampling density
-
+    \b
     Additional options:
     - --invert: Fill outside instead of inside (watertight mode)
     - --boundary-sampling-density: Surface sampling density (boundary mode)
-
+    \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
     - Many-to-many: regex pattern → template with {input_session_id}
 
+    \b
     Examples:
         # Convert mesh interior to segmentation (default)
         mesh2seg --mesh-session-id "manual-001" --seg-session-id "from-mesh-001"
-
+        \b
         # Convert mesh boundary only with high sampling density
         mesh2seg --mode boundary --boundary-sampling-density 2.0 --mesh-session-id "manual-001" --seg-session-id "boundary-001"
-
+        \b
         # Invert watertight mesh (fill outside)
         mesh2seg --invert --mesh-session-id "manual-001" --seg-session-id "inverted-001"
-
+        \b
         # Convert all manual meshes using pattern matching
         mesh2seg --mesh-session-id "manual-.*" --seg-session-id "from-mesh-{input_session_id}"
     """
@@ -490,14 +491,16 @@ def seg2mesh(
     """
     Convert segmentation volumes to meshes using marching cubes.
 
+    \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
     - Many-to-many: regex pattern → template with {input_session_id}
 
+    \b
     Examples:
         # Convert single segmentation to mesh
         seg2mesh --seg-session-id "manual-001" --mesh-session-id "from-seg-001"
-
+        \b
         # Convert all manual segmentations using pattern matching
         seg2mesh --seg-session-id "manual-.*" --mesh-session-id "from-seg-{input_session_id}"
     """

@@ -60,17 +60,17 @@ def picksin(
     """
     Filter picks to include only those inside a reference volume.
 
-    \\b
+    \b
     The reference volume can be either a watertight mesh or a segmentation.
     Only picks that fall inside the reference volume will be kept.
 
-    \\b
+    \b
     Examples:
         # Include only picks inside reference mesh
-        picks-include --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --pick-session-id "inside-001"
-
+        copick picksin --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --pick-session-id "inside-001"
+        \b
         # Include only picks inside segmentation
-        picks-include --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --pick-session-id "inside-001"
+        copick picksin --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --pick-session-id "inside-001"
     """
     from copick_utils.logical.point_operations import picks_inclusion_by_mesh_batch
 
@@ -230,17 +230,17 @@ def picksout(
     """
     Filter picks to exclude those inside a reference volume.
 
-    \\b
+    \b
     The reference volume can be either a watertight mesh or a segmentation.
     Picks that fall inside the reference volume will be removed.
 
-    \\b
+    \b
     Examples:
         # Exclude picks inside reference mesh
-        picks-exclude --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --pick-session-id "outside-001"
-
+        copick picksout --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --pick-session-id "outside-001"
+        \b
         # Exclude picks inside segmentation
-        picks-exclude --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --pick-session-id "outside-001"
+        copick picksout --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --pick-session-id "outside-001"
     """
     from copick_utils.logical.point_operations import picks_exclusion_by_mesh_batch
 

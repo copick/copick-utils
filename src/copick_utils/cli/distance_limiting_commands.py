@@ -69,17 +69,17 @@ def clipmesh(
     """
     Limit meshes to vertices within a certain distance of a reference surface.
 
-    \\b
+    \b
     The reference surface can be either a mesh or a segmentation.
     Only mesh vertices within the specified distance will be kept.
 
-    \\b
+    \b
     Examples:
         # Limit mesh to vertices near reference mesh surface
-        limit-mesh-distance --mesh-session-id "full-001" --ref-mesh-session-id "boundary-001" --max-distance 50.0 --mesh-session-id "limited-001"
-
+        copick clipmesh --mesh-session-id "full-001" --ref-mesh-session-id "boundary-001" --max-distance 50.0 --mesh-session-id "limited-001"
+        \b
         # Limit using segmentation as reference
-        limit-mesh-distance --mesh-session-id "full-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --max-distance 100.0 --mesh-session-id "limited-001"
+        copick clipmesh --mesh-session-id "full-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --max-distance 100.0 --mesh-session-id "limited-001"
     """
     from copick_utils.logical.distance_operations import limit_mesh_by_distance_batch
 
@@ -260,17 +260,17 @@ def clipseg(
     """
     Limit segmentations to voxels within a certain distance of a reference surface.
 
-    \\b
+    \b
     The reference surface can be either a mesh or another segmentation.
     Only segmentation voxels within the specified distance will be kept.
 
-    \\b
+    \b
     Examples:
         # Limit segmentation to voxels near reference mesh
-        limit-segmentation-distance --seg-session-id "full-001" --ref-mesh-session-id "boundary-001" --max-distance 50.0 --voxel-spacing 10.0 --seg-session-id "limited-001"
-
+        copick clipseg --seg-session-id "full-001" --ref-mesh-session-id "boundary-001" --max-distance 50.0 --voxel-spacing 10.0 --seg-session-id "limited-001"
+        \b
         # Limit using another segmentation as reference
-        limit-segmentation-distance --seg-session-id "full-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --max-distance 100.0 --voxel-spacing 10.0 --seg-session-id "limited-001"
+        copick clipseg --seg-session-id "full-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --max-distance 100.0 --voxel-spacing 10.0 --seg-session-id "limited-001"
     """
     from copick_utils.logical.distance_operations import limit_segmentation_by_distance_batch
 
@@ -441,17 +441,17 @@ def clippicks(
     """
     Limit picks to those within a certain distance of a reference surface.
 
-    \\b
+    \b
     The reference surface can be either a mesh or a segmentation.
     Only picks within the specified distance will be kept.
 
-    \\b
+    \b
     Examples:
         # Limit picks to those near reference mesh surface
-        limit-picks-distance --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --max-distance 50.0 --pick-session-id "limited-001"
-
+        copick clippicks --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --max-distance 50.0 --pick-session-id "limited-001"
+        \b
         # Limit using segmentation as reference
-        limit-picks-distance --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --max-distance 100.0 --pick-session-id "limited-001"
+        copick clippicks --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --max-distance 100.0 --pick-session-id "limited-001"
     """
     from copick_utils.logical.distance_operations import limit_picks_by_distance_batch
 
