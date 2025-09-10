@@ -41,7 +41,7 @@ from copick_utils.cli.util import (
 @add_distance_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output picks.")
-@add_picks_output_options(default_tool="picks-distance")
+@add_picks_output_options(default_tool="clippicks")
 @add_debug_option
 def clippicks(
     config,

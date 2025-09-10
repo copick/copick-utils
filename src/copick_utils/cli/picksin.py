@@ -37,7 +37,7 @@ from copick_utils.cli.util import (
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output picks.")
-@add_picks_output_options(default_tool="picks-include")
+@add_picks_output_options(default_tool="picksin")
 @add_debug_option
 def picksin(
     config,
@@ -68,10 +68,10 @@ def picksin(
     \b
     Examples:
         # Include only picks inside reference mesh
-        copick picksin --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --pick-session-id "inside-001"
+        copick logical picksin --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --pick-session-id "inside-001"
         \b
         # Include only picks inside segmentation
-        copick picksin --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --pick-session-id "inside-001"
+        copick logical picksin --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --pick-session-id "inside-001"
     """
     from copick_utils.logical.point_operations import picks_inclusion_by_mesh_batch
 

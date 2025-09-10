@@ -31,6 +31,7 @@ from copick_utils.cli.util import (
 @add_mesh_voxelization_options
 @optgroup.option(
     "--tomo-type",
+    "-tt",
     default="wbp",
     help="Type of tomogram to use as reference.",
 )
@@ -58,14 +59,17 @@ def mesh2seg(
 ):
     """
     Convert meshes to segmentation volumes with multiple voxelization modes.
+
     \b
     Voxelization modes:
     - watertight: Fill entire interior volume using ray casting
     - boundary: Voxelize only the surface with controllable sampling density
+
     \b
     Additional options:
     - --invert: Fill outside instead of inside (watertight mode)
     - --boundary-sampling-density: Surface sampling density (boundary mode)
+
     \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
@@ -74,16 +78,16 @@ def mesh2seg(
     \b
     Examples:
         # Convert mesh interior to segmentation (default)
-        mesh2seg --mesh-session-id "manual-001" --seg-session-id "from-mesh-001"
+        copick convert mesh2seg --mesh-session-id "manual-001" --seg-session-id "from-mesh-001"
         \b
         # Convert mesh boundary only with high sampling density
-        mesh2seg --mode boundary --boundary-sampling-density 2.0 --mesh-session-id "manual-001" --seg-session-id "boundary-001"
+        copick convert mesh2seg --mode boundary --boundary-sampling-density 2.0 --mesh-session-id "manual-001" --seg-session-id "boundary-001"
         \b
         # Invert watertight mesh (fill outside)
-        mesh2seg --invert --mesh-session-id "manual-001" --seg-session-id "inverted-001"
+        copick convert mesh2seg --invert --mesh-session-id "manual-001" --seg-session-id "inverted-001"
         \b
         # Convert all manual meshes using pattern matching
-        mesh2seg --mesh-session-id "manual-.*" --seg-session-id "from-mesh-{input_session_id}"
+        copick convert mesh2seg --mesh-session-id "manual-.*" --seg-session-id "from-mesh-{input_session_id}"
     """
     from copick_utils.converters.segmentation_from_mesh import segmentation_from_mesh_batch
 

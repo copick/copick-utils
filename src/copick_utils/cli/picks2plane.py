@@ -72,15 +72,13 @@ def picks2plane(
     Examples:
         \b
         # Convert single pick set to single plane mesh
-        picks2plane --pick-session-id "manual-001" --mesh-session-id "plane-001"
-
+        copick convert picks2plane --pick-session-id "manual-001" --mesh-session-id "plane-001"
         \b
-    # Create individual plane meshes from clusters
-    picks2plane --pick-session-id "manual-001" --mesh-session-id "plane-{instance_id}" --individual-meshes
-
+        # Create individual plane meshes from clusters
+        copick convert picks2plane --pick-session-id "manual-001" --mesh-session-id "plane-{instance_id}" --individual-meshes
         \b
-    # Convert all manual picks using pattern matching
-    picks2plane --pick-session-id "manual-.*" --mesh-session-id "plane-{input_session_id}"
+        # Convert all manual picks using pattern matching
+        copick convert picks2plane --pick-session-id "manual-.*" --mesh-session-id "plane-{input_session_id}"
     """
     from copick_utils.converters.plane_from_picks import plane_from_picks_batch
 
@@ -142,8 +140,6 @@ def picks2plane(
         clustering_params=clustering_params,
         padding=padding,
         all_clusters=all_clusters,
-        # individual_meshes=individual_meshes,
-        # session_id_template=mesh_session_id,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)

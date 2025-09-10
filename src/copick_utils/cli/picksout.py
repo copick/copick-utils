@@ -39,7 +39,7 @@ from copick_utils.cli.util import (
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output picks.")
-@add_picks_output_options(default_tool="picks-exclude")
+@add_picks_output_options(default_tool="picksout")
 @add_debug_option
 def picksout(
     config,
@@ -70,10 +70,10 @@ def picksout(
     \b
     Examples:
         # Exclude picks inside reference mesh
-        copick picksout --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --pick-session-id "outside-001"
+        copick logical picksout --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --pick-session-id "outside-001"
         \b
         # Exclude picks inside segmentation
-        copick picksout --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --pick-session-id "outside-001"
+        copick logical picksout --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --pick-session-id "outside-001"
     """
     from copick_utils.logical.point_operations import picks_exclusion_by_mesh_batch
 

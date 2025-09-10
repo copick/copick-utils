@@ -54,16 +54,18 @@ def seg2picks(
     """
     Convert segmentation volumes to picks by extracting centroids.
 
+    \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
     - Many-to-many: regex pattern → template with {input_session_id}
 
+    \b
     Examples:
         # Convert single segmentation to picks
-        seg2picks --seg-session-id "manual-001" --pick-session-id "centroid-001"
-
+        copick convert seg2picks --seg-session-id "manual-001" --pick-session-id "centroid-001"
+        \b
         # Convert all manual segmentations using pattern matching
-        seg2picks --seg-session-id "manual-.*" --pick-session-id "centroid-{input_session_id}"
+        copick convert seg2picks --seg-session-id "manual-.*" --pick-session-id "centroid-{input_session_id}"
     """
     from copick_utils.converters.picks_from_segmentation import picks_from_segmentation_batch
 

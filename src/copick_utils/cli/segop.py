@@ -71,10 +71,10 @@ def segop(
     \b
     Examples:
         # Union of two segmentation sets
-        copick segop --operation union --seg-session-id "manual-001" --input2-session-id "auto-001" --seg-session-id "union-001" --voxel-spacing 10.0
+        copick logical segop --operation union --seg-session-id "manual-001" --input2-session-id "auto-001" --seg-session-id "union-001" --voxel-spacing 10.0
         \b
         # Difference operation with pattern matching
-        copick segop --operation difference --seg-session-id "manual-.*" --input2-session-id "mask-.*" --seg-session-id "diff-{input_session_id}" --voxel-spacing 10.0
+        copick logical segop --operation difference --seg-session-id "manual-.*" --input2-session-id "mask-.*" --seg-session-id "diff-{input_session_id}" --voxel-spacing 10.0
     """
     from copick_utils.logical.segmentation_operations import (
         segmentation_difference_batch,

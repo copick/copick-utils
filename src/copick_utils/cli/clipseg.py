@@ -38,7 +38,7 @@ from copick_utils.cli.util import (
 @add_distance_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
-@add_segmentation_output_options(default_tool="seg-distance")
+@add_segmentation_output_options(default_tool="clipseg")
 @add_debug_option
 def clipseg(
     config,

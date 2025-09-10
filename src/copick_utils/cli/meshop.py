@@ -71,10 +71,10 @@ def meshop(
     \b
     Examples:
         # Union of two mesh sets
-        copick meshop --operation union --mesh-session-id "manual-001" --input2-session-id "auto-001" --mesh-session-id "union-001"
+        copick logical meshop --operation union --mesh-session-id "manual-001" --input2-session-id "auto-001" --mesh-session-id "union-001"
         \b
         # Difference operation with pattern matching
-        copick meshop --operation difference --mesh-session-id "manual-.*" --input2-session-id "mask-.*" --mesh-session-id "diff-{input_session_id}"
+        copick logical meshop --operation difference --mesh-session-id "manual-.*" --input2-session-id "mask-.*" --mesh-session-id "diff-{input_session_id}"
     """
     from copick_utils.logical.mesh_operations import (
         mesh_difference_batch,

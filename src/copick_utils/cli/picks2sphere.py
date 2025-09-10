@@ -84,15 +84,13 @@ def picks2sphere(
     \b
     Examples:
         # Convert single pick set to single sphere mesh
-        picks2sphere --pick-session-id "manual-001" --mesh-session-id "sphere-001"
-
+        copick convert picks2sphere --pick-session-id "manual-001" --mesh-session-id "sphere-001"
         \b
-    # Create individual sphere meshes from clusters
-    picks2sphere --pick-session-id "manual-001" --mesh-session-id "sphere-{instance_id}" --individual-meshes
-
+        # Create individual sphere meshes from clusters
+        copick convert picks2sphere --pick-session-id "manual-001" --mesh-session-id "sphere-{instance_id}" --individual-meshes
         \b
-    # Convert all manual picks using pattern matching
-    picks2sphere --pick-session-id "manual-.*" --mesh-session-id "sphere-{input_session_id}"
+        # Convert all manual picks using pattern matching
+        copick convert picks2sphere --pick-session-id "manual-.*" --mesh-session-id "sphere-{input_session_id}"
     """
     from copick_utils.converters.sphere_from_picks import sphere_from_picks_batch
 
@@ -156,8 +154,6 @@ def picks2sphere(
         all_clusters=all_clusters,
         deduplicate_spheres_flag=deduplicate_spheres,
         min_sphere_distance=min_sphere_distance,
-        # individual_meshes=individual_meshes,
-        # session_id_template=mesh_session_id,
     )
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
     total_vertices = sum(result.get("vertices_created", 0) for result in results.values() if result)

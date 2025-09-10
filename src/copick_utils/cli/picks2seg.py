@@ -31,6 +31,7 @@ from copick_utils.cli.util import (
 @add_picks_painting_options
 @optgroup.option(
     "--tomo-type",
+    "-tt",
     default="wbp",
     help="Type of tomogram to use as reference.",
 )
@@ -63,16 +64,18 @@ def picks2seg(
     """
     Convert picks to segmentation volumes by painting spheres.
 
+    \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
     - Many-to-many: regex pattern → template with {input_session_id}
 
+    \b
     Examples:
         # Convert single pick set to segmentation
-        copick picks2seg --pick-session-id "manual-001" --seg-session-id "painted-001"
-
+        copick convert picks2seg --pick-session-id "manual-001" --seg-session-id "painted-001"
+        \b
         # Convert all manual picks using pattern matching
-        copick picks2seg --pick-session-id "manual-.*" --seg-session-id "painted-{input_session_id}"
+        copick convert picks2seg --pick-session-id "manual-.*" --seg-session-id "painted-{input_session_id}"
     """
     from copick_utils.converters.segmentation_from_picks import segmentation_from_picks_batch
 

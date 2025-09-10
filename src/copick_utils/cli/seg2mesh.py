@@ -61,10 +61,10 @@ def seg2mesh(
     \b
     Examples:
         # Convert single segmentation to mesh
-        seg2mesh --seg-session-id "manual-001" --mesh-session-id "from-seg-001"
+        copick convert seg2mesh --seg-session-id "manual-001" --mesh-session-id "from-seg-001"
         \b
         # Convert all manual segmentations using pattern matching
-        seg2mesh --seg-session-id "manual-.*" --mesh-session-id "from-seg-{input_session_id}"
+        copick convert seg2mesh --seg-session-id "manual-.*" --mesh-session-id "from-seg-{input_session_id}"
     """
     from copick_utils.converters.mesh_from_segmentation import mesh_from_segmentation_batch
 

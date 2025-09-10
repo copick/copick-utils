@@ -38,7 +38,7 @@ from copick_utils.cli.util import (
 @add_distance_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options(default_tool="mesh-distance")
+@add_mesh_output_options(default_tool="clipmesh")
 @add_debug_option
 def clipmesh(
     config,

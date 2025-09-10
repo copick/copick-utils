@@ -49,7 +49,7 @@ from copick_utils.cli.util import add_mesh_output_options
     help="Number of worker processes.",
 )
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options(default_tool="validbox")
+@add_mesh_output_options(default_tool="validbox", include_individual_mesh=False)
 @add_debug_option
 def validbox(
     config,
@@ -61,12 +61,12 @@ def validbox(
     mesh_object_name_output,
     mesh_user_id_output,
     mesh_session_id_output,
-    individual_meshes,
     debug,
 ):
     """
     Generate valid area box meshes for tomographic reconstructions.
 
+    \b
     Creates box meshes representing the valid imaging area of tomographic
     reconstructions. The box dimensions are based on the tomogram voxel dimensions
     and can be optionally rotated around the Z-axis.
@@ -74,10 +74,10 @@ def validbox(
     \b
     Examples:
         # Generate validbox meshes for all runs
-        copick validbox --voxel-spacing 10.0 --mesh-object-name "validbox" --mesh-user-id "auto" --mesh-session-id "0"
+        copick process validbox --voxel-spacing 10.0 --mesh-object-name "validbox" --mesh-user-id "auto" --mesh-session-id "0"
         \b
         # Generate with rotation and specific tomogram type
-        copick validbox --voxel-spacing 10.0 --angle 45.0 --tomo-type "imod" --mesh-object-name "validbox" --mesh-user-id "rotated" --mesh-session-id "45deg"
+        copick process validbox --voxel-spacing 10.0 --angle 45.0 --tomo-type "imod" --mesh-object-name "validbox" --mesh-user-id "rotated" --mesh-session-id "45deg"
     """
     from copick_utils.process.validbox import validbox_batch
 

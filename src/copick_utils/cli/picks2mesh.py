@@ -151,8 +151,6 @@ def picks2mesh(
         clustering_method=clustering_method,
         clustering_params=clustering_params,
         all_clusters=all_clusters,
-        # individual_meshes=individual_meshes,
-        # session_id_template=mesh_session_id,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)

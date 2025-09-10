@@ -69,18 +69,20 @@ def picks2surface(
     """
     Convert picks to 2D surface meshes.
 
+    \b
     Supports flexible input/output selection modes:
     - One-to-one: exact session ID → exact session ID
     - One-to-many: exact session ID → template with {instance_id}
     - Many-to-many: regex pattern → template with {input_session_id} and {instance_id}
 
+    \b
     Examples:
         # Convert single pick set to single surface mesh
         picks2surface --pick-session-id "manual-001" --mesh-session-id "surface-001"
-
+        \b
         # Create individual surface meshes from clusters
         picks2surface --pick-session-id "manual-001" --mesh-session-id "surface-{instance_id}" --individual-meshes
-
+        \b
         # Convert all manual picks using pattern matching
         picks2surface --pick-session-id "manual-.*" --mesh-session-id "surface-{input_session_id}"
     """
@@ -145,8 +147,6 @@ def picks2surface(
         clustering_method=clustering_method,
         clustering_params=clustering_params,
         all_clusters=all_clusters,
-        # individual_meshes=individual_meshes,
-        # session_id_template=mesh_session_id,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)

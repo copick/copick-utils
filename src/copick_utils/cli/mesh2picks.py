@@ -6,6 +6,8 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
+from copick_utils.cli.util import add_mesh_input_options, add_picks_output_options, add_workers_option
+
 
 @click.command(
     context_settings={"show_default": True},
@@ -16,26 +18,14 @@ from copick.util.log import get_logger
 @optgroup.group("\nInput Options", help="Options related to the input meshes.")
 @optgroup.option(
     "--run-names",
+    "-r",
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@optgroup.option(
-    "--mesh-object-name",
-    required=True,
-    help="Name of the mesh object to sample from.",
-)
-@optgroup.option(
-    "--mesh-user-id",
-    required=True,
-    help="User ID of the mesh to convert.",
-)
-@optgroup.option(
-    "--mesh-session-id",
-    required=True,
-    help="Session ID of the mesh to convert.",
-)
+@add_mesh_input_options
 @optgroup.option(
     "--tomo-type",
+    "-tt",
     default="wbp",
     help="Type of tomogram to use as reference.",
 )
@@ -86,28 +76,9 @@ from copick.util.log import get_logger
     type=int,
     help="Random seed for reproducible results.",
 )
-@optgroup.option(
-    "--workers",
-    type=int,
-    default=8,
-    help="Number of worker processes.",
-)
+@add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output picks.")
-@optgroup.option(
-    "--pick-object-name",
-    required=True,
-    help="Name of the object for created picks.",
-)
-@optgroup.option(
-    "--pick-user-id",
-    default="from-mesh",
-    help="User ID for created picks.",
-)
-@optgroup.option(
-    "--pick-session-id",
-    default="0",
-    help="Session ID for created picks.",
-)
+@add_picks_output_options
 @add_debug_option
 def mesh2picks(
     config,

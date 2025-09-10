@@ -435,7 +435,12 @@ def add_segmentation_boolean_output_options(
         return add_segmentation_boolean_output_options_decorator(func)
 
 
-def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "from-picks") -> Callable:
+def add_mesh_output_options(
+    func: click.Command = None,
+    *,
+    default_tool: str = "from-picks",
+    include_individual_mesh: bool = True,
+) -> Callable:
     """
     Add common output options for picks-to-mesh conversion commands.
 
@@ -447,6 +452,7 @@ def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "
     Args:
         func (click.Command): The Click command to which the options will be added.
         default_tool (str): Default user ID for created mesh.
+        include_individual_mesh (bool): Whether to include the individual meshes option.
 
     Returns:
         click.Command: The Click command with the output options added.
@@ -480,14 +486,18 @@ def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "
                 default="0",
                 help="Session ID or template for created mesh. Supports placeholders: {input_session_id} for many-to-many, {instance_id} for individual meshes.",
             ),
-            optgroup.option(
-                "--individual-meshes/--no-individual-meshes",
-                "-im",
-                is_flag=True,
-                default=False,
-                help="Create individual mesh files for each mesh instead of combining them.",
-            ),
         ]
+
+        if include_individual_mesh:
+            opts.append(
+                optgroup.option(
+                    "--individual-meshes/--no-individual-meshes",
+                    "-im",
+                    is_flag=True,
+                    default=False,
+                    help="Create individual meshes for each instance (enables {instance_id} placeholder).",
+                ),
+            )
 
         for opt in reversed(opts):
             func = opt(func)

@@ -84,15 +84,13 @@ def picks2ellipsoid(
     \b
     Examples:
         # Convert single pick set to single ellipsoid mesh
-        picks2ellipsoid --pick-session-id "manual-001" --mesh-session-id "ellipsoid-001"
-
+        copick convert picks2ellipsoid --pick-session-id "manual-001" --mesh-session-id "ellipsoid-001"
         \b
-    # Create individual ellipsoid meshes from clusters
-    picks2ellipsoid --pick-session-id "manual-001" --mesh-session-id "ellipsoid-{instance_id}" --individual-meshes
-
+        # Create individual ellipsoid meshes from clusters
+        copick convert picks2ellipsoid --pick-session-id "manual-001" --mesh-session-id "ellipsoid-{instance_id}" --individual-meshes
         \b
-    # Convert all manual picks using pattern matching
-    picks2ellipsoid --pick-session-id "manual-.*" --mesh-session-id "ellipsoid-{input_session_id}"
+        # Convert all manual picks using pattern matching
+        copick convert picks2ellipsoid --pick-session-id "manual-.*" --mesh-session-id "ellipsoid-{input_session_id}"
     """
     from copick_utils.converters.ellipsoid_from_picks import ellipsoid_from_picks_batch
 
