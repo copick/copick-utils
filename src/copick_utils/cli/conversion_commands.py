@@ -3,24 +3,16 @@
 This module imports all conversion commands from specialized files for better organization.
 """
 
-# Import picks-to-mesh conversion commands
-# Import mesh-to-picks conversion commands
-from copick_utils.cli.mesh_to_picks_commands import mesh2picks
-from copick_utils.cli.picks_to_mesh_commands import (
-    picks2ellipsoid,
-    picks2mesh,
-    picks2plane,
-    picks2sphere,
-    picks2surface,
-)
-
-# Import segmentation conversion commands
-from copick_utils.cli.segmentation_conversion_commands import (
-    mesh2seg,
-    picks2seg,
-    seg2mesh,
-    seg2picks,
-)
+from copick_utils.cli.mesh2picks import mesh2picks
+from copick_utils.cli.mesh2seg import mesh2seg
+from copick_utils.cli.picks2ellipsoid import picks2ellipsoid
+from copick_utils.cli.picks2mesh import picks2mesh
+from copick_utils.cli.picks2plane import picks2plane
+from copick_utils.cli.picks2seg import picks2seg
+from copick_utils.cli.picks2sphere import picks2sphere
+from copick_utils.cli.picks2surface import picks2surface
+from copick_utils.cli.seg2mesh import seg2mesh
+from copick_utils.cli.seg2picks import seg2picks
 
 # All commands are now available for import by the main CLI
 __all__ = [

@@ -206,6 +206,7 @@ mesh_union_batch = create_batch_converter(
     "mesh",
     "mesh",
     min_points=0,
+    dual_input=True,
 )
 
 mesh_difference_batch = create_batch_converter(
@@ -214,6 +215,7 @@ mesh_difference_batch = create_batch_converter(
     "mesh",
     "mesh",
     min_points=0,
+    dual_input=True,
 )
 
 mesh_intersection_batch = create_batch_converter(
@@ -222,6 +224,7 @@ mesh_intersection_batch = create_batch_converter(
     "mesh",
     "mesh",
     min_points=0,
+    dual_input=True,
 )
 
 mesh_exclusion_batch = create_batch_converter(
@@ -230,4 +233,5 @@ mesh_exclusion_batch = create_batch_converter(
     "mesh",
     "mesh",
     min_points=0,
+    dual_input=True,
 )

@@ -9,7 +9,6 @@ from copick.util.log import get_logger
 from copick_utils.cli.input_output_selection import ConversionSelector, validate_conversion_placeholders
 from copick_utils.cli.util import (
     add_boolean_operation_option,
-    add_dual_mesh_input_options,
     add_mesh_input_options,
     add_mesh_output_options,
     add_workers_option,
@@ -30,7 +29,7 @@ from copick_utils.cli.util import (
     help="Specific run names to process (default: all runs).",
 )
 @add_mesh_input_options
-@add_dual_mesh_input_options
+@add_mesh_input_options(suffix="2")
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_boolean_operation_option
 @add_workers_option

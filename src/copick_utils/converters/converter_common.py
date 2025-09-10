@@ -250,6 +250,7 @@ def create_batch_converter(
     output_type: str,
     input_type: str = "picks",
     min_points: int = 3,
+    dual_input: bool = False,
 ) -> Callable:
     """
     Create a batch converter function that supports flexible input/output selection.
@@ -260,6 +261,7 @@ def create_batch_converter(
         output_type: Type of output being created (e.g., "mesh", "segmentation").
         input_type: Type of input being processed (e.g., "picks", "mesh", "segmentation").
         min_points: Minimum points required (only relevant for picks input).
+        dual_input: If True, expects tasks with dual inputs (e.g., mesh boolean operations).
 
     Returns:
         Batch converter function.
@@ -367,14 +369,32 @@ def create_batch_converter(
                     else:
                         # For mesh or segmentation input, pass the object directly
                         if input_type == "mesh":
-                            result = converter_func(
-                                mesh=input_obj,
-                                run=run,
-                                object_name=task.get(f"{output_type}_object_name"),
-                                session_id=task.get(f"{output_type}_session_id"),
-                                user_id=task.get(f"{output_type}_user_id"),
-                                **converter_kwargs,
-                            )
+                            if dual_input:
+                                # For dual-input operations like mesh boolean operations
+                                input2_obj = task.get("input2_mesh")
+                                if not input2_obj:
+                                    all_errors.append(f"Missing second input mesh for task in {run.name}")
+                                    continue
+
+                                result = converter_func(
+                                    mesh1=input_obj,
+                                    mesh2=input2_obj,
+                                    run=run,
+                                    object_name=task.get("mesh_object_name"),
+                                    session_id=task.get("mesh_session_id"),
+                                    user_id=task.get("mesh_user_id"),
+                                    **converter_kwargs,
+                                )
+                            else:
+                                # Single-input mesh operations
+                                result = converter_func(
+                                    mesh=input_obj,
+                                    run=run,
+                                    object_name=task.get(f"{output_type}_object_name"),
+                                    session_id=task.get(f"{output_type}_session_id"),
+                                    user_id=task.get(f"{output_type}_user_id"),
+                                    **converter_kwargs,
+                                )
                         elif input_type == "segmentation":
                             result = converter_func(
                                 segmentation=input_obj,

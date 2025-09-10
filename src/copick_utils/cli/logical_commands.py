@@ -3,23 +3,14 @@
 This module imports all logical operation commands from specialized files for better organization.
 """
 
-# Import mesh boolean operation commands
-# Import distance-based limiting commands
-from copick_utils.cli.distance_limiting_commands import (
-    clipmesh,
-    clippicks,
-    clipseg,
-)
-from copick_utils.cli.mesh_logical_commands import meshop
 
-# Import point filtering commands
-from copick_utils.cli.point_filtering_commands import (
-    picksin,
-    picksout,
-)
-
-# Import segmentation boolean operation commands
-from copick_utils.cli.segmentation_logical_commands import segop
+from copick_utils.cli.clipmesh import clipmesh
+from copick_utils.cli.clippicks import clippicks
+from copick_utils.cli.clipseg import clipseg
+from copick_utils.cli.meshop import meshop
+from copick_utils.cli.picksin import picksin
+from copick_utils.cli.picksout import picksout
+from copick_utils.cli.segop import segop
 
 # All commands are now available for import by the main CLI
 __all__ = [

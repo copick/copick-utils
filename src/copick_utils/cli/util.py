@@ -25,19 +25,19 @@ def add_pick_input_options(func: click.Command) -> click.Command:
             "--pick-object-name",
             "-po",
             required=True,
-            help="Name of the pick object to convert.",
+            help="Name of the input pick object.",
         ),
         optgroup.option(
             "--pick-user-id",
             "-pu",
             required=True,
-            help="User ID of the picks to convert.",
+            help="User ID of the input picks.",
         ),
         optgroup.option(
             "--pick-session-id",
             "-ps",
             required=True,
-            help="Session ID or regex pattern of the picks to convert. Use regex for many-to-many mode.",
+            help="Session ID or regex pattern of the input picks. Use regex for many-to-many mode.",
         ),
     ]
 
@@ -130,111 +130,187 @@ def add_workers_option(func: click.Command) -> click.Command:
     return func
 
 
-def add_mesh_input_options(func: click.Command) -> click.Command:
+def add_mesh_input_options(func: click.Command = None, *, suffix: str = "", prefix: str = "") -> Callable:
     """
     Add common input options for mesh-to-segmentation conversion commands.
 
     Args:
         func (click.Command): The Click command to which the options will be added.
+        suffix (str): Suffix to append to option names (for dual inputs).
+        prefix (str): Prefix to prepend to option names (for namespacing).
 
     Returns:
         click.Command: The Click command with the input options added.
     """
-    opts = [
-        optgroup.option(
-            "--mesh-object-name",
-            "-mo",
-            required=True,
-            help="Name of the mesh object to convert.",
-        ),
-        optgroup.option(
-            "--mesh-user-id",
-            "-mu",
-            required=True,
-            help="User ID of the mesh to convert.",
-        ),
-        optgroup.option(
-            "--mesh-session-id",
-            "-ms",
-            required=True,
-            help="Session ID or regex pattern of the mesh to convert.",
-        ),
-    ]
 
-    for opt in reversed(opts):
-        func = opt(func)
+    short_prefix = prefix[0] if prefix else ""
+    additional_suffix_doc = f" ({suffix})" if suffix else ""
+    additional_prefix_doc = f" ({prefix}) " if prefix else " "
 
-    return func
+    mesh_doc = f"{additional_prefix_doc}mesh{additional_suffix_doc}."
+
+    prefix = prefix + "-" if prefix else ""
+
+    def add_mesh_input_options_decorator(_func: click.Command) -> click.Command:
+        """
+        Add common input options for mesh-to-segmentation conversion commands.
+
+        Args:
+            _func (click.Command): The Click command to which the options will be added.
+
+        Returns:
+            click.Command: The Click command with the input options added.
+        """
+        opts = [
+            optgroup.option(
+                f"--{prefix}mesh-object-name{suffix}",
+                f"-{short_prefix}mo{suffix}",
+                required=True,
+                help=f"Object name of the input {mesh_doc}",
+            ),
+            optgroup.option(
+                f"--{prefix}mesh-user-id{suffix}",
+                f"-{short_prefix}mu{suffix}",
+                required=True,
+                help=f"User ID of the input {mesh_doc}",
+            ),
+            optgroup.option(
+                f"--{prefix}mesh-session-id{suffix}",
+                f"-{short_prefix}ms{suffix}",
+                required=True,
+                help=f"Session ID or regex pattern of the input {mesh_doc}",
+            ),
+        ]
+
+        for opt in reversed(opts):
+            _func = opt(_func)
+
+        return _func
+
+    if func is None:
+        return add_mesh_input_options_decorator
+    else:
+        return add_mesh_input_options_decorator(func)
 
 
-def add_segmentation_input_options(func: click.Command) -> click.Command:
+def add_segmentation_input_options(
+    func: click.Command = None,
+    *,
+    suffix: str = "",
+    prefix: str = "",
+    include_voxel_spacing: bool = True,
+    include_multilabel: bool = True,
+) -> Callable:
     """
     Add common input options for segmentation-to-mesh conversion commands.
 
     Args:
         func (click.Command): The Click command to which the options will be added.
+        suffix (str): Suffix to append to option names (for dual inputs).
+        prefix (str): Prefix to prepend to option names (for namespacing).
+        include_voxel_spacing (bool): Whether to include the voxel spacing option.
+        include_multilabel (bool): Whether to include the multilabel option.
 
     Returns:
         click.Command: The Click command with the input options added.
     """
-    opts = [
-        optgroup.option(
-            "--seg-name",
-            "-sn",
-            required=True,
-            help="Name of the segmentation to convert.",
-        ),
-        optgroup.option(
-            "--seg-user-id",
-            "-su",
-            required=True,
-            help="User ID of the segmentation to convert.",
-        ),
-        optgroup.option(
-            "--seg-session-id",
-            "-ss",
-            required=True,
-            help="Session ID or regex pattern of the segmentation to convert.",
-        ),
-        optgroup.option(
-            "--voxel-spacing",
-            "-vs",
-            type=float,
-            required=True,
-            help="Voxel spacing of the segmentation.",
-        ),
-        optgroup.option(
-            "--multilabel/--no-multilabel",
-            is_flag=True,
-            default=False,
-            help="Source is multilabel segmentation.",
-        ),
-    ]
+    short_prefix = prefix[0] if prefix else ""
+    additional_suffix_doc = f" ({suffix})" if suffix else ""
+    additional_prefix_doc = f" ({prefix}) " if prefix else " "
 
-    for opt in reversed(opts):
-        func = opt(func)
+    segmentation_doc = f"{additional_prefix_doc}segmentation{additional_suffix_doc}."
 
-    return func
+    prefix = prefix + "-" if prefix else ""
+
+    def add_segmentation_input_options_decorator(_func: click.Command) -> click.Command:
+        """
+        Add common input options for segmentation-to-mesh conversion commands.
+
+        Args:
+            _func (click.Command): The Click command to which the options will be added.
+
+        Returns:
+            click.Command: The Click command with the input options added.
+        """
+        opts = [
+            optgroup.option(
+                f"--{prefix}seg-name{suffix}",
+                f"-{short_prefix}sn{suffix}",
+                required=True,
+                help=f"Name of the input{segmentation_doc}",
+            ),
+            optgroup.option(
+                f"--{prefix}seg-user-id{suffix}",
+                f"-{short_prefix}su{suffix}",
+                required=True,
+                help=f"User ID of the input{segmentation_doc}",
+            ),
+            optgroup.option(
+                f"--{prefix}seg-session-id{suffix}",
+                f"-{short_prefix}ss{suffix}",
+                required=True,
+                help=f"Session ID or regex pattern of the input{segmentation_doc}",
+            ),
+        ]
+
+        if include_voxel_spacing:
+            opts.append(
+                optgroup.option(
+                    f"--{prefix}voxel-spacing{suffix}",
+                    f"-{short_prefix}vs{suffix}",
+                    type=float,
+                    required=True,
+                    help=f"Voxel spacing of the input{segmentation_doc}",
+                ),
+            )
+
+        if include_multilabel:
+            opts.append(
+                optgroup.option(
+                    "--multilabel/--no-multilabel",
+                    is_flag=True,
+                    default=False,
+                    help="Input is multilabel segmentation.",
+                ),
+            )
+
+        for opt in reversed(opts):
+            _func = opt(_func)
+
+        return _func
+
+    if func is None:
+        return add_segmentation_input_options_decorator
+    else:
+        return add_segmentation_input_options_decorator(func)
 
 
-def add_segmentation_output_options(func: click.Command = None, *, default_tool: str = "from-mesh") -> Callable:
+def add_segmentation_output_options(
+    func: click.Command = None,
+    *,
+    default_tool: str = "from-mesh",
+    include_multilabel: bool = True,
+    include_tomo_type: bool = True,
+) -> Callable:
     """
     Add common output options for mesh-to-segmentation conversion commands.
 
     Args:
         func (click.Command): The Click command to which the options will be added.
         default_tool (str): Default user ID for created segmentation.
+        include_multilabel (bool): Whether to include the multilabel option.
+        include_tomo_type (bool): Whether to include the tomo type option.
 
     Returns:
         click.Command: The Click command with the output options added.
     """
 
-    def add_segmentation_output_options_decorator(func: click.Command) -> click.Command:
+    def add_segmentation_output_options_decorator(_func: click.Command) -> click.Command:
         """
         Add common output options for segmentation creation commands.
 
         Args:
-            func (click.Command): The Click command to which the options will be added.
+            _func (click.Command): The Click command to which the options will be added.
 
         Returns:
             click.Command: The Click command with the output options added.
@@ -265,23 +341,32 @@ def add_segmentation_output_options(func: click.Command = None, *, default_tool:
                 required=True,
                 help="Voxel spacing for the segmentation.",
             ),
-            optgroup.option(
-                "--multilabel/--no-multilabel",
-                is_flag=True,
-                default=False,
-                help="Create multilabel segmentation.",
-            ),
-            optgroup.option(
-                "--tomo-type",
-                default="wbp",
-                help="Type of tomogram to use as reference.",
-            ),
         ]
 
-        for opt in reversed(opts):
-            func = opt(func)
+        if include_multilabel:
+            opts.append(
+                optgroup.option(
+                    "--multilabel/--no-multilabel",
+                    is_flag=True,
+                    default=False,
+                    help="Create a multilabel segmentation.",
+                ),
+            )
 
-        return func
+        if include_tomo_type:
+            opts.append(
+                optgroup.option(
+                    "--tomo-type",
+                    "-tt",
+                    default="wbp",
+                    help="Type of tomogram to use as reference.",
+                ),
+            )
+
+        for opt in reversed(opts):
+            _func = opt(_func)
+
+        return _func
 
     if func is None:
         return add_segmentation_output_options_decorator
@@ -350,48 +435,6 @@ def add_segmentation_boolean_output_options(
         return add_segmentation_boolean_output_options_decorator(func)
 
 
-def add_segmentation_boolean_input_options(func: click.Command) -> click.Command:
-    """
-    Add input options for segmentation boolean operations (no multilabel support).
-    Args:
-        func (click.Command): The Click command to which the options will be added.
-    Returns:
-        click.Command: The Click command with the input options added.
-    """
-    opts = [
-        optgroup.option(
-            "--seg-name",
-            "-sn",
-            required=True,
-            help="Name of the segmentation to convert.",
-        ),
-        optgroup.option(
-            "--seg-user-id",
-            "-su",
-            required=True,
-            help="User ID of the segmentation to convert.",
-        ),
-        optgroup.option(
-            "--seg-session-id",
-            "-ss",
-            required=True,
-            help="Session ID or regex pattern of the segmentation to convert.",
-        ),
-        optgroup.option(
-            "--voxel-spacing",
-            "-vs",
-            type=float,
-            required=True,
-            help="Voxel spacing of the segmentation.",
-        ),
-    ]
-
-    for opt in reversed(opts):
-        func = opt(func)
-
-    return func
-
-
 def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "from-picks") -> Callable:
     """
     Add common output options for picks-to-mesh conversion commands.
@@ -421,19 +464,19 @@ def add_mesh_output_options(func: click.Command = None, *, default_tool: str = "
         """
         opts = [
             optgroup.option(
-                "--mesh-object-name",
-                "-mo",
+                "--mesh-object-name-output",
+                "-moo",
                 help="Name of the mesh object to create. If not specified, defaults to pick object name.",
             ),
             optgroup.option(
-                "--mesh-user-id",
-                "-mu",
+                "--mesh-user-id-output",
+                "-muo",
                 default=default_tool,
                 help="User ID for created mesh. Defaults to tool name.",
             ),
             optgroup.option(
-                "--mesh-session-id",
-                "-ms",
+                "--mesh-session-id-output",
+                "-mso",
                 default="0",
                 help="Session ID or template for created mesh. Supports placeholders: {input_session_id} for many-to-many, {instance_id} for individual meshes.",
             ),
@@ -698,154 +741,6 @@ def add_distance_options(func: click.Command) -> click.Command:
             type=float,
             default=1.0,
             help="Surface sampling density for distance calculations.",
-        ),
-    ]
-
-    for opt in reversed(opts):
-        func = opt(func)
-
-    return func
-
-
-def add_reference_mesh_options(func: click.Command) -> click.Command:
-    """
-    Add reference mesh input options for logical operations.
-
-    Args:
-        func (click.Command): The Click command to which the options will be added.
-
-    Returns:
-        click.Command: The Click command with the reference mesh options added.
-    """
-    opts = [
-        optgroup.option(
-            "--ref-mesh-object-name",
-            "-rmo",
-            help="Name of the reference mesh object.",
-        ),
-        optgroup.option(
-            "--ref-mesh-user-id",
-            "-rmu",
-            help="User ID of the reference mesh.",
-        ),
-        optgroup.option(
-            "--ref-mesh-session-id",
-            "-rms",
-            help="Session ID of the reference mesh.",
-        ),
-    ]
-
-    for opt in reversed(opts):
-        func = opt(func)
-
-    return func
-
-
-def add_reference_segmentation_options(func: click.Command) -> click.Command:
-    """
-    Add reference segmentation input options for logical operations.
-
-    Args:
-        func (click.Command): The Click command to which the options will be added.
-
-    Returns:
-        click.Command: The Click command with the reference segmentation options added.
-    """
-    opts = [
-        optgroup.option(
-            "--ref-seg-name",
-            "-rsn",
-            help="Name of the reference segmentation.",
-        ),
-        optgroup.option(
-            "--ref-seg-user-id",
-            "-rsu",
-            help="User ID of the reference segmentation.",
-        ),
-        optgroup.option(
-            "--ref-seg-session-id",
-            "-rss",
-            help="Session ID of the reference segmentation.",
-        ),
-        optgroup.option(
-            "--ref-voxel-spacing",
-            "-rvs",
-            type=float,
-            help="Voxel spacing of the reference segmentation.",
-        ),
-    ]
-
-    for opt in reversed(opts):
-        func = opt(func)
-
-    return func
-
-
-def add_dual_segmentation_input_options(func: click.Command) -> click.Command:
-    """
-    Add dual segmentation input options for operations requiring two segmentation inputs.
-
-    Args:
-        func (click.Command): The Click command to which the options will be added.
-
-    Returns:
-        click.Command: The Click command with dual segmentation input options added.
-    """
-    opts = [
-        optgroup.option(
-            "--seg-name2",
-            "-sn2",
-            required=True,
-            help="Name of the second input segmentation.",
-        ),
-        optgroup.option(
-            "--seg-user-id2",
-            "-su2",
-            required=True,
-            help="User ID of the second input segmentation.",
-        ),
-        optgroup.option(
-            "--seg-session-id2",
-            "-ss2",
-            required=True,
-            help="Session ID or regex pattern of the second input segmentation.",
-        ),
-    ]
-
-    for opt in reversed(opts):
-        func = opt(func)
-
-    return func
-
-
-def add_dual_mesh_input_options(func: click.Command) -> click.Command:
-    """
-    Add dual mesh input options for operations requiring two mesh inputs.
-
-    Args:
-        func (click.Command): The Click command to which the options will be added.
-
-    Returns:
-        click.Command: The Click command with dual mesh input options added.
-    """
-    opts = [
-        optgroup.option(
-            "--mesh-object-name2",
-            "-mo2",
-            required=True,
-            help="Name of the second input mesh object.",
-        ),
-        optgroup.option(
-            "--mesh-user-id2",
-            "-mu2",
-            required=True,
-            help="User ID of the second input mesh.",
-        ),
-        optgroup.option(
-            "--mesh-session-id2",
-            "-ms2",
-            required=True,
-            help="Session ID or regex pattern of the second input mesh.",
         ),
     ]
 

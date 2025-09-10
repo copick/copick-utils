@@ -9,9 +9,8 @@ from copick.util.log import get_logger
 from copick_utils.cli.input_output_selection import ConversionSelector
 from copick_utils.cli.util import (
     add_boolean_operation_option,
-    add_dual_segmentation_input_options,
-    add_segmentation_boolean_input_options,
     add_segmentation_boolean_output_options,
+    add_segmentation_input_options,
     add_workers_option,
 )
 
@@ -29,8 +28,8 @@ from copick_utils.cli.util import (
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@add_segmentation_boolean_input_options
-@add_dual_segmentation_input_options
+@add_segmentation_input_options(include_multilabel=False)
+@add_segmentation_input_options(suffix="2", include_multilabel=False, include_voxel_spacing=False)
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_boolean_operation_option
 @add_workers_option
