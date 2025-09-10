@@ -419,9 +419,7 @@ def create_batch_converter(
                         all_errors.append(f"No {output_type} generated for {session_id} in {run.name}")
 
                 except Exception as e:
-                    import traceback
-
-                    traceback.print_exc()
+                    logger.error(f"Error processing task in {run.name}: {e}", exc_info=True)
                     all_errors.append(f"Error processing task in {run.name}: {e}")
 
             return {
