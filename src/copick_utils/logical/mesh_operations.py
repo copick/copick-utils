@@ -1,4 +1,4 @@
-"""Boolean operations on meshes (union, intersection, difference, exclusion)."""
+"""Mesh operations (union, intersection, difference, exclusion, concatenate)."""
 
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
@@ -24,7 +24,7 @@ def _perform_mesh_boolean_operation(mesh1: tm.Trimesh, mesh2: tm.Trimesh, operat
     Args:
         mesh1: First mesh
         mesh2: Second mesh
-        operation: Type of boolean operation ('union', 'difference', 'intersection', 'exclusion')
+        operation: Type of boolean operation ('union', 'difference', 'intersection', 'exclusion', 'concatenate')
 
     Returns:
         Result mesh or None if operation failed
@@ -41,28 +41,31 @@ def _perform_mesh_boolean_operation(mesh1: tm.Trimesh, mesh2: tm.Trimesh, operat
             union_mesh = mesh1.union(mesh2)
             intersection_mesh = mesh1.intersection(mesh2)
             result = union_mesh.difference(intersection_mesh)
+        elif operation == "concatenate":
+            # Simple concatenation without boolean operations
+            result = tm.util.concatenate([mesh1, mesh2])
         else:
-            raise ValueError(f"Unknown boolean operation: {operation}")
+            raise ValueError(f"Unknown operation: {operation}")
 
         # Handle the case where result might be a Scene or empty
         if isinstance(result, tm.Scene):
             if len(result.geometry) == 0:
-                logger.warning(f"Boolean {operation} resulted in empty geometry")
+                logger.warning(f"{operation.capitalize()} operation resulted in empty geometry")
                 return None
             # Concatenate all geometries in the scene
             result = tm.util.concatenate(list(result.geometry.values()))
         elif isinstance(result, tm.Trimesh):
             if result.vertices.shape[0] == 0:
-                logger.warning(f"Boolean {operation} resulted in empty mesh")
+                logger.warning(f"{operation.capitalize()} operation resulted in empty mesh")
                 return None
         else:
-            logger.warning(f"Boolean {operation} returned unexpected type: {type(result)}")
+            logger.warning(f"{operation.capitalize()} operation returned unexpected type: {type(result)}")
             return None
 
         return result
 
     except Exception as e:
-        logger.error(f"Boolean {operation} failed: {e}")
+        logger.error(f"{operation.capitalize()} operation failed: {e}")
         return None
 
 
@@ -86,7 +89,7 @@ def mesh_boolean_operation(
         object_name: Name for the output mesh
         session_id: Session ID for the output mesh
         user_id: User ID for the output mesh
-        operation: Type of boolean operation ('union', 'difference', 'intersection', 'exclusion')
+        operation: Type of operation ('union', 'difference', 'intersection', 'exclusion', 'concatenate')
         **kwargs: Additional keyword arguments
 
     Returns:
@@ -193,11 +196,25 @@ def mesh_exclusion(
     return mesh_boolean_operation(mesh1, mesh2, run, object_name, session_id, user_id, "exclusion", **kwargs)
 
 
+def mesh_concatenate(
+    mesh1: "CopickMesh",
+    mesh2: "CopickMesh",
+    run: "CopickRun",
+    object_name: str,
+    session_id: str,
+    user_id: str,
+    **kwargs,
+) -> Optional[Tuple["CopickMesh", Dict[str, int]]]:
+    """Concatenate two meshes without boolean operations."""
+    return mesh_boolean_operation(mesh1, mesh2, run, object_name, session_id, user_id, "concatenate", **kwargs)
+
+
 # Create batch workers for each operation
 _mesh_union_worker = create_batch_worker(mesh_union, "mesh", "mesh", min_points=0)
 _mesh_difference_worker = create_batch_worker(mesh_difference, "mesh", "mesh", min_points=0)
 _mesh_intersection_worker = create_batch_worker(mesh_intersection, "mesh", "mesh", min_points=0)
 _mesh_exclusion_worker = create_batch_worker(mesh_exclusion, "mesh", "mesh", min_points=0)
+_mesh_concatenate_worker = create_batch_worker(mesh_concatenate, "mesh", "mesh", min_points=0)
 
 # Create batch converters
 mesh_union_batch = create_batch_converter(
@@ -230,6 +247,15 @@ mesh_intersection_batch = create_batch_converter(
 mesh_exclusion_batch = create_batch_converter(
     mesh_exclusion,
     "Computing mesh exclusions",
+    "mesh",
+    "mesh",
+    min_points=0,
+    dual_input=True,
+)
+
+mesh_concatenate_batch = create_batch_converter(
+    mesh_concatenate,
+    "Computing mesh concatenations",
     "mesh",
     "mesh",
     min_points=0,

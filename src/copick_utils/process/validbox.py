@@ -180,7 +180,6 @@ def create_validbox_mesh(
         )
 
     # Clean up the mesh to remove degenerate faces and unused vertices
-    current_mesh.remove_degenerate_faces()
     current_mesh.remove_unreferenced_vertices()
     current_mesh.fix_normals()
 

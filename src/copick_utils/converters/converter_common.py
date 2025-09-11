@@ -292,13 +292,8 @@ def create_batch_converter(
         runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
 
         # Group tasks by run - determine input object key dynamically
-        input_key = f"input_{input_type}"
-        if input_type == "picks":
-            input_key = "input_picks"  # backward compatibility
-        elif input_type == "mesh":
-            input_key = "input_mesh"
-        elif input_type == "segmentation":
-            input_key = "input_segmentation"
+        # ConversionSelector always uses 'input_object' as the key
+        input_key = "input_object"
 
         tasks_by_run = {}
         for task in conversion_tasks:
@@ -390,18 +385,18 @@ def create_batch_converter(
                                 result = converter_func(
                                     mesh=input_obj,
                                     run=run,
-                                    object_name=task.get(f"{output_type}_object_name"),
-                                    session_id=task.get(f"{output_type}_session_id"),
-                                    user_id=task.get(f"{output_type}_user_id"),
+                                    object_name=task.get("output_object_name"),
+                                    session_id=task.get("output_session_id"),
+                                    user_id=task.get("output_user_id"),
                                     **converter_kwargs,
                                 )
                         elif input_type == "segmentation":
                             result = converter_func(
                                 segmentation=input_obj,
                                 run=run,
-                                object_name=task.get(f"{output_type}_object_name"),
-                                session_id=task.get(f"{output_type}_session_id"),
-                                user_id=task.get(f"{output_type}_user_id"),
+                                object_name=task.get("output_object_name"),
+                                session_id=task.get("output_session_id"),
+                                user_id=task.get("output_user_id"),
                                 **converter_kwargs,
                             )
 
@@ -419,7 +414,7 @@ def create_batch_converter(
                         all_errors.append(f"No {output_type} generated for {session_id} in {run.name}")
 
                 except Exception as e:
-                    logger.error(f"Error processing task in {run.name}: {e}", exc_info=True)
+                    logger.exception(f"Error processing task in {run.name}: {e}")
                     all_errors.append(f"Error processing task in {run.name}: {e}")
 
             return {
@@ -432,8 +427,12 @@ def create_batch_converter(
         relevant_runs = [run for run in runs_to_process if run in tasks_by_run]
 
         if not relevant_runs:
-            input_type_name = input_type + "s" if not input_type.endswith("s") else input_type
-            return {"processed": 0, "errors": [f"No relevant runs found with matching {input_type_name}"]}
+            input_type + "s" if not input_type.endswith("s") else input_type
+            # Fix pluralization for common cases
+            if input_type == "mesh":
+                pass
+            # Return empty results dict to match map_runs format
+            return {}
 
         results = map_runs(
             callback=multi_task_worker,

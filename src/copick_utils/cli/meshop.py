@@ -34,7 +34,7 @@ from copick_utils.cli.util import (
 @add_boolean_operation_option
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options(default_tool="mesh-boolean")
+@add_mesh_output_options(default_tool="meshop")
 @add_debug_option
 def meshop(
     config,
@@ -57,11 +57,12 @@ def meshop(
     Perform boolean operations between two meshes.
 
     \b
-    Supports the following boolean operations:
-    - union: Combine both meshes
+    Supports the following operations:
+    - union: Combine both meshes using boolean union
     - difference: First mesh minus second mesh
     - intersection: Common volume of both meshes
     - exclusion: Exclusive or (XOR) of both meshes
+    - concatenate: Simple concatenation without boolean operations
 
     \b
     Supports flexible input/output selection modes:
@@ -77,6 +78,7 @@ def meshop(
         copick logical meshop --operation difference --mesh-session-id "manual-.*" --input2-session-id "mask-.*" --mesh-session-id "diff-{input_session_id}"
     """
     from copick_utils.logical.mesh_operations import (
+        mesh_concatenate_batch,
         mesh_difference_batch,
         mesh_exclusion_batch,
         mesh_intersection_batch,
@@ -199,6 +201,7 @@ def meshop(
         "difference": mesh_difference_batch,
         "intersection": mesh_intersection_batch,
         "exclusion": mesh_exclusion_batch,
+        "concatenate": mesh_concatenate_batch,
     }
 
     batch_function = batch_functions[operation]

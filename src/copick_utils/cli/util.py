@@ -715,7 +715,7 @@ def add_boolean_operation_option(func: click.Command) -> click.Command:
         optgroup.option(
             "--operation",
             "-op",
-            type=click.Choice(["union", "difference", "intersection", "exclusion"]),
+            type=click.Choice(["union", "difference", "intersection", "exclusion", "concatenate"]),
             required=True,
             help="Boolean operation to perform.",
         ),

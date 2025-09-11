@@ -71,6 +71,7 @@ separate_components = "copick_utils.cli.processing_commands:separate_components"
 skeletonize = "copick_utils.cli.processing_commands:skeletonize"
 fit_spline = "copick_utils.cli.processing_commands:fit_spline"
 validbox = "copick_utils.cli.processing_commands:validbox"
+hull = "copick_utils.cli.processing_commands:hull"
 
 [project.entry-points."copick.logical.commands"]
 meshop = "copick_utils.cli.logical_commands:meshop"

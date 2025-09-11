@@ -37,7 +37,7 @@ from copick_utils.cli.util import (
 )
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
-@add_segmentation_output_options(default_tool="mesh2seg")
+@add_segmentation_output_options(default_tool="mesh2seg", include_tomo_type=False)
 @add_debug_option
 def mesh2seg(
     config,
@@ -144,6 +144,7 @@ def mesh2seg(
         conversion_tasks=all_tasks,
         run_names=run_names_list,
         workers=workers,
+        voxel_spacing=voxel_spacing,
         tomo_type=tomo_type,
         is_multilabel=multilabel,
         mode=mode,
