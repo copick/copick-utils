@@ -225,8 +225,6 @@ class SkeletonSplineFitter:
             # Fallback to identity matrix
             return np.eye(3)
 
-
-
         l = np.sqrt(l)  # noqa
         d = np.sqrt(d)
         # Create the z_align rotation matrix
