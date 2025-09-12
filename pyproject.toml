@@ -31,7 +31,8 @@ dependencies = [
     "mapbox-earcut",
     "tqdm",
     "scikit-learn",
-    "shapely"
+    "shapely",
+    "rtree"
 ]
 authors = [
     { name = "Kyle Harrington", email = "czi@kyleharrington.com" },
