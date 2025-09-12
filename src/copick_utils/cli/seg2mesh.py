@@ -26,7 +26,7 @@ from copick_utils.cli.util import (
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@add_segmentation_input_options
+@add_segmentation_input_options(include_multilabel=False)
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_marching_cubes_options
 @add_workers_option
@@ -40,13 +40,12 @@ def seg2mesh(
     seg_user_id,
     seg_session_id,
     voxel_spacing,
-    multilabel,
     level,
     step_size,
     workers,
-    mesh_object_name,
-    mesh_user_id,
-    mesh_session_id,
+    mesh_object_name_output,
+    mesh_user_id_output,
+    mesh_session_id_output,
     individual_meshes,
     debug,
 ):
@@ -75,7 +74,7 @@ def seg2mesh(
 
     # Validate placeholder requirements
     try:
-        validate_conversion_placeholders(seg_session_id, mesh_session_id, individual_outputs=individual_meshes)
+        validate_conversion_placeholders(seg_session_id, mesh_session_id_output, individual_outputs=individual_meshes)
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
@@ -83,12 +82,12 @@ def seg2mesh(
     selector = ConversionSelector(
         input_type="segmentation",
         output_type="mesh",
-        input_object_name=mesh_object_name,  # For mesh, we use mesh_object_name as both input and output object
+        input_object_name=mesh_object_name_output,  # For mesh, we use mesh_object_name as both input and output object
         input_user_id=seg_user_id,
         input_session_id=seg_session_id,
-        output_object_name=mesh_object_name,
-        output_user_id=mesh_user_id,
-        output_session_id=mesh_session_id,
+        output_object_name=mesh_object_name_output,
+        output_user_id=mesh_user_id_output,
+        output_session_id=mesh_session_id_output,
         individual_outputs=individual_meshes,
         segmentation_name=seg_name,
         voxel_spacing=voxel_spacing,
@@ -97,7 +96,7 @@ def seg2mesh(
     logger.info(f"Converting segmentation to mesh for '{seg_name}'")
     logger.info(f"Selection mode: {selector.get_mode_description()}")
     logger.info(f"Source segmentation pattern: {seg_name} ({seg_user_id}/{seg_session_id})")
-    logger.info(f"Target mesh template: {mesh_object_name} ({mesh_user_id}/{mesh_session_id})")
+    logger.info(f"Target mesh template: {mesh_object_name_output} ({mesh_user_id_output}/{mesh_session_id_output})")
     logger.info(f"Marching cubes level: {level}, step size: {step_size}")
 
     # Collect all conversion tasks across runs

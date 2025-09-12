@@ -66,9 +66,9 @@ def picks2ellipsoid(
     min_ellipsoid_distance,
     all_clusters,
     workers,
-    mesh_object_name,
-    mesh_user_id,
-    mesh_session_id,
+    mesh_object_name_output,
+    mesh_user_id_output,
+    mesh_session_id_output,
     individual_meshes,
     debug,
 ):
@@ -101,7 +101,7 @@ def picks2ellipsoid(
 
     # Validate placeholder requirements
     try:
-        validate_placeholders(pick_session_id, mesh_session_id, individual_meshes)
+        validate_placeholders(pick_session_id, mesh_session_id_output, individual_meshes)
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
@@ -117,16 +117,16 @@ def picks2ellipsoid(
         pick_object_name=pick_object_name,
         pick_user_id=pick_user_id,
         pick_session_id=pick_session_id,
-        mesh_object_name=mesh_object_name,
-        mesh_user_id=mesh_user_id,
-        mesh_session_id=mesh_session_id,
+        mesh_object_name=mesh_object_name_output,
+        mesh_user_id=mesh_user_id_output,
+        mesh_session_id=mesh_session_id_output,
         individual_meshes=individual_meshes,
     )
 
     logger.info(f"Converting picks to ellipsoid mesh for object '{pick_object_name}'")
     logger.info(f"Selection mode: {selector.get_mode_description()}")
     logger.info(f"Source picks pattern: {pick_user_id}/{pick_session_id}")
-    logger.info(f"Target mesh template: {selector.mesh_object_name} ({mesh_user_id}/{mesh_session_id})")
+    logger.info(f"Target mesh template: {selector.mesh_object_name} ({mesh_user_id_output}/{mesh_session_id_output})")
 
     # Collect all conversion tasks across runs
     all_tasks = []
