@@ -30,6 +30,7 @@ dependencies = [
     "manifold3d",
     "mapbox-earcut",
     "tqdm",
+    "sklearn",
 ]
 authors = [
     { name = "Kyle Harrington", email = "czi@kyleharrington.com" },
