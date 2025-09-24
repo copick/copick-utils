@@ -56,7 +56,7 @@ def clipseg(
     ref_seg_session_id,
     ref_voxel_spacing,
     max_distance,
-    sampling_density,
+    mesh_voxel_spacing,
     workers,
     seg_name_output,
     seg_user_id_output,
@@ -161,7 +161,7 @@ def clipseg(
                     continue
 
             task["max_distance"] = max_distance
-            task["sampling_density"] = sampling_density
+            task["mesh_voxel_spacing"] = mesh_voxel_spacing
             task["voxel_spacing"] = voxel_spacing_output
             task["is_multilabel"] = multilabel_output
             all_tasks.append(task)

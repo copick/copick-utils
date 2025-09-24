@@ -58,7 +58,7 @@ def clippicks(
     ref_seg_session_id,
     ref_voxel_spacing,
     max_distance,
-    sampling_density,
+    mesh_voxel_spacing,
     workers,
     pick_object_name_output,
     pick_user_id_output,
@@ -159,7 +159,7 @@ def clippicks(
                     continue
 
             task["max_distance"] = max_distance
-            task["sampling_density"] = sampling_density
+            task["mesh_voxel_spacing"] = mesh_voxel_spacing
             all_tasks.append(task)
 
     if not all_tasks:

@@ -755,11 +755,10 @@ def add_distance_options(func: click.Command) -> click.Command:
             help="Maximum distance from reference surface (in angstroms).",
         ),
         optgroup.option(
-            "--sampling-density",
-            "-sd",
+            "--mesh-voxel-spacing",
+            "-mvs",
             type=float,
-            default=1.0,
-            help="Surface sampling density for distance calculations.",
+            help="Voxel spacing for mesh voxelization when using mesh reference (defaults to target voxel spacing).",
         ),
     ]
 

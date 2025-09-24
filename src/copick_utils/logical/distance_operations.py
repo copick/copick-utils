@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple
 import numpy as np
 import trimesh as tm
 from copick.util.log import get_logger
-from scipy.spatial.distance import cdist
 
 from copick_utils.converters.converter_common import (
     create_batch_converter,
@@ -19,83 +18,114 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _get_mesh_surface_points(mesh: tm.Trimesh, sampling_density: float = 1.0) -> np.ndarray:
+def _create_distance_field_from_segmentation(segmentation_array: np.ndarray, voxel_spacing: float) -> np.ndarray:
     """
-    Get surface points from a mesh for distance calculations.
+    Create Euclidean distance field from reference segmentation using distance transform.
 
     Args:
-        mesh: Input mesh
-        sampling_density: Density of surface sampling (points per unit area)
+        segmentation_array: Binary reference segmentation array
+        voxel_spacing: Voxel spacing of the segmentation
 
     Returns:
-        Array of surface points (N, 3)
+        Distance field array with exact Euclidean distances in physical units
     """
-    # Calculate number of sample points based on surface area
-    surface_area = mesh.area
-    n_points = max(int(surface_area * sampling_density), 1000)  # Minimum 1000 points
+    from scipy import ndimage
 
-    # Sample points uniformly on the surface
-    surface_points, _ = tm.sample.sample_surface(mesh, n_points)
-    return surface_points
+    # Convert reference to binary
+    binary_ref = (segmentation_array > 0).astype(bool)
+
+    # Compute distance transform (distances to nearest foreground voxel)
+    # We want distances FROM the segmentation, so use the inverse
+    distance_field_voxels = ndimage.distance_transform_edt(~binary_ref)
+
+    # Convert from voxel units to physical units
+    distance_field = distance_field_voxels * voxel_spacing
+
+    return distance_field
 
 
-def _get_segmentation_surface_points(
-    segmentation_array: np.ndarray,
-    voxel_spacing: float,
-    sampling_density: float = 1.0,
+def _create_distance_field_from_mesh(
+    mesh: tm.Trimesh,
+    target_shape: tuple,
+    target_voxel_spacing: float,
+    mesh_voxel_spacing: float = None,
 ) -> np.ndarray:
     """
-    Get surface points from a segmentation for distance calculations.
+    Create Euclidean distance field from reference mesh using voxelization and distance transform.
 
     Args:
-        segmentation_array: Binary segmentation array
-        voxel_spacing: Spacing between voxels
-        sampling_density: Density of surface sampling
+        mesh: Reference trimesh object
+        target_shape: Shape of target array
+        target_voxel_spacing: Voxel spacing of target
+        mesh_voxel_spacing: Voxel spacing for mesh voxelization (defaults to target_voxel_spacing)
 
     Returns:
-        Array of surface points (N, 3) in physical coordinates
+        Distance field array with exact Euclidean distances in physical units
     """
-    from skimage.measure import marching_cubes
+    if mesh_voxel_spacing is None:
+        mesh_voxel_spacing = target_voxel_spacing
 
-    # Use marching cubes to extract surface
+    # Calculate voxelization grid size based on target shape and spacing
+    physical_size = np.array(target_shape) * target_voxel_spacing
+    voxel_grid_shape = np.ceil(physical_size / mesh_voxel_spacing).astype(int)
+
+    # Voxelize the mesh
     try:
-        vertices, faces, _, _ = marching_cubes(segmentation_array.astype(float), level=0.5)
-
-        # Convert to physical coordinates
-        vertices = vertices * voxel_spacing
-
-        # Create a mesh and sample surface points
-        surface_mesh = tm.Trimesh(vertices=vertices, faces=faces)
-        return _get_mesh_surface_points(surface_mesh, sampling_density)
-
+        # Use trimesh's voxelization
+        voxel_grid = mesh.voxelized(pitch=mesh_voxel_spacing)
+        voxelized_array = voxel_grid.matrix
     except Exception as e:
-        logger.warning(f"Could not extract surface from segmentation: {e}")
-        # Fallback: find boundary voxels
-        from scipy import ndimage
+        logger.warning(f"Trimesh voxelization failed: {e}. Using fallback method.")
+        # Fallback: create a simple voxelization by checking mesh bounds
+        bounds = mesh.bounds
+        origin = bounds[0]
 
-        # Find edges using morphological gradient
-        structure = ndimage.generate_binary_structure(3, 1)  # 6-connected
-        boundary = ndimage.binary_dilation(segmentation_array, structure) ^ segmentation_array
+        # Create coordinate grids
+        x_coords = np.arange(voxel_grid_shape[0]) * mesh_voxel_spacing + origin[0]
+        y_coords = np.arange(voxel_grid_shape[1]) * mesh_voxel_spacing + origin[1]
+        z_coords = np.arange(voxel_grid_shape[2]) * mesh_voxel_spacing + origin[2]
 
-        # Get boundary voxel coordinates
-        boundary_coords = np.array(np.where(boundary)).T
+        xx, yy, zz = np.meshgrid(x_coords, y_coords, z_coords, indexing="ij")
+        points = np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()])
 
-        # Convert to physical coordinates (voxel centers)
-        boundary_points = boundary_coords * voxel_spacing
+        # Check which points are inside the mesh
+        inside = mesh.contains(points)
+        voxelized_array = inside.reshape(voxel_grid_shape)
 
-        return boundary_points
+    # Resample to target resolution if needed
+    if mesh_voxel_spacing != target_voxel_spacing:
+        from scipy.ndimage import zoom
+
+        zoom_factor = mesh_voxel_spacing / target_voxel_spacing
+        voxelized_array = zoom(voxelized_array.astype(float), zoom_factor, order=0) > 0.5
+
+    # Ensure shape matches target
+    if voxelized_array.shape != target_shape:
+        # Crop or pad to match target shape
+        result = np.zeros(target_shape, dtype=bool)
+
+        # Calculate valid regions for copying
+        copy_shape = np.minimum(voxelized_array.shape, target_shape)
+        slices_src = tuple(slice(0, s) for s in copy_shape)
+        slices_dst = tuple(slice(0, s) for s in copy_shape)
+
+        result[slices_dst] = voxelized_array[slices_src]
+        voxelized_array = result
+
+    # Create distance field using distance transform
+    return _create_distance_field_from_segmentation(voxelized_array.astype(np.uint8), target_voxel_spacing)
 
 
 def limit_mesh_by_distance(
     mesh: "CopickMesh",
     run: "CopickRun",
-    mesh_object_name: str,
-    mesh_session_id: str,
-    mesh_user_id: str,
+    output_object_name: str,
+    output_session_id: str,
+    output_user_id: str,
     reference_mesh: Optional["CopickMesh"] = None,
     reference_segmentation: Optional["CopickSegmentation"] = None,
     max_distance: float = 100.0,
-    sampling_density: float = 1.0,
+    mesh_voxel_spacing: float = None,
     **kwargs,
 ) -> Optional[Tuple["CopickMesh", Dict[str, int]]]:
     """
@@ -106,11 +136,11 @@ def limit_mesh_by_distance(
         reference_mesh: Reference CopickMesh (either this or reference_segmentation must be provided)
         reference_segmentation: Reference CopickSegmentation
         run: CopickRun object
-        mesh_object_name: Name for the output mesh
-        mesh_session_id: Session ID for the output mesh
-        mesh_user_id: User ID for the output mesh
+        output_object_name: Name for the output mesh
+        output_session_id: Session ID for the output mesh
+        output_user_id: User ID for the output mesh
         max_distance: Maximum distance from reference surface
-        sampling_density: Density of surface sampling for distance calculations
+        mesh_voxel_spacing: Voxel spacing for mesh voxelization (defaults to 10.0)
         **kwargs: Additional keyword arguments
 
     Returns:
@@ -134,7 +164,19 @@ def limit_mesh_by_distance(
                 return None
             target_mesh = tm.util.concatenate(list(target_mesh.geometry.values()))
 
-        # Get reference surface points
+        # Create distance field from reference
+        # Use mesh bounds to define coordinate space
+        mesh_bounds = np.array([target_mesh.vertices.min(axis=0), target_mesh.vertices.max(axis=0)])
+
+        # Add padding for max_distance
+        padding = max_distance * 1.1
+        mesh_bounds[0] -= padding
+        mesh_bounds[1] += padding
+
+        field_voxel_spacing = mesh_voxel_spacing if mesh_voxel_spacing is not None else 10.0
+        field_size = mesh_bounds[1] - mesh_bounds[0]
+        field_shape = np.ceil(field_size / field_voxel_spacing).astype(int)
+
         if reference_mesh is not None:
             ref_mesh = reference_mesh.mesh
             if ref_mesh is None:
@@ -147,7 +189,13 @@ def limit_mesh_by_distance(
                     return None
                 ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
 
-            reference_points = _get_mesh_surface_points(ref_mesh, sampling_density)
+            # Create distance field from mesh
+            distance_field = _create_distance_field_from_mesh(
+                ref_mesh,
+                field_shape,
+                field_voxel_spacing,
+                mesh_voxel_spacing,
+            )
 
         else:  # reference_segmentation is not None
             ref_seg_array = reference_segmentation.numpy()
@@ -155,29 +203,51 @@ def limit_mesh_by_distance(
                 logger.error("Could not load reference segmentation data")
                 return None
 
-            reference_points = _get_segmentation_surface_points(
-                ref_seg_array,
-                reference_segmentation.voxel_size,
-                sampling_density,
+            # Convert segmentation to field coordinate space
+            seg_indices = np.array(np.where(ref_seg_array > 0)).T
+            seg_physical = seg_indices * reference_segmentation.voxel_size
+            field_coords = np.floor((seg_physical - mesh_bounds[0]) / field_voxel_spacing).astype(int)
+
+            # Create voxelized reference in field space
+            voxelized_ref = np.zeros(field_shape, dtype=bool)
+            valid_coords = (field_coords >= 0).all(axis=1) & (field_coords < field_shape).all(axis=1)
+            if np.any(valid_coords):
+                valid_field_coords = field_coords[valid_coords]
+                voxelized_ref[valid_field_coords[:, 0], valid_field_coords[:, 1], valid_field_coords[:, 2]] = True
+
+            distance_field = _create_distance_field_from_segmentation(
+                voxelized_ref.astype(np.uint8),
+                field_voxel_spacing,
             )
 
-        if len(reference_points) == 0:
-            logger.error("No reference surface points found")
+        # Convert mesh vertex coordinates to field indices
+        vertex_field_coords = (target_mesh.vertices - mesh_bounds[0]) / field_voxel_spacing
+        vertex_field_indices = np.floor(vertex_field_coords).astype(int)
+
+        # Check which vertices are within field bounds
+        valid_vertices = (vertex_field_indices >= 0).all(axis=1) & (vertex_field_indices < field_shape).all(axis=1)
+
+        if not np.any(valid_vertices):
+            logger.warning("No mesh vertices within distance field bounds")
             return None
 
-        # Calculate distances from mesh vertices to reference surface
-        distances = cdist(target_mesh.vertices, reference_points)
-        min_distances = np.min(distances, axis=1)
+        # Get distances for valid vertices
+        valid_indices = vertex_field_indices[valid_vertices]
+        vertex_distances = distance_field[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
 
         # Find vertices within distance threshold
-        valid_vertex_mask = min_distances <= max_distance
+        distance_valid = vertex_distances <= max_distance
 
-        if not np.any(valid_vertex_mask):
+        # Combine bounds validity and distance validity
+        final_valid = np.zeros(len(target_mesh.vertices), dtype=bool)
+        final_valid[valid_vertices] = distance_valid
+
+        if not np.any(final_valid):
             logger.warning(f"No vertices within {max_distance} units of reference surface")
             return None
 
         # Create a new mesh with only valid vertices and their faces
-        valid_vertex_indices = np.where(valid_vertex_mask)[0]
+        valid_vertex_indices = np.where(final_valid)[0]
 
         # Create a mapping from old vertex indices to new ones
         vertex_mapping = {}
@@ -208,9 +278,9 @@ def limit_mesh_by_distance(
         copick_mesh, stats = store_mesh_with_stats(
             run=run,
             mesh=limited_mesh,
-            object_name=mesh_object_name,
-            session_id=mesh_session_id,
-            user_id=mesh_user_id,
+            object_name=output_object_name,
+            session_id=output_session_id,
+            user_id=output_user_id,
             shape_name="distance-limited mesh",
         )
 
@@ -232,7 +302,7 @@ def limit_segmentation_by_distance(
     reference_segmentation: Optional["CopickSegmentation"] = None,
     max_distance: float = 100.0,
     voxel_spacing: float = 10.0,
-    sampling_density: float = 1.0,
+    mesh_voxel_spacing: float = None,
     is_multilabel: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
@@ -249,7 +319,7 @@ def limit_segmentation_by_distance(
         output_user_id: User ID for the output segmentation
         max_distance: Maximum distance from reference surface
         voxel_spacing: Voxel spacing for the output segmentation
-        sampling_density: Density of surface sampling for distance calculations
+        mesh_voxel_spacing: Voxel spacing for mesh voxelization (defaults to target voxel spacing)
         is_multilabel: Whether the segmentation is multilabel
         **kwargs: Additional keyword arguments
 
@@ -267,7 +337,7 @@ def limit_segmentation_by_distance(
             logger.error("Could not load target segmentation data")
             return None
 
-        # Get reference surface points
+        # Create distance field from reference
         if reference_mesh is not None:
             ref_mesh = reference_mesh.mesh
             if ref_mesh is None:
@@ -280,7 +350,13 @@ def limit_segmentation_by_distance(
                     return None
                 ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
 
-            reference_points = _get_mesh_surface_points(ref_mesh, sampling_density)
+            # Create distance field from mesh
+            distance_field = _create_distance_field_from_mesh(
+                ref_mesh,
+                seg_array.shape,
+                segmentation.voxel_size,
+                mesh_voxel_spacing,
+            )
 
         else:  # reference_segmentation is not None
             ref_seg_array = reference_segmentation.numpy()
@@ -288,44 +364,34 @@ def limit_segmentation_by_distance(
                 logger.error("Could not load reference segmentation data")
                 return None
 
-            reference_points = _get_segmentation_surface_points(
-                ref_seg_array,
-                reference_segmentation.voxel_size,
-                sampling_density,
-            )
+            # Handle different voxel spacings between reference and target
+            if abs(reference_segmentation.voxel_size - segmentation.voxel_size) > 1e-6:
+                # Resample reference segmentation to match target
+                from scipy.ndimage import zoom
 
-        if len(reference_points) == 0:
-            logger.error("No reference surface points found")
-            return None
+                zoom_factor = reference_segmentation.voxel_size / segmentation.voxel_size
+                ref_seg_array = zoom(ref_seg_array.astype(float), zoom_factor, order=0) > 0.5
 
-        # Get coordinates of all voxels in the segmentation
-        seg_coords = np.array(np.where(seg_array > 0)).T  # Only consider non-zero voxels
+                # Crop or pad to match target shape
+                if ref_seg_array.shape != seg_array.shape:
+                    result = np.zeros(seg_array.shape, dtype=bool)
+                    copy_shape = np.minimum(ref_seg_array.shape, seg_array.shape)
+                    slices = tuple(slice(0, s) for s in copy_shape)
+                    result[slices] = ref_seg_array[slices]
+                    ref_seg_array = result
 
-        if len(seg_coords) == 0:
-            logger.warning("No non-zero voxels in segmentation")
-            return None
+            # Create distance field from segmentation
+            distance_field = _create_distance_field_from_segmentation(ref_seg_array, segmentation.voxel_size)
 
-        # Convert voxel coordinates to physical coordinates
-        seg_points = seg_coords * segmentation.voxel_size
+        # Apply distance threshold to create mask
+        distance_mask = distance_field <= max_distance
 
-        # Calculate distances from segmentation voxels to reference surface
-        distances = cdist(seg_points, reference_points)
-        min_distances = np.min(distances, axis=1)
+        # Apply mask to target segmentation
+        output_array = seg_array * distance_mask
 
-        # Find voxels within distance threshold
-        valid_voxel_mask = min_distances <= max_distance
-
-        if not np.any(valid_voxel_mask):
+        if np.sum(output_array > 0) == 0:
             logger.warning(f"No voxels within {max_distance} units of reference surface")
             return None
-
-        # Create output segmentation array
-        output_array = np.zeros_like(seg_array)
-
-        # Set valid voxels to their original values
-        valid_coords = seg_coords[valid_voxel_mask]
-        for coord in valid_coords:
-            output_array[coord[0], coord[1], coord[2]] = seg_array[coord[0], coord[1], coord[2]]
 
         # Create output segmentation
         output_seg = run.new_segmentation(
@@ -358,7 +424,7 @@ def limit_picks_by_distance(
     reference_mesh: Optional["CopickMesh"] = None,
     reference_segmentation: Optional["CopickSegmentation"] = None,
     max_distance: float = 100.0,
-    sampling_density: float = 1.0,
+    mesh_voxel_spacing: float = None,
     **kwargs,
 ) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
     """
@@ -373,7 +439,7 @@ def limit_picks_by_distance(
         pick_session_id: Session ID for the output picks
         pick_user_id: User ID for the output picks
         max_distance: Maximum distance from reference surface
-        sampling_density: Density of surface sampling for distance calculations
+        mesh_voxel_spacing: Voxel spacing for mesh voxelization (defaults to 10.0)
         **kwargs: Additional keyword arguments
 
     Returns:
@@ -390,8 +456,25 @@ def limit_picks_by_distance(
             logger.error("Could not load pick data")
             return None
 
-        # Get reference surface points
-        if reference_mesh is not None:
+        pick_positions = points[:, :3]  # Use only x, y, z coordinates
+
+        # We need a coordinate space to create the distance field
+        # Use the reference segmentation's coordinate space, or create one for mesh references
+        if reference_segmentation is not None:
+            ref_seg_array = reference_segmentation.numpy()
+            if ref_seg_array is None or ref_seg_array.size == 0:
+                logger.error("Could not load reference segmentation data")
+                return None
+
+            # Use reference segmentation's coordinate space
+            field_voxel_spacing = reference_segmentation.voxel_size
+            distance_field = _create_distance_field_from_segmentation(ref_seg_array, field_voxel_spacing)
+
+            # Convert pick coordinates to voxel indices in reference segmentation space
+            pick_voxel_coords = pick_positions / field_voxel_spacing
+            pick_voxel_indices = np.floor(pick_voxel_coords).astype(int)
+
+        else:  # reference_mesh is not None
             ref_mesh = reference_mesh.mesh
             if ref_mesh is None:
                 logger.error("Could not load reference mesh data")
@@ -403,39 +486,56 @@ def limit_picks_by_distance(
                     return None
                 ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
 
-            reference_points = _get_mesh_surface_points(ref_mesh, sampling_density)
+            # Define coordinate space based on mesh bounds and pick positions
+            all_coords = np.vstack([ref_mesh.vertices, pick_positions])
+            coord_bounds = np.array([all_coords.min(axis=0), all_coords.max(axis=0)])
 
-        else:  # reference_segmentation is not None
-            ref_seg_array = reference_segmentation.numpy()
-            if ref_seg_array is None or ref_seg_array.size == 0:
-                logger.error("Could not load reference segmentation data")
-                return None
+            # Add padding for max_distance
+            padding = max_distance * 1.1
+            coord_bounds[0] -= padding
+            coord_bounds[1] += padding
 
-            reference_points = _get_segmentation_surface_points(
-                ref_seg_array,
-                reference_segmentation.voxel_size,
-                sampling_density,
+            field_voxel_spacing = mesh_voxel_spacing if mesh_voxel_spacing is not None else 10.0
+            field_size = coord_bounds[1] - coord_bounds[0]
+            field_shape = np.ceil(field_size / field_voxel_spacing).astype(int)
+
+            # Create distance field from mesh in this coordinate space
+            distance_field = _create_distance_field_from_mesh(
+                ref_mesh,
+                field_shape,
+                field_voxel_spacing,
+                mesh_voxel_spacing,
             )
 
-        if len(reference_points) == 0:
-            logger.error("No reference surface points found")
+            # Convert pick coordinates to voxel indices in this field space
+            pick_voxel_coords = (pick_positions - coord_bounds[0]) / field_voxel_spacing
+            pick_voxel_indices = np.floor(pick_voxel_coords).astype(int)
+
+        # Check which picks are within field bounds
+        valid_picks = (pick_voxel_indices >= 0).all(axis=1) & (pick_voxel_indices < distance_field.shape).all(axis=1)
+
+        if not np.any(valid_picks):
+            logger.warning("No picks within distance field bounds")
             return None
 
-        # Calculate distances from picks to reference surface
-        pick_positions = points[:, :3]  # Use only x, y, z coordinates
-        distances = cdist(pick_positions, reference_points)
-        min_distances = np.min(distances, axis=1)
+        # Get distances for valid picks
+        valid_indices = pick_voxel_indices[valid_picks]
+        pick_distances = distance_field[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
 
         # Find picks within distance threshold
-        valid_pick_mask = min_distances <= max_distance
+        distance_valid = pick_distances <= max_distance
 
-        if not np.any(valid_pick_mask):
+        # Combine bounds validity and distance validity
+        final_valid = np.zeros(len(points), dtype=bool)
+        final_valid[valid_picks] = distance_valid
+
+        if not np.any(final_valid):
             logger.warning(f"No picks within {max_distance} units of reference surface")
             return None
 
         # Filter picks
-        valid_points = points[valid_pick_mask]
-        valid_transforms = transforms[valid_pick_mask] if transforms is not None else None
+        valid_points = points[final_valid]
+        valid_transforms = transforms[final_valid] if transforms is not None else None
 
         # Create output picks
         output_picks = run.new_picks(pick_object_name, pick_session_id, pick_user_id, exist_ok=True)

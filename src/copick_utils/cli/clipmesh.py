@@ -55,7 +55,7 @@ def clipmesh(
     ref_seg_session_id,
     ref_voxel_spacing,
     max_distance,
-    sampling_density,
+    mesh_voxel_spacing,
     workers,
     mesh_object_name_output,
     mesh_user_id_output,
@@ -165,7 +165,7 @@ def clipmesh(
                     continue
 
             task["max_distance"] = max_distance
-            task["sampling_density"] = sampling_density
+            task["mesh_voxel_spacing"] = mesh_voxel_spacing
             all_tasks.append(task)
 
     if not all_tasks:
