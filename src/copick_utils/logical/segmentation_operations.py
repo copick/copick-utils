@@ -252,6 +252,7 @@ _segmentation_difference_worker = create_batch_worker(
     "segmentation",
     "segmentation",
     min_points=0,
+    dual_input=True,
 )
 _segmentation_intersection_worker = create_batch_worker(
     segmentation_intersection,
@@ -273,6 +274,7 @@ segmentation_union_batch = create_batch_converter(
     "segmentation",
     "segmentation",
     min_points=0,
+    dual_input=True,
 )
 
 segmentation_difference_batch = create_batch_converter(
@@ -281,6 +283,7 @@ segmentation_difference_batch = create_batch_converter(
     "segmentation",
     "segmentation",
     min_points=0,
+    dual_input=True,
 )
 
 segmentation_intersection_batch = create_batch_converter(
@@ -289,6 +292,7 @@ segmentation_intersection_batch = create_batch_converter(
     "segmentation",
     "segmentation",
     min_points=0,
+    dual_input=True,
 )
 
 segmentation_exclusion_batch = create_batch_converter(

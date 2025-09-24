@@ -391,14 +391,35 @@ def create_batch_converter(
                                     **converter_kwargs,
                                 )
                         elif input_type == "segmentation":
-                            result = converter_func(
-                                segmentation=input_obj,
-                                run=run,
-                                object_name=task.get("output_object_name"),
-                                session_id=task.get("output_session_id"),
-                                user_id=task.get("output_user_id"),
-                                **converter_kwargs,
-                            )
+                            if dual_input:
+                                # For dual-input operations like segmentation boolean operations
+                                input2_obj = task.get("input2_segmentation")
+                                if not input2_obj:
+                                    all_errors.append(f"Missing second input segmentation for task in {run.name}")
+                                    continue
+
+                                result = converter_func(
+                                    segmentation1=input_obj,
+                                    segmentation2=input2_obj,
+                                    run=run,
+                                    object_name=task.get("segmentation_object_name"),
+                                    session_id=task.get("segmentation_session_id"),
+                                    user_id=task.get("segmentation_user_id"),
+                                    voxel_spacing=task.get("voxel_spacing"),
+                                    tomo_type=task.get("tomo_type", "wbp"),
+                                    is_multilabel=task.get("is_multilabel", False),
+                                    **converter_kwargs,
+                                )
+                            else:
+                                # Single-input segmentation operations
+                                result = converter_func(
+                                    segmentation=input_obj,
+                                    run=run,
+                                    object_name=task.get("output_object_name"),
+                                    session_id=task.get("output_session_id"),
+                                    user_id=task.get("output_user_id"),
+                                    **converter_kwargs,
+                                )
 
                     if result:
                         output_obj, stats = result
