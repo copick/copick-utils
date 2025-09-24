@@ -75,10 +75,10 @@ def clipseg(
     \b
     Examples:
         # Limit segmentation to voxels near reference mesh
-        copick clipseg --seg-session-id "full-001" --ref-mesh-session-id "boundary-001" --max-distance 50.0 --voxel-spacing 10.0 --seg-session-id "limited-001"
+        copick logical clipseg --seg-session-id "full-001" --ref-mesh-session-id "boundary-001" --max-distance 50.0 --voxel-spacing 10.0 --seg-session-id "limited-001"
         \b
         # Limit using another segmentation as reference
-        copick clipseg --seg-session-id "full-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --max-distance 100.0 --voxel-spacing 10.0 --seg-session-id "limited-001"
+        copick logical clipseg --seg-session-id "full-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --max-distance 100.0 --voxel-spacing 10.0 --seg-session-id "limited-001"
     """
     from copick_utils.logical.distance_operations import limit_segmentation_by_distance_batch
 

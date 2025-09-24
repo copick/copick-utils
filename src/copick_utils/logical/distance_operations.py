@@ -225,9 +225,9 @@ def limit_mesh_by_distance(
 def limit_segmentation_by_distance(
     segmentation: "CopickSegmentation",
     run: "CopickRun",
-    segmentation_object_name: str,
-    segmentation_session_id: str,
-    segmentation_user_id: str,
+    output_object_name: str,
+    output_session_id: str,
+    output_user_id: str,
     reference_mesh: Optional["CopickMesh"] = None,
     reference_segmentation: Optional["CopickSegmentation"] = None,
     max_distance: float = 100.0,
@@ -244,9 +244,9 @@ def limit_segmentation_by_distance(
         reference_mesh: Reference CopickMesh (either this or reference_segmentation must be provided)
         reference_segmentation: Reference CopickSegmentation
         run: CopickRun object
-        segmentation_object_name: Name for the output segmentation
-        segmentation_session_id: Session ID for the output segmentation
-        segmentation_user_id: User ID for the output segmentation
+        output_object_name: Name for the output segmentation
+        output_session_id: Session ID for the output segmentation
+        output_user_id: User ID for the output segmentation
         max_distance: Maximum distance from reference surface
         voxel_spacing: Voxel spacing for the output segmentation
         sampling_density: Density of surface sampling for distance calculations
@@ -329,9 +329,9 @@ def limit_segmentation_by_distance(
 
         # Create output segmentation
         output_seg = run.new_segmentation(
-            name=segmentation_object_name,
-            user_id=segmentation_user_id,
-            session_id=segmentation_session_id,
+            name=output_object_name,
+            user_id=output_user_id,
+            session_id=output_session_id,
             is_multilabel=is_multilabel,
             voxel_size=voxel_spacing,
             exist_ok=True,
