@@ -130,7 +130,13 @@ def add_workers_option(func: click.Command) -> click.Command:
     return func
 
 
-def add_mesh_input_options(func: click.Command = None, *, suffix: str = "", prefix: str = "") -> Callable:
+def add_mesh_input_options(
+    func: click.Command = None,
+    *,
+    suffix: str = "",
+    prefix: str = "",
+    required=True,
+) -> Callable:
     """
     Add common input options for mesh-to-segmentation conversion commands.
 
@@ -138,6 +144,7 @@ def add_mesh_input_options(func: click.Command = None, *, suffix: str = "", pref
         func (click.Command): The Click command to which the options will be added.
         suffix (str): Suffix to append to option names (for dual inputs).
         prefix (str): Prefix to prepend to option names (for namespacing).
+        required (bool): Whether the input options are required.
 
     Returns:
         click.Command: The Click command with the input options added.
@@ -165,19 +172,19 @@ def add_mesh_input_options(func: click.Command = None, *, suffix: str = "", pref
             optgroup.option(
                 f"--{prefix}mesh-object-name{suffix}",
                 f"-{short_prefix}mo{suffix}",
-                required=True,
+                required=required,
                 help=f"Object name of the input {mesh_doc}",
             ),
             optgroup.option(
                 f"--{prefix}mesh-user-id{suffix}",
                 f"-{short_prefix}mu{suffix}",
-                required=True,
+                required=required,
                 help=f"User ID of the input {mesh_doc}",
             ),
             optgroup.option(
                 f"--{prefix}mesh-session-id{suffix}",
                 f"-{short_prefix}ms{suffix}",
-                required=True,
+                required=required,
                 help=f"Session ID or regex pattern of the input {mesh_doc}",
             ),
         ]
@@ -200,6 +207,7 @@ def add_segmentation_input_options(
     prefix: str = "",
     include_voxel_spacing: bool = True,
     include_multilabel: bool = True,
+    required: bool = True,
 ) -> Callable:
     """
     Add common input options for segmentation-to-mesh conversion commands.
@@ -210,6 +218,7 @@ def add_segmentation_input_options(
         prefix (str): Prefix to prepend to option names (for namespacing).
         include_voxel_spacing (bool): Whether to include the voxel spacing option.
         include_multilabel (bool): Whether to include the multilabel option.
+        required (bool): Whether the input options are required.
 
     Returns:
         click.Command: The Click command with the input options added.
@@ -236,19 +245,19 @@ def add_segmentation_input_options(
             optgroup.option(
                 f"--{prefix}seg-name{suffix}",
                 f"-{short_prefix}sn{suffix}",
-                required=True,
+                required=required,
                 help=f"Name of the input{segmentation_doc}",
             ),
             optgroup.option(
                 f"--{prefix}seg-user-id{suffix}",
                 f"-{short_prefix}su{suffix}",
-                required=True,
+                required=required,
                 help=f"User ID of the input{segmentation_doc}",
             ),
             optgroup.option(
                 f"--{prefix}seg-session-id{suffix}",
                 f"-{short_prefix}ss{suffix}",
-                required=True,
+                required=required,
                 help=f"Session ID or regex pattern of the input{segmentation_doc}",
             ),
         ]
@@ -259,7 +268,7 @@ def add_segmentation_input_options(
                     f"--{prefix}voxel-spacing{suffix}",
                     f"-{short_prefix}vs{suffix}",
                     type=float,
-                    required=True,
+                    required=required,
                     help=f"Voxel spacing of the input{segmentation_doc}",
                 ),
             )

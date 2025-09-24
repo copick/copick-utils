@@ -32,10 +32,11 @@ from copick_utils.cli.util import (
 )
 @add_pick_input_options
 @optgroup.group("\nReference Options", help="Options for reference surface (provide either mesh or segmentation).")
-@add_mesh_input_options(prefix="ref")
+@add_mesh_input_options(prefix="ref", required=False)
 @add_segmentation_input_options(
     prefix="ref",
     include_multilabel=False,
+    required=False,
 )
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_distance_options
