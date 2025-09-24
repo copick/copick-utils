@@ -50,11 +50,11 @@ def mesh2seg(
     invert,
     tomo_type,
     workers,
-    seg_name,
-    seg_user_id,
-    seg_session_id,
-    voxel_spacing,
-    multilabel,
+    seg_name_output,
+    seg_user_id_output,
+    seg_session_id_output,
+    voxel_spacing_output,
+    multilabel_output,
     debug,
 ):
     """
@@ -98,7 +98,7 @@ def mesh2seg(
 
     # Validate placeholder requirements
     try:
-        validate_conversion_placeholders(mesh_session_id, seg_session_id, individual_outputs=False)
+        validate_conversion_placeholders(mesh_session_id, seg_session_id_output, individual_outputs=False)
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
@@ -109,17 +109,17 @@ def mesh2seg(
         input_object_name=mesh_object_name,
         input_user_id=mesh_user_id,
         input_session_id=mesh_session_id,
-        output_object_name=seg_name,
-        output_user_id=seg_user_id,
-        output_session_id=seg_session_id,
-        voxel_spacing=voxel_spacing,
+        output_object_name=seg_name_output,
+        output_user_id=seg_user_id_output,
+        output_session_id=seg_session_id_output,
+        voxel_spacing=voxel_spacing_output,
     )
 
     logger.info(f"Converting mesh to segmentation for object '{mesh_object_name}'")
     logger.info(f"Selection mode: {selector.get_mode_description()}")
     logger.info(f"Source mesh pattern: {mesh_user_id}/{mesh_session_id}")
-    logger.info(f"Target segmentation template: {seg_name} ({seg_user_id}/{seg_session_id})")
-    logger.info(f"Mode: {mode}, voxel spacing: {voxel_spacing}, multilabel: {multilabel}")
+    logger.info(f"Target segmentation template: {seg_name_output} ({seg_user_id_output}/{seg_session_id_output})")
+    logger.info(f"Mode: {mode}, voxel spacing: {voxel_spacing_output}, multilabel: {multilabel_output}")
     if mode == "boundary":
         logger.info(f"Boundary sampling density: {boundary_sampling_density}")
     if invert:
@@ -144,9 +144,9 @@ def mesh2seg(
         conversion_tasks=all_tasks,
         run_names=run_names_list,
         workers=workers,
-        voxel_spacing=voxel_spacing,
+        voxel_spacing=voxel_spacing_output,
         tomo_type=tomo_type,
-        is_multilabel=multilabel,
+        is_multilabel=multilabel_output,
         mode=mode,
         boundary_sampling_density=boundary_sampling_density,
         invert=invert,

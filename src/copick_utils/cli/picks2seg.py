@@ -56,9 +56,9 @@ def picks2seg(
     tomo_type,
     voxel_spacing,
     workers,
-    seg_name,
-    seg_user_id,
-    seg_session_id,
+    seg_name_output,
+    seg_user_id_output,
+    seg_session_id_output,
     debug,
 ):
     """
@@ -86,7 +86,7 @@ def picks2seg(
 
     # Validate placeholder requirements
     try:
-        validate_conversion_placeholders(pick_session_id, seg_session_id, individual_outputs=False)
+        validate_conversion_placeholders(pick_session_id, seg_session_id_output, individual_outputs=False)
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
@@ -97,16 +97,16 @@ def picks2seg(
         input_object_name=pick_object_name,
         input_user_id=pick_user_id,
         input_session_id=pick_session_id,
-        output_object_name=seg_name,
-        output_user_id=seg_user_id,
-        output_session_id=seg_session_id,
+        output_object_name=seg_name_output,
+        output_user_id=seg_user_id_output,
+        output_session_id=seg_session_id_output,
         voxel_spacing=voxel_spacing,
     )
 
     logger.info(f"Converting picks to segmentation for object '{pick_object_name}'")
     logger.info(f"Selection mode: {selector.get_mode_description()}")
     logger.info(f"Source picks pattern: {pick_user_id}/{pick_session_id}")
-    logger.info(f"Target segmentation template: {seg_name} ({seg_user_id}/{seg_session_id})")
+    logger.info(f"Target segmentation template: {seg_name_output} ({seg_user_id_output}/{seg_session_id_output})")
     logger.info(f"Sphere radius: {radius}, voxel spacing: {voxel_spacing}")
 
     # Collect all conversion tasks across runs

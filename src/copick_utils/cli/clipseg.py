@@ -38,7 +38,7 @@ from copick_utils.cli.util import (
 @add_distance_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
-@add_segmentation_output_options(default_tool="clipseg")
+@add_segmentation_output_options(default_tool="clipseg", include_tomo_type=False)
 @add_debug_option
 def clipseg(
     config,
@@ -62,7 +62,6 @@ def clipseg(
     seg_session_id_output,
     voxel_spacing_output,
     multilabel_output,
-    tomo_type,
     debug,
 ):
     """
@@ -163,7 +162,6 @@ def clipseg(
             task["max_distance"] = max_distance
             task["sampling_density"] = sampling_density
             task["voxel_spacing"] = voxel_spacing_output
-            task["tomo_type"] = tomo_type
             task["is_multilabel"] = multilabel_output
             all_tasks.append(task)
 

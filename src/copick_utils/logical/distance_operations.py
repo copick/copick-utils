@@ -233,7 +233,6 @@ def limit_segmentation_by_distance(
     max_distance: float = 100.0,
     voxel_spacing: float = 10.0,
     sampling_density: float = 1.0,
-    tomo_type: str = "wbp",
     is_multilabel: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
@@ -251,7 +250,6 @@ def limit_segmentation_by_distance(
         max_distance: Maximum distance from reference surface
         voxel_spacing: Voxel spacing for the output segmentation
         sampling_density: Density of surface sampling for distance calculations
-        tomo_type: Type of tomogram to use for reference dimensions
         is_multilabel: Whether the segmentation is multilabel
         **kwargs: Additional keyword arguments
 

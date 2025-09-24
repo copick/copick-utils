@@ -317,26 +317,26 @@ def add_segmentation_output_options(
         """
         opts = [
             optgroup.option(
-                "--seg-name",
-                "-sn",
+                "--seg-name-output",
+                "-sno",
                 required=True,
                 help="Name of the segmentation to create.",
             ),
             optgroup.option(
-                "--seg-user-id",
-                "-su",
+                "--seg-user-id-output",
+                "-suo",
                 default=default_tool,
                 help="User ID for created segmentation. Defaults to tool name.",
             ),
             optgroup.option(
-                "--seg-session-id",
-                "-ss",
+                "--seg-session-id-output",
+                "-sso",
                 default="0",
                 help="Session ID for created segmentation.",
             ),
             optgroup.option(
-                "--voxel-spacing",
-                "-vs",
+                "--voxel-spacing-output",
+                "-vso",
                 type=float,
                 required=True,
                 help="Voxel spacing for the segmentation.",
@@ -346,7 +346,7 @@ def add_segmentation_output_options(
         if include_multilabel:
             opts.append(
                 optgroup.option(
-                    "--multilabel/--no-multilabel",
+                    "--multilabel-output/--no-multilabel-output",
                     is_flag=True,
                     default=False,
                     help="Create a multilabel segmentation.",
