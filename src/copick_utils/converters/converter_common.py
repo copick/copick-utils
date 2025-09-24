@@ -412,14 +412,13 @@ def create_batch_converter(
                                 )
                             else:
                                 # Single-input segmentation operations
-                                result = converter_func(
-                                    segmentation=input_obj,
-                                    run=run,
-                                    object_name=task.get("output_object_name"),
-                                    session_id=task.get("output_session_id"),
-                                    user_id=task.get("output_user_id"),
-                                    **converter_kwargs,
-                                )
+                                # Pass all task parameters to the converter function
+                                task_params = dict(task)
+                                task_params["segmentation"] = input_obj
+                                task_params["run"] = run
+                                task_params.update(converter_kwargs)
+
+                                result = converter_func(**task_params)
 
                     if result:
                         output_obj, stats = result
