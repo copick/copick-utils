@@ -281,6 +281,7 @@ def add_references_to_tasks(
 def pair_tasks_within_run(
     tasks1: List[Dict[str, Any]],
     tasks2: List[Dict[str, Any]],
+    input_type: str = "segmentation",
 ) -> List[Dict[str, Any]]:
     """
     Pair tasks from two selectors within a single run for boolean operations.
@@ -288,10 +289,22 @@ def pair_tasks_within_run(
     Args:
         tasks1: Tasks from first selector
         tasks2: Tasks from second selector
+        input_type: Type of input objects to determine parameter names
 
     Returns:
         List of paired tasks for boolean operations
     """
+    # Generate type-specific parameter names
+    if input_type == "mesh":
+        param1, param2 = "mesh1", "mesh2"
+    elif input_type == "segmentation":
+        param1, param2 = "segmentation1", "segmentation2"
+    elif input_type == "picks":
+        param1, param2 = "picks1", "picks2"
+    else:
+        # Fallback to generic names
+        param1, param2 = "input_object1", "input_object2"
+
     paired_tasks = []
 
     # Pair in order (same logic as current segop.py)
@@ -299,10 +312,10 @@ def pair_tasks_within_run(
         if i < len(tasks2):
             task2 = tasks2[i]
 
-            # Create combined task for boolean operation
+            # Create combined task for boolean operation with type-specific parameter names
             paired_task = {
-                "segmentation1": task1["input_object"],
-                "segmentation2": task2["input_object"],
+                param1: task1["input_object"],
+                param2: task2["input_object"],
                 "object_name": task1["output_object_name"],
                 "user_id": task1["output_user_id"],
                 "session_id": task1["output_session_id"],
@@ -347,7 +360,9 @@ def lazy_conversion_worker(
             # Boolean operation command
             tasks1 = discover_tasks_for_run(run, config.selectors[0])
             tasks2 = discover_tasks_for_run(run, config.selectors[1])
-            tasks = pair_tasks_within_run(tasks1, tasks2)
+            # Use input type from first selector to determine parameter names
+            input_type = config.selectors[0].input_type
+            tasks = pair_tasks_within_run(tasks1, tasks2, input_type)
 
             # Add additional parameters to all tasks
             if config.additional_params:
