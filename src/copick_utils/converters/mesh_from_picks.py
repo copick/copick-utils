@@ -11,6 +11,7 @@ from copick_utils.converters.converter_common import (
     store_mesh_with_stats,
     validate_points,
 )
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickRun
@@ -199,4 +200,10 @@ mesh_from_picks_batch = create_batch_converter(
     "mesh",
     "picks",
     min_points=4,
+)
+
+# Lazy batch converter for new architecture
+mesh_from_picks_lazy_batch = create_lazy_batch_converter(
+    converter_func=mesh_from_picks,
+    task_description="Converting picks to meshes",
 )

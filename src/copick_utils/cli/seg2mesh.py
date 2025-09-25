@@ -4,13 +4,15 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
-from copick_utils.cli.input_output_selection import ConversionSelector, validate_conversion_placeholders
+from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import (
     add_marching_cubes_options,
     add_mesh_output_options,
     add_segmentation_input_options,
     add_workers_option,
 )
+from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.converters.mesh_from_segmentation import mesh_from_segmentation_lazy_batch
 
 
 @click.command(
@@ -65,7 +67,6 @@ def seg2mesh(
         # Convert all manual segmentations using pattern matching
         copick convert seg2mesh --seg-session-id "manual-.*" --mesh-session-id "from-seg-{input_session_id}"
     """
-    from copick_utils.converters.mesh_from_segmentation import mesh_from_segmentation_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -78,11 +79,16 @@ def seg2mesh(
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
-    # Create conversion selector
-    selector = ConversionSelector(
+    logger.info(f"Converting segmentation to mesh for '{seg_name}'")
+    logger.info(f"Source segmentation pattern: {seg_name} ({seg_user_id}/{seg_session_id})")
+    logger.info(f"Target mesh template: {mesh_object_name_output} ({mesh_user_id_output}/{mesh_session_id_output})")
+    logger.info(f"Marching cubes level: {level}, step size: {step_size}")
+
+    # Create type-safe Pydantic configuration
+    selector_config = SelectorConfig(
         input_type="segmentation",
         output_type="mesh",
-        input_object_name=mesh_object_name_output,  # For mesh, we use mesh_object_name as both input and output object
+        input_object_name=mesh_object_name_output,
         input_user_id=seg_user_id,
         input_session_id=seg_session_id,
         output_object_name=mesh_object_name_output,
@@ -93,29 +99,15 @@ def seg2mesh(
         voxel_spacing=voxel_spacing,
     )
 
-    logger.info(f"Converting segmentation to mesh for '{seg_name}'")
-    logger.info(f"Selection mode: {selector.get_mode_description()}")
-    logger.info(f"Source segmentation pattern: {seg_name} ({seg_user_id}/{seg_session_id})")
-    logger.info(f"Target mesh template: {mesh_object_name_output} ({mesh_user_id_output}/{mesh_session_id_output})")
-    logger.info(f"Marching cubes level: {level}, step size: {step_size}")
+    config = TaskConfig(
+        type="single_selector",
+        selector=selector_config,
+    )
 
-    # Collect all conversion tasks across runs
-    all_tasks = []
-    runs_to_process = root.runs if run_names_list is None else [root.get_run(name) for name in run_names_list]
-
-    for run in runs_to_process:
-        tasks = selector.get_conversion_tasks(run)
-        all_tasks.extend(tasks)
-
-    if not all_tasks:
-        logger.warning("No matching segmentations found for conversion")
-        return
-
-    logger.info(f"Found {len(all_tasks)} conversion tasks across {len(runs_to_process)} runs")
-
-    results = mesh_from_segmentation_batch(
+    # Parallel discovery and processing - no sequential bottleneck!
+    results = mesh_from_segmentation_lazy_batch(
         root=root,
-        conversion_tasks=all_tasks,
+        config=config,
         run_names=run_names_list,
         workers=workers,
         level=level,

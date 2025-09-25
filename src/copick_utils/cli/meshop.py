@@ -6,13 +6,14 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
-from copick_utils.cli.input_output_selection import ConversionSelector, validate_conversion_placeholders
+from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import (
     add_boolean_operation_option,
     add_mesh_input_options,
     add_mesh_output_options,
     add_workers_option,
 )
+from copick_utils.converters.config_models import SelectorConfig, TaskConfig
 
 
 @click.command(
@@ -78,11 +79,11 @@ def meshop(
         copick logical meshop --operation difference --mesh-session-id "manual-.*" --input2-session-id "mask-.*" --mesh-session-id "diff-{input_session_id}"
     """
     from copick_utils.logical.mesh_operations import (
-        mesh_concatenate_batch,
-        mesh_difference_batch,
-        mesh_exclusion_batch,
-        mesh_intersection_batch,
-        mesh_union_batch,
+        mesh_concatenate,
+        mesh_difference,
+        mesh_exclusion,
+        mesh_intersection,
+        mesh_union,
     )
 
     logger = get_logger(__name__, debug=debug)
@@ -96,20 +97,58 @@ def meshop(
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
-    # Create selectors for both inputs
-    selector1 = ConversionSelector(
+    logger.info(f"Performing {operation} operation on meshes for object '{mesh_object_name}'")
+    logger.info(f"First mesh pattern: {mesh_user_id}/{mesh_session_id}")
+    logger.info(f"Second mesh pattern: {mesh_user_id2}/{mesh_session_id2}")
+    logger.info(
+        f"Target mesh template: {mesh_object_name_output or mesh_object_name} ({mesh_user_id_output}/{mesh_session_id_output})",
+    )
+
+    # Select the appropriate converter function based on operation
+    converter_functions = {
+        "union": mesh_union,
+        "difference": mesh_difference,
+        "intersection": mesh_intersection,
+        "exclusion": mesh_exclusion,
+        "concatenate": mesh_concatenate,
+    }
+
+    converter_functions[operation]
+
+    # Import the appropriate lazy batch converter based on operation
+    from copick_utils.logical.mesh_operations import (
+        mesh_concatenate_lazy_batch,
+        mesh_difference_lazy_batch,
+        mesh_exclusion_lazy_batch,
+        mesh_intersection_lazy_batch,
+        mesh_union_lazy_batch,
+    )
+
+    # Select the appropriate lazy batch converter
+    lazy_batch_functions = {
+        "union": mesh_union_lazy_batch,
+        "difference": mesh_difference_lazy_batch,
+        "intersection": mesh_intersection_lazy_batch,
+        "exclusion": mesh_exclusion_lazy_batch,
+        "concatenate": mesh_concatenate_lazy_batch,
+    }
+
+    lazy_batch_function = lazy_batch_functions[operation]
+
+    # Create type-safe Pydantic selector configurations
+    selector1_config = SelectorConfig(
         input_type="mesh",
         output_type="mesh",
         input_object_name=mesh_object_name,
         input_user_id=mesh_user_id,
         input_session_id=mesh_session_id,
-        output_object_name=mesh_object_name_output or mesh_object_name,
+        output_object_name=mesh_object_name_output,
         output_user_id=mesh_user_id_output,
         output_session_id=mesh_session_id_output,
         individual_outputs=individual_meshes,
     )
 
-    selector2 = ConversionSelector(
+    selector2_config = SelectorConfig(
         input_type="mesh",
         output_type="mesh",
         input_object_name=mesh_object_name2,
@@ -121,94 +160,16 @@ def meshop(
         individual_outputs=False,  # Not used for second input
     )
 
-    logger.info(f"Performing {operation} operation on meshes for object '{mesh_object_name}'")
-    logger.info(f"First mesh pattern: {mesh_user_id}/{mesh_session_id}")
-    logger.info(f"Second mesh pattern: {mesh_user_id2}/{mesh_session_id2}")
-    logger.info(
-        f"Target mesh template: {mesh_object_name_output or mesh_object_name} ({mesh_user_id_output}/{mesh_session_id_output})",
+    config = TaskConfig(
+        type="dual_selector",
+        selectors=[selector1_config, selector2_config],
+        pairing_method="index_order",
     )
 
-    # Collect conversion tasks for both inputs across runs
-    all_tasks_1 = []
-    all_tasks_2 = []
-    runs_to_process = root.runs if run_names_list is None else [root.get_run(name) for name in run_names_list]
-
-    for run in runs_to_process:
-        tasks1 = selector1.get_conversion_tasks(run)
-        tasks2 = selector2.get_conversion_tasks(run)
-        all_tasks_1.extend(tasks1)
-        all_tasks_2.extend(tasks2)
-
-    if not all_tasks_1:
-        logger.warning("No matching first meshes found for operation")
-        return
-
-    if not all_tasks_2:
-        logger.warning("No matching second meshes found for operation")
-        return
-
-    # Create paired tasks for boolean operations
-    # For now, we'll match by run name and assume 1:1 correspondence
-    paired_tasks = []
-
-    # Group tasks by run name
-    tasks1_by_run = {}
-    for task in all_tasks_1:
-        run_name = task["input_object"].run.name
-        if run_name not in tasks1_by_run:
-            tasks1_by_run[run_name] = []
-        tasks1_by_run[run_name].append(task)
-
-    tasks2_by_run = {}
-    for task in all_tasks_2:
-        run_name = task["input_object"].run.name
-        if run_name not in tasks2_by_run:
-            tasks2_by_run[run_name] = []
-        tasks2_by_run[run_name].append(task)
-
-    # Pair up tasks from each run
-    for run_name in tasks1_by_run:
-        if run_name in tasks2_by_run:
-            run_tasks_1 = tasks1_by_run[run_name]
-            run_tasks_2 = tasks2_by_run[run_name]
-
-            # For simplicity, pair in order (could be made more sophisticated)
-            for i, task1 in enumerate(run_tasks_1):
-                if i < len(run_tasks_2):
-                    task2 = run_tasks_2[i]
-
-                    # Create combined task
-                    paired_task = {
-                        "input_mesh": task1["input_object"],
-                        "input2_mesh": task2["input_object"],
-                        "mesh_object_name": task1["output_object_name"],
-                        "mesh_user_id": task1["output_user_id"],
-                        "mesh_session_id": task1["output_session_id"],
-                        "individual_meshes": task1["individual_outputs"],
-                        "session_id_template": task1.get("session_id_template"),
-                    }
-                    paired_tasks.append(paired_task)
-
-    if not paired_tasks:
-        logger.warning("No paired mesh tasks found for boolean operation")
-        return
-
-    logger.info(f"Found {len(paired_tasks)} paired tasks across {len(runs_to_process)} runs")
-
-    # Select the appropriate batch function based on operation
-    batch_functions = {
-        "union": mesh_union_batch,
-        "difference": mesh_difference_batch,
-        "intersection": mesh_intersection_batch,
-        "exclusion": mesh_exclusion_batch,
-        "concatenate": mesh_concatenate_batch,
-    }
-
-    batch_function = batch_functions[operation]
-
-    results = batch_function(
+    # Parallel discovery and processing - no sequential bottleneck!
+    results = lazy_batch_function(
         root=root,
-        conversion_tasks=paired_tasks,
+        config=config,
         run_names=run_names_list,
         workers=workers,
     )

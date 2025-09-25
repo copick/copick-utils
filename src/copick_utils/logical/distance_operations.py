@@ -11,6 +11,7 @@ from copick_utils.converters.converter_common import (
     create_batch_worker,
     store_mesh_with_stats,
 )
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickPicks, CopickRun, CopickSegmentation
@@ -584,4 +585,20 @@ limit_picks_by_distance_batch = create_batch_converter(
     "picks",
     "picks",
     min_points=1,
+)
+
+# Lazy batch converters for new architecture
+limit_segmentation_by_distance_lazy_batch = create_lazy_batch_converter(
+    converter_func=limit_segmentation_by_distance,
+    task_description="Limiting segmentations by distance",
+)
+
+limit_picks_by_distance_lazy_batch = create_lazy_batch_converter(
+    converter_func=limit_picks_by_distance,
+    task_description="Limiting picks by distance",
+)
+
+limit_mesh_by_distance_lazy_batch = create_lazy_batch_converter(
+    converter_func=limit_mesh_by_distance,
+    task_description="Limiting meshes by distance",
 )

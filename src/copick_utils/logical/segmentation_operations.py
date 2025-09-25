@@ -9,6 +9,7 @@ from copick_utils.converters.converter_common import (
     create_batch_converter,
     create_batch_worker,
 )
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
     from copick.models import CopickRun, CopickSegmentation
@@ -301,4 +302,25 @@ segmentation_exclusion_batch = create_batch_converter(
     "segmentation",
     min_points=0,
     dual_input=True,
+)
+
+# Lazy batch converters for new architecture
+segmentation_union_lazy_batch = create_lazy_batch_converter(
+    converter_func=segmentation_union,
+    task_description="Computing segmentation unions",
+)
+
+segmentation_difference_lazy_batch = create_lazy_batch_converter(
+    converter_func=segmentation_difference,
+    task_description="Computing segmentation differences",
+)
+
+segmentation_intersection_lazy_batch = create_lazy_batch_converter(
+    converter_func=segmentation_intersection,
+    task_description="Computing segmentation intersections",
+)
+
+segmentation_exclusion_lazy_batch = create_lazy_batch_converter(
+    converter_func=segmentation_exclusion,
+    task_description="Computing segmentation exclusions",
 )

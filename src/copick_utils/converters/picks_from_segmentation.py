@@ -11,6 +11,7 @@ from copick_utils.converters.converter_common import (
     create_batch_converter,
     create_batch_worker,
 )
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
     from copick.models import CopickPicks, CopickRun, CopickSegmentation
@@ -158,4 +159,10 @@ picks_from_segmentation_batch = create_batch_converter(
     "picks",
     "segmentation",
     min_points=0,
+)
+
+# Lazy batch converter for new architecture
+picks_from_segmentation_lazy_batch = create_lazy_batch_converter(
+    converter_func=picks_from_segmentation,
+    task_description="Converting segmentations to picks",
 )

@@ -6,7 +6,10 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
+from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import add_mesh_input_options, add_picks_output_options, add_workers_option
+from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.converters.picks_from_mesh import picks_from_mesh_lazy_batch
 
 
 @click.command(
@@ -101,34 +104,63 @@ def mesh2picks(
     pick_session_id,
     debug,
 ):
-    """Convert meshes to picks using different sampling strategies."""
-    from copick_utils.converters.picks_from_mesh import picks_from_mesh_batch
+    """
+    Convert meshes to picks using different sampling strategies.
 
+    \b
+    Supports flexible input/output selection modes:
+    - One-to-one: exact session ID → exact session ID
+    - Many-to-many: regex pattern → template with {input_session_id}
+
+    \b
+    Examples:
+        # Convert single mesh to picks
+        copick convert mesh2picks --mesh-session-id "boundary-001" --pick-session-id "sampled-001" --sampling-type surface
+        \b
+        # Convert all boundary meshes using pattern matching
+        copick convert mesh2picks --mesh-session-id "boundary-.*" --pick-session-id "sampled-{input_session_id}" --sampling-type inside
+    """
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
+    # Validate placeholder requirements
+    try:
+        validate_conversion_placeholders(mesh_session_id, pick_session_id, individual_outputs=False)
+    except ValueError as e:
+        raise click.BadParameter(str(e)) from e
+
     logger.info(f"Converting mesh to picks for object '{mesh_object_name}'")
-    logger.info(f"Source mesh: {mesh_user_id}/{mesh_session_id}")
-    logger.info(f"Target picks: {pick_object_name} ({pick_user_id}/{pick_session_id})")
+    logger.info(f"Source mesh pattern: {mesh_user_id}/{mesh_session_id}")
+    logger.info(f"Target picks template: {pick_object_name} ({pick_user_id}/{pick_session_id})")
     logger.info(f"Sampling type: {sampling_type}, n_points: {n_points}")
 
-    if run_names_list:
-        logger.info(f"Processing {len(run_names_list)} specific runs")
-    else:
-        logger.info(f"Processing all {len(root.runs)} runs")
+    # Create type-safe Pydantic configuration
+    selector_config = SelectorConfig(
+        input_type="mesh",
+        output_type="picks",
+        input_object_name=mesh_object_name,
+        input_user_id=mesh_user_id,
+        input_session_id=mesh_session_id,
+        output_object_name=pick_object_name,
+        output_user_id=pick_user_id,
+        output_session_id=pick_session_id,
+    )
 
-    results = picks_from_mesh_batch(
+    config = TaskConfig(
+        type="single_selector",
+        selector=selector_config,
+    )
+
+    # Parallel discovery and processing with consistent architecture!
+    results = picks_from_mesh_lazy_batch(
         root=root,
-        mesh_object_name=mesh_object_name,
-        mesh_user_id=mesh_user_id,
-        mesh_session_id=mesh_session_id,
+        config=config,
+        run_names=run_names_list,
+        workers=workers,
         sampling_type=sampling_type,
         n_points=n_points,
-        pick_object_name=pick_object_name,
-        pick_session_id=pick_session_id,
-        pick_user_id=pick_user_id,
         voxel_spacing=voxel_spacing,
         tomo_type=tomo_type,
         min_dist=min_dist,
@@ -136,8 +168,6 @@ def mesh2picks(
         include_normals=include_normals,
         random_orientations=random_orientations,
         seed=seed,
-        run_names=run_names_list,
-        workers=workers,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)

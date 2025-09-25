@@ -10,6 +10,7 @@ from copick_utils.converters.converter_common import (
     create_batch_worker,
     store_mesh_with_stats,
 )
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickRun
@@ -260,4 +261,30 @@ mesh_concatenate_batch = create_batch_converter(
     "mesh",
     min_points=0,
     dual_input=True,
+)
+
+# Lazy batch converters for new architecture
+mesh_union_lazy_batch = create_lazy_batch_converter(
+    converter_func=mesh_union,
+    task_description="Computing mesh unions",
+)
+
+mesh_difference_lazy_batch = create_lazy_batch_converter(
+    converter_func=mesh_difference,
+    task_description="Computing mesh differences",
+)
+
+mesh_intersection_lazy_batch = create_lazy_batch_converter(
+    converter_func=mesh_intersection,
+    task_description="Computing mesh intersections",
+)
+
+mesh_exclusion_lazy_batch = create_lazy_batch_converter(
+    converter_func=mesh_exclusion,
+    task_description="Computing mesh exclusions",
+)
+
+mesh_concatenate_lazy_batch = create_lazy_batch_converter(
+    converter_func=mesh_concatenate,
+    task_description="Computing mesh concatenations",
 )

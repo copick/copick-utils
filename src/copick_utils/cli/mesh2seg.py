@@ -4,13 +4,15 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
-from copick_utils.cli.input_output_selection import ConversionSelector, validate_conversion_placeholders
+from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import (
     add_mesh_input_options,
     add_mesh_voxelization_options,
     add_segmentation_output_options,
     add_workers_option,
 )
+from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.converters.segmentation_from_mesh import segmentation_from_mesh_lazy_batch
 
 
 @click.command(
@@ -89,7 +91,6 @@ def mesh2seg(
         # Convert all manual meshes using pattern matching
         copick convert mesh2seg --mesh-session-id "manual-.*" --seg-session-id "from-mesh-{input_session_id}"
     """
-    from copick_utils.converters.segmentation_from_mesh import segmentation_from_mesh_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -102,21 +103,7 @@ def mesh2seg(
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
-    # Create conversion selector
-    selector = ConversionSelector(
-        input_type="mesh",
-        output_type="segmentation",
-        input_object_name=mesh_object_name,
-        input_user_id=mesh_user_id,
-        input_session_id=mesh_session_id,
-        output_object_name=seg_name_output,
-        output_user_id=seg_user_id_output,
-        output_session_id=seg_session_id_output,
-        voxel_spacing=voxel_spacing_output,
-    )
-
     logger.info(f"Converting mesh to segmentation for object '{mesh_object_name}'")
-    logger.info(f"Selection mode: {selector.get_mode_description()}")
     logger.info(f"Source mesh pattern: {mesh_user_id}/{mesh_session_id}")
     logger.info(f"Target segmentation template: {seg_name_output} ({seg_user_id_output}/{seg_session_id_output})")
     logger.info(f"Mode: {mode}, voxel spacing: {voxel_spacing_output}, multilabel: {multilabel_output}")
@@ -125,23 +112,29 @@ def mesh2seg(
     if invert:
         logger.info("Volume inversion: enabled")
 
-    # Collect all conversion tasks across runs
-    all_tasks = []
-    runs_to_process = root.runs if run_names_list is None else [root.get_run(name) for name in run_names_list]
+    # Create type-safe Pydantic configuration
+    selector_config = SelectorConfig(
+        input_type="mesh",
+        output_type="segmentation",
+        input_object_name=mesh_object_name,
+        input_user_id=mesh_user_id,
+        input_session_id=mesh_session_id,
+        output_object_name=seg_name_output,
+        output_user_id=seg_user_id_output,
+        output_session_id=seg_session_id_output,
+        segmentation_name=seg_name_output,
+        voxel_spacing=voxel_spacing_output,
+    )
 
-    for run in runs_to_process:
-        tasks = selector.get_conversion_tasks(run)
-        all_tasks.extend(tasks)
+    config = TaskConfig(
+        type="single_selector",
+        selector=selector_config,
+    )
 
-    if not all_tasks:
-        logger.warning("No matching meshes found for conversion")
-        return
-
-    logger.info(f"Found {len(all_tasks)} conversion tasks across {len(runs_to_process)} runs")
-
-    results = segmentation_from_mesh_batch(
+    # Parallel discovery and processing - no sequential bottleneck!
+    results = segmentation_from_mesh_lazy_batch(
         root=root,
-        conversion_tasks=all_tasks,
+        config=config,
         run_names=run_names_list,
         workers=workers,
         voxel_spacing=voxel_spacing_output,

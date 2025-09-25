@@ -5,12 +5,14 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
-from copick_utils.cli.input_output_selection import ConversionSelector, validate_conversion_placeholders
+from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import (
     add_mesh_input_options,
     add_mesh_output_options,
     add_workers_option,
 )
+from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.process.hull import hull_lazy_batch
 
 
 @click.command(
@@ -68,7 +70,6 @@ def hull(
         # Process specific runs
         copick hull -r run1 -r run2 -mo my-mesh -mu user1 -ms session1 --hull-type convex
     """
-    from copick_utils.process.hull import hull_from_mesh_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -81,8 +82,14 @@ def hull(
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
-    # Create conversion selector
-    selector = ConversionSelector(
+    logger.info(f"Computing {hull_type} hull for meshes '{mesh_object_name}'")
+    logger.info(f"Source mesh pattern: {mesh_user_id}/{mesh_session_id}")
+    logger.info(
+        f"Target mesh template: {mesh_object_name_output or mesh_object_name} ({mesh_user_id_output}/{mesh_session_id_output})",
+    )
+
+    # Create type-safe Pydantic configuration
+    selector_config = SelectorConfig(
         input_type="mesh",
         output_type="mesh",
         input_object_name=mesh_object_name,
@@ -94,32 +101,15 @@ def hull(
         individual_outputs=individual_meshes,
     )
 
-    logger.info(f"Computing {hull_type} hull for meshes '{mesh_object_name}'")
-    logger.info(f"Selection mode: {selector.get_mode_description()}")
-    logger.info(f"Source mesh pattern: {mesh_user_id}/{mesh_session_id}")
-    logger.info(
-        f"Target mesh template: {mesh_object_name_output or mesh_object_name} ({mesh_user_id_output}/{mesh_session_id_output})",
+    config = TaskConfig(
+        type="single_selector",
+        selector=selector_config,
     )
 
-    # Collect all conversion tasks across runs
-    all_tasks = []
-    runs_to_process = root.runs if run_names_list is None else [root.get_run(name) for name in run_names_list]
-
-    for run in runs_to_process:
-        tasks = selector.get_conversion_tasks(run)
-        all_tasks.extend(tasks)
-
-    print(all_tasks)
-
-    if not all_tasks:
-        logger.warning("No matching meshes found for hull computation")
-        return
-
-    logger.info(f"Found {len(all_tasks)} conversion tasks across {len(runs_to_process)} runs")
-
-    results = hull_from_mesh_batch(
+    # Parallel discovery and processing - no sequential bottleneck!
+    results = hull_lazy_batch(
         root=root,
-        conversion_tasks=all_tasks,
+        config=config,
         run_names=run_names_list,
         workers=workers,
         hull_type=hull_type,

@@ -12,6 +12,7 @@ from copick_utils.converters.converter_common import (
     create_batch_converter,
     create_batch_worker,
 )
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickRun, CopickSegmentation
@@ -281,4 +282,10 @@ segmentation_from_mesh_batch = create_batch_converter(
     "segmentation",
     "mesh",
     min_points=0,
+)
+
+# Lazy batch converter for new architecture
+segmentation_from_mesh_lazy_batch = create_lazy_batch_converter(
+    converter_func=segmentation_from_mesh,
+    task_description="Converting meshes to segmentations",
 )

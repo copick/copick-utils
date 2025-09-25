@@ -6,7 +6,6 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
-from copick_utils.cli.input_output_selection import ConversionSelector
 from copick_utils.cli.util import (
     add_mesh_input_options,
     add_pick_input_options,
@@ -14,6 +13,8 @@ from copick_utils.cli.util import (
     add_segmentation_input_options,
     add_workers_option,
 )
+from copick_utils.converters.config_models import ReferenceConfig, SelectorConfig, TaskConfig
+from copick_utils.logical.point_operations import picks_exclusion_by_mesh_lazy_batch
 
 
 @click.command(
@@ -75,7 +76,6 @@ def picksout(
         # Exclude picks inside segmentation
         copick logical picksout --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --pick-session-id "outside-001"
     """
-    from copick_utils.logical.point_operations import picks_exclusion_by_mesh_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -94,19 +94,6 @@ def picksout(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Create selector for input picks
-    selector = ConversionSelector(
-        input_type="picks",
-        output_type="picks",
-        input_object_name=pick_object_name,
-        input_user_id=pick_user_id,
-        input_session_id=pick_session_id,
-        output_object_name=pick_object_name_output,
-        output_user_id=pick_user_id_output,
-        output_session_id=pick_session_id_output,
-        individual_outputs=False,
-    )
-
     logger.info(f"Excluding picks inside reference volume for object '{pick_object_name}'")
     logger.info(f"Source picks pattern: {pick_user_id}/{pick_session_id}")
     if ref_mesh_provided:
@@ -115,54 +102,45 @@ def picksout(
         logger.info(f"Reference segmentation: {ref_seg_name} ({ref_seg_user_id}/{ref_seg_session_id})")
     logger.info(f"Target picks template: {pick_object_name_output} ({pick_user_id_output}/{pick_session_id_output})")
 
-    # Collect all conversion tasks across runs
-    all_tasks = []
-    runs_to_process = root.runs if run_names_list is None else [root.get_run(name) for name in run_names_list]
+    # Create type-safe Pydantic configuration
+    selector_config = SelectorConfig(
+        input_type="picks",
+        output_type="picks",
+        input_object_name=pick_object_name,
+        input_user_id=pick_user_id,
+        input_session_id=pick_session_id,
+        output_object_name=pick_object_name_output,
+        output_user_id=pick_user_id_output,
+        output_session_id=pick_session_id_output,
+    )
 
-    for run in runs_to_process:
-        tasks = selector.get_conversion_tasks(run)
+    # Create reference configuration
+    if ref_mesh_provided:
+        reference_config = ReferenceConfig(
+            reference_type="mesh",
+            object_name=ref_mesh_object_name,
+            user_id=ref_mesh_user_id,
+            session_id=ref_mesh_session_id,
+        )
+    else:
+        reference_config = ReferenceConfig(
+            reference_type="segmentation",
+            object_name=ref_seg_name,
+            user_id=ref_seg_user_id,
+            session_id=ref_seg_session_id,
+            voxel_spacing=ref_voxel_spacing,
+        )
 
-        # Add reference information to each task
-        for task in tasks:
-            if ref_mesh_provided:
-                # Find reference mesh in the same run
-                ref_meshes = run.get_meshes(
-                    object_name=ref_mesh_object_name,
-                    user_id=ref_mesh_user_id,
-                    session_id=ref_mesh_session_id,
-                )
-                if ref_meshes:
-                    task["reference_mesh"] = ref_meshes[0]
-                    task["reference_segmentation"] = None
-                else:
-                    logger.warning(f"No reference mesh found in run {run.name}")
-                    continue
-            else:
-                # Find reference segmentation in the same run
-                ref_segs = run.get_segmentations(
-                    name=ref_seg_name,
-                    user_id=ref_seg_user_id,
-                    session_id=ref_seg_session_id,
-                    voxel_size=ref_voxel_spacing,
-                )
-                if ref_segs:
-                    task["reference_mesh"] = None
-                    task["reference_segmentation"] = ref_segs[0]
-                else:
-                    logger.warning(f"No reference segmentation found in run {run.name}")
-                    continue
+    config = TaskConfig(
+        type="single_selector_with_reference",
+        selector=selector_config,
+        reference=reference_config,
+    )
 
-            all_tasks.append(task)
-
-    if not all_tasks:
-        logger.warning("No matching picks/reference pairs found for exclusion filtering")
-        return
-
-    logger.info(f"Found {len(all_tasks)} tasks across {len(runs_to_process)} runs")
-
-    results = picks_exclusion_by_mesh_batch(
+    # Parallel discovery and processing - no sequential bottleneck!
+    results = picks_exclusion_by_mesh_lazy_batch(
         root=root,
-        conversion_tasks=all_tasks,
+        config=config,
         run_names=run_names_list,
         workers=workers,
     )

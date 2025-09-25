@@ -4,13 +4,15 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
-from copick_utils.cli.input_output_selection import InputOutputSelector, validate_placeholders
+from copick_utils.cli.input_output_selection import validate_placeholders
 from copick_utils.cli.util import (
     add_clustering_options,
     add_mesh_output_options,
     add_pick_input_options,
     add_workers_option,
 )
+from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.converters.surface_from_picks import surface_from_picks_lazy_batch
 
 
 @click.command(
@@ -86,7 +88,6 @@ def picks2surface(
         # Convert all manual picks using pattern matching
         picks2surface --pick-session-id "manual-.*" --mesh-session-id "surface-{input_session_id}"
     """
-    from copick_utils.converters.surface_from_picks import surface_from_picks_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -106,39 +107,32 @@ def picks2surface(
     elif clustering_method == "kmeans":
         clustering_params = {"n_clusters": clustering_n_clusters}
 
-    # Create input/output selector
-    selector = InputOutputSelector(
-        pick_object_name=pick_object_name,
-        pick_user_id=pick_user_id,
-        pick_session_id=pick_session_id,
-        mesh_object_name=mesh_object_name,
-        mesh_user_id=mesh_user_id,
-        mesh_session_id=mesh_session_id,
-        individual_meshes=individual_meshes,
+    logger.info(f"Converting picks to {surface_method} surface mesh for object '{pick_object_name}'")
+    logger.info(f"Source picks pattern: {pick_user_id}/{pick_session_id}")
+    logger.info(f"Target mesh template: {mesh_object_name} ({mesh_user_id}/{mesh_session_id})")
+
+    # Create type-safe Pydantic configuration
+    selector_config = SelectorConfig(
+        input_type="picks",
+        output_type="mesh",
+        input_object_name=pick_object_name,
+        input_user_id=pick_user_id,
+        input_session_id=pick_session_id,
+        output_object_name=mesh_object_name,
+        output_user_id=mesh_user_id,
+        output_session_id=mesh_session_id,
+        individual_outputs=individual_meshes,
     )
 
-    logger.info(f"Converting picks to {surface_method} surface mesh for object '{pick_object_name}'")
-    logger.info(f"Selection mode: {selector.get_mode_description()}")
-    logger.info(f"Source picks pattern: {pick_user_id}/{pick_session_id}")
-    logger.info(f"Target mesh template: {selector.mesh_object_name} ({mesh_user_id}/{mesh_session_id})")
+    config = TaskConfig(
+        type="single_selector",
+        selector=selector_config,
+    )
 
-    # Collect all conversion tasks across runs
-    all_tasks = []
-    runs_to_process = root.runs if run_names_list is None else [root.get_run(name) for name in run_names_list]
-
-    for run in runs_to_process:
-        tasks = selector.get_conversion_tasks(run)
-        all_tasks.extend(tasks)
-
-    if not all_tasks:
-        logger.warning("No matching picks found for conversion")
-        return
-
-    logger.info(f"Found {len(all_tasks)} conversion tasks across {len(runs_to_process)} runs")
-
-    results = surface_from_picks_batch(
+    # Parallel discovery and processing - no sequential bottleneck!
+    results = surface_from_picks_lazy_batch(
         root=root,
-        conversion_tasks=all_tasks,
+        config=config,
         run_names=run_names_list,
         workers=workers,
         surface_method=surface_method,

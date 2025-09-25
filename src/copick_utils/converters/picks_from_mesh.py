@@ -2,10 +2,15 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import trimesh as tm
+from copick.util.log import get_logger
 from scipy.stats.qmc import PoissonDisk
 
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+
 if TYPE_CHECKING:
-    from copick.models import CopickPicks, CopickRoot, CopickRun
+    from copick.models import CopickMesh, CopickPicks, CopickRoot, CopickRun
+
+logger = get_logger(__name__)
 
 
 def ensure_mesh(trimesh_object):
@@ -368,6 +373,92 @@ def _picks_from_mesh_worker(
         return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"]}
 
 
+def picks_from_mesh_standard(
+    mesh: "CopickMesh",
+    run: "CopickRun",
+    output_object_name: str,
+    output_session_id: str,
+    output_user_id: str,
+    sampling_type: str,
+    n_points: int,
+    voxel_spacing: float,
+    tomo_type: str = "wbp",
+    min_dist: Optional[float] = None,
+    edge_dist: float = 32.0,
+    include_normals: bool = False,
+    random_orientations: bool = False,
+    seed: Optional[int] = None,
+    **kwargs,
+) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
+    """
+    Standard signature wrapper for picks_from_mesh to match converter pattern.
+
+    Args:
+        mesh: CopickMesh object to sample from
+        run: Copick run object
+        output_object_name: Name for the output picks
+        output_session_id: Session ID for the output picks
+        output_user_id: User ID for the output picks
+        sampling_type: Type of sampling ('inside', 'surface', 'outside', 'vertices')
+        n_points: Number of points to sample (ignored for 'vertices')
+        voxel_spacing: Voxel spacing for coordinate scaling
+        tomo_type: Tomogram type for getting volume dimensions
+        min_dist: Minimum distance between points
+        edge_dist: Distance from volume edges in voxels
+        include_normals: Include surface normals as orientations
+        random_orientations: Generate random orientations for points
+        seed: Random seed for reproducible results
+        **kwargs: Additional arguments (ignored)
+
+    Returns:
+        Tuple of (CopickPicks object, stats dict) or None if conversion failed
+    """
+    try:
+        # Get the trimesh object
+        trimesh_obj = mesh.mesh
+        if trimesh_obj is None:
+            logger.error("Could not load mesh data")
+            return None
+
+        # Handle Scene objects
+        if isinstance(trimesh_obj, tm.Scene):
+            if len(trimesh_obj.geometry) == 0:
+                logger.error("Mesh is empty")
+                return None
+            trimesh_obj = tm.util.concatenate(list(trimesh_obj.geometry.values()))
+
+        # Call the original picks_from_mesh function
+        result_picks = picks_from_mesh(
+            mesh=trimesh_obj,
+            sampling_type=sampling_type,
+            n_points=n_points,
+            run=run,
+            object_name=output_object_name,
+            session_id=output_session_id,
+            user_id=output_user_id,
+            voxel_spacing=voxel_spacing,
+            tomo_type=tomo_type,
+            min_dist=min_dist,
+            edge_dist=edge_dist,
+            include_normals=include_normals,
+            random_orientations=random_orientations,
+            seed=seed,
+        )
+
+        if result_picks is None:
+            return None
+
+        # Get point count for stats
+        points, _ = result_picks.numpy()
+        stats = {"points_created": len(points) if points is not None else 0}
+
+        return result_picks, stats
+
+    except Exception as e:
+        logger.error(f"Error converting mesh to picks: {e}")
+        return None
+
+
 def picks_from_mesh_batch(
     root: "CopickRoot",
     mesh_object_name: str,
@@ -442,3 +533,10 @@ def picks_from_mesh_batch(
     )
 
     return results
+
+
+# Lazy batch converter for new architecture
+picks_from_mesh_lazy_batch = create_lazy_batch_converter(
+    converter_func=picks_from_mesh_standard,
+    task_description="Converting meshes to picks",
+)

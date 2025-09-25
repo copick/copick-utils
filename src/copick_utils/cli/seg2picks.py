@@ -4,13 +4,15 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
-from copick_utils.cli.input_output_selection import ConversionSelector, validate_conversion_placeholders
+from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import (
     add_picks_output_options,
     add_segmentation_input_options,
     add_segmentation_processing_options,
     add_workers_option,
 )
+from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.converters.picks_from_segmentation import picks_from_segmentation_lazy_batch
 
 
 @click.command(
@@ -67,7 +69,6 @@ def seg2picks(
         # Convert all manual segmentations using pattern matching
         copick convert seg2picks --seg-session-id "manual-.*" --pick-session-id "centroid-{input_session_id}"
     """
-    from copick_utils.converters.picks_from_segmentation import picks_from_segmentation_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -80,11 +81,16 @@ def seg2picks(
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
-    # Create conversion selector
-    selector = ConversionSelector(
+    logger.info(f"Converting segmentation to picks for '{seg_name}'")
+    logger.info(f"Source segmentation pattern: {seg_name} ({seg_user_id}/{seg_session_id})")
+    logger.info(f"Target picks template: {pick_object_name} ({pick_user_id}/{pick_session_id})")
+    logger.info(f"Label {segmentation_idx}, particle size: {min_particle_size}-{max_particle_size}")
+
+    # Create type-safe Pydantic configuration
+    selector_config = SelectorConfig(
         input_type="segmentation",
         output_type="picks",
-        input_object_name=pick_object_name,  # For picks, we use pick_object_name as both input and output object
+        input_object_name=pick_object_name,
         input_user_id=seg_user_id,
         input_session_id=seg_session_id,
         output_object_name=pick_object_name,
@@ -94,29 +100,15 @@ def seg2picks(
         voxel_spacing=voxel_spacing,
     )
 
-    logger.info(f"Converting segmentation to picks for '{seg_name}'")
-    logger.info(f"Selection mode: {selector.get_mode_description()}")
-    logger.info(f"Source segmentation pattern: {seg_name} ({seg_user_id}/{seg_session_id})")
-    logger.info(f"Target picks template: {pick_object_name} ({pick_user_id}/{pick_session_id})")
-    logger.info(f"Label {segmentation_idx}, particle size: {min_particle_size}-{max_particle_size}")
+    config = TaskConfig(
+        type="single_selector",
+        selector=selector_config,
+    )
 
-    # Collect all conversion tasks across runs
-    all_tasks = []
-    runs_to_process = root.runs if run_names_list is None else [root.get_run(name) for name in run_names_list]
-
-    for run in runs_to_process:
-        tasks = selector.get_conversion_tasks(run)
-        all_tasks.extend(tasks)
-
-    if not all_tasks:
-        logger.warning("No matching segmentations found for conversion")
-        return
-
-    logger.info(f"Found {len(all_tasks)} conversion tasks across {len(runs_to_process)} runs")
-
-    results = picks_from_segmentation_batch(
+    # Parallel discovery and processing - no sequential bottleneck!
+    results = picks_from_segmentation_lazy_batch(
         root=root,
-        conversion_tasks=all_tasks,
+        config=config,
         run_names=run_names_list,
         workers=workers,
         segmentation_idx=segmentation_idx,
