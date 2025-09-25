@@ -193,6 +193,16 @@ def discover_tasks_for_run(run: "CopickRun", selector_config: SelectorConfig) ->
     if not matching_inputs:
         return []
 
+    # Generate type-specific input parameter name
+    if selector_config.input_type == "mesh":
+        input_param_name = "mesh"
+    elif selector_config.input_type == "segmentation":
+        input_param_name = "segmentation"
+    elif selector_config.input_type == "picks":
+        input_param_name = "picks"
+    else:
+        input_param_name = "input_object"  # fallback
+
     tasks = []
     for input_object in matching_inputs:
         # Resolve output session ID from template
@@ -202,7 +212,7 @@ def discover_tasks_for_run(run: "CopickRun", selector_config: SelectorConfig) ->
         )
 
         task = {
-            "input_object": input_object,
+            input_param_name: input_object,  # Use type-specific parameter name
             "output_object_name": selector_config.output_object_name,
             "output_user_id": selector_config.output_user_id,
             "output_session_id": resolved_session_id,
@@ -399,7 +409,16 @@ def lazy_conversion_worker(
                             accumulated_stats[key] = 0
                         accumulated_stats[key] += value
                 else:
-                    input_obj = task.get("input_object")
+                    # Try to find the input object using different possible parameter names
+                    input_obj = (
+                        task.get("input_object")
+                        or task.get("segmentation")
+                        or task.get("mesh")
+                        or task.get("picks")
+                        or task.get("segmentation1")
+                        or task.get("mesh1")
+                        or task.get("picks1")
+                    )
                     session_id = getattr(input_obj, "session_id", "unknown")
                     all_errors.append(f"No output generated for {session_id} in {run.name}")
 
