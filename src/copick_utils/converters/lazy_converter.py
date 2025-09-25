@@ -301,11 +301,11 @@ def pair_tasks_within_run(
 
             # Create combined task for boolean operation
             paired_task = {
-                "input_segmentation": task1["input_object"],
-                "input2_segmentation": task2["input_object"],
-                "segmentation_object_name": task1["output_object_name"],
-                "segmentation_user_id": task1["output_user_id"],
-                "segmentation_session_id": task1["output_session_id"],
+                "segmentation1": task1["input_object"],
+                "segmentation2": task2["input_object"],
+                "object_name": task1["output_object_name"],
+                "user_id": task1["output_user_id"],
+                "session_id": task1["output_session_id"],
                 # Copy other parameters from task1
                 "voxel_spacing": task1.get("voxel_spacing"),
                 "is_multilabel": False,  # Boolean ops work on binary
