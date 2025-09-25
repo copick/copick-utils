@@ -4,6 +4,7 @@ from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 
+from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import (
     add_distance_options,
     add_mesh_input_options,
@@ -12,7 +13,7 @@ from copick_utils.cli.util import (
     add_workers_option,
 )
 from copick_utils.converters.config_models import ReferenceConfig, SelectorConfig, TaskConfig
-from copick_utils.logical.distance_operations import limit_mesh_by_distance_lazy_batch, validate_conversion_placeholders
+from copick_utils.logical.distance_operations import limit_mesh_by_distance_lazy_batch
 
 
 @click.command(
