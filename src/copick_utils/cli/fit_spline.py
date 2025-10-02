@@ -3,6 +3,9 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
+from copick.util.uri import parse_copick_uri
+
+from copick_utils.cli.util import add_input_option, add_output_option
 
 
 @click.command(
@@ -17,20 +20,13 @@ from copick.util.log import get_logger
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
+@add_input_option("segmentation")
 @optgroup.option(
-    "--segmentation-name",
+    "--voxel-spacing",
+    "-vs",
+    type=float,
     required=True,
-    help="Name of the segmentations to process.",
-)
-@optgroup.option(
-    "--segmentation-user-id",
-    required=True,
-    help="User ID of the segmentations to process.",
-)
-@optgroup.option(
-    "--session-id-pattern",
-    required=True,
-    help="Session ID pattern (regex) or exact session ID to match segmentations.",
+    help="Voxel spacing for coordinate scaling.",
 )
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
@@ -80,29 +76,14 @@ from copick.util.log import get_logger
     default=8,
     help="Number of worker processes.",
 )
-@optgroup.group("\nOutput Options", help="Options related to output segmentations.")
-@optgroup.option(
-    "--output-session-id-template",
-    help="Template for output session IDs. Use {input_session_id} as placeholder. Default: same as input.",
-)
-@optgroup.option(
-    "--output-user-id",
-    default="spline",
-    help="User ID for output picks.",
-)
-@optgroup.option(
-    "--voxel-spacing",
-    type=float,
-    required=True,
-    help="Voxel spacing for coordinate scaling.",
-)
+@optgroup.group("\nOutput Options", help="Options related to output picks.")
+@add_output_option("picks", default_tool="spline")
 @add_debug_option
 def fit_spline(
     config,
     run_names,
-    segmentation_name,
-    segmentation_user_id,
-    session_id_pattern,
+    input_uri,
+    voxel_spacing,
     spacing_distance,
     smoothing_factor,
     degree,
@@ -111,24 +92,28 @@ def fit_spline(
     curvature_threshold,
     max_iterations,
     workers,
-    output_session_id_template,
-    output_user_id,
-    voxel_spacing,
+    output_uri,
     debug,
 ):
     """Fit 3D splines to skeletonized segmentations and generate picks with orientations.
 
+    \b
+    URI Format:
+        Segmentations: name:user_id/session_id@voxel_spacing
+        Picks: object_name:user_id/session_id
+
+    \b
     This command fits regularized 3D parametric splines to skeleton volumes and samples
     points along the spline at regular intervals. Orientations are computed based on
     the spline direction.
 
-    This is designed to work with the output of the skeletonize command, using regex
-    pattern matching to process multiple skeletons in batch.
-
+    \b
     Examples:
-    - Process skeletonized components: --session-id-pattern "inst-.*" --spacing-distance 4.4
-    - Process specific skeleton: --session-id-pattern "skel-0" --spacing-distance 2.0
-    - Custom output naming: --output-session-id-template "spline-{input_session_id}"
+        # Fit splines to skeletonized components
+        copick process fit_spline -i "skeleton:skel/inst-.*@10.0" -o "skeleton:spline/spline-{input_session_id}" --spacing-distance 4.4 --voxel-spacing 10.0
+
+        # Process specific skeleton
+        copick process fit_spline -i "skeleton:skel/skel-0@10.0" -o "skeleton:spline/spline-0" --spacing-distance 2.0 --voxel-spacing 10.0
     """
     from copick_utils.process.spline_fitting import fit_spline_batch
 
@@ -137,6 +122,25 @@ def fit_spline(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
+    # Parse input URI
+    try:
+        input_params = parse_copick_uri(input_uri, "segmentation")
+    except ValueError as e:
+        raise click.BadParameter(f"Invalid input URI: {e}") from e
+
+    segmentation_name = input_params["name"]
+    segmentation_user_id = input_params["user_id"]
+    session_id_pattern = input_params["session_id"]
+
+    # Parse output URI
+    try:
+        output_params = parse_copick_uri(output_uri, "picks")
+    except ValueError as e:
+        raise click.BadParameter(f"Invalid output URI: {e}") from e
+
+    output_user_id = output_params["user_id"]
+    output_session_id_template = output_params["session_id"]
+
     logger.info(f"Fitting splines to segmentations '{segmentation_name}'")
     logger.info(f"Source segmentations: {segmentation_user_id} matching pattern '{session_id_pattern}'")
     logger.info(f"Spacing distance: {spacing_distance}, degree: {degree}")
@@ -144,16 +148,7 @@ def fit_spline(
     logger.info(f"Compute transforms: {compute_transforms}, output user ID: {output_user_id}")
     logger.info(f"Curvature threshold: {curvature_threshold}, max iterations: {max_iterations}")
     logger.info(f"Voxel spacing: {voxel_spacing}")
-
-    if output_session_id_template:
-        logger.info(f"Output session ID template: '{output_session_id_template}'")
-    else:
-        logger.info("Output session IDs: same as input")
-
-    if run_names_list:
-        logger.info(f"Processing {len(run_names_list)} specific runs")
-    else:
-        logger.info(f"Processing all {len(root.runs)} runs")
+    logger.info(f"Output session ID template: '{output_session_id_template}'")
 
     results = fit_spline_batch(
         root=root,

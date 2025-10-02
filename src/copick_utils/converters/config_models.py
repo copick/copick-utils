@@ -76,6 +76,69 @@ class SelectorConfig(BaseModel):
 
         return v
 
+    @classmethod
+    def from_uris(
+        cls,
+        input_uri: str,
+        input_type: Literal["picks", "mesh", "segmentation"],
+        output_uri: str,
+        output_type: Literal["picks", "mesh", "segmentation"],
+        individual_outputs: bool = False,
+    ) -> "SelectorConfig":
+        """Create SelectorConfig from input/output URIs.
+
+        Args:
+            input_uri: Input copick URI string.
+            input_type: Type of input object ('picks', 'mesh', 'segmentation').
+            output_uri: Output copick URI string.
+            output_type: Type of output object ('picks', 'mesh', 'segmentation').
+            individual_outputs: Whether to create individual outputs.
+
+        Returns:
+            SelectorConfig instance with parsed URI components.
+
+        Raises:
+            ValueError: If URI parsing fails or required fields are missing.
+        """
+        from copick.util.uri import parse_copick_uri
+
+        # Parse input URI
+        input_params = parse_copick_uri(input_uri, input_type)
+
+        # Parse output URI
+        output_params = parse_copick_uri(output_uri, output_type)
+
+        # Extract common fields
+        input_object_name = input_params.get("object_name") or input_params.get("name")
+        output_object_name = output_params.get("object_name") or output_params.get("name")
+
+        # Build config dict
+        config_dict = {
+            "input_type": input_type,
+            "output_type": output_type,
+            "input_object_name": input_object_name,
+            "input_user_id": input_params["user_id"],
+            "input_session_id": input_params["session_id"],
+            "output_object_name": output_object_name,
+            "output_user_id": output_params["user_id"],
+            "output_session_id": output_params["session_id"],
+            "individual_outputs": individual_outputs,
+        }
+
+        # Add segmentation-specific fields if needed
+        if input_type == "segmentation" or output_type == "segmentation":
+            seg_name = input_params.get("name") or output_params.get("name")
+            voxel_spacing = input_params.get("voxel_spacing") or output_params.get("voxel_spacing")
+
+            config_dict["segmentation_name"] = seg_name
+
+            # Convert voxel_spacing to float if it's a string
+            if isinstance(voxel_spacing, str) and voxel_spacing != "*":
+                voxel_spacing = float(voxel_spacing)
+            config_dict["voxel_spacing"] = voxel_spacing
+
+        return cls(**config_dict)
+
 
 class ReferenceConfig(BaseModel):
     """Pydantic model for reference discovery configuration."""
@@ -103,6 +166,50 @@ class ReferenceConfig(BaseModel):
         if v is None:
             raise ValueError("object_name is required for reference configuration")
         return v
+
+    @classmethod
+    def from_uri(
+        cls,
+        uri: str,
+        reference_type: Literal["mesh", "segmentation"],
+        additional_params: Optional[Dict[str, Any]] = None,
+    ) -> "ReferenceConfig":
+        """Create ReferenceConfig from a URI.
+
+        Args:
+            uri: Copick URI string for the reference object.
+            reference_type: Type of reference ('mesh' or 'segmentation').
+            additional_params: Additional parameters to include in the config.
+
+        Returns:
+            ReferenceConfig instance with parsed URI components.
+
+        Raises:
+            ValueError: If URI parsing fails or required fields are missing.
+        """
+        from copick.util.uri import parse_copick_uri
+
+        # Parse URI
+        params = parse_copick_uri(uri, reference_type)
+
+        # Extract fields based on type
+        object_name = params.get("object_name") or params.get("name")
+        user_id = params["user_id"]
+        session_id = params["session_id"]
+        voxel_spacing = params.get("voxel_spacing")
+
+        # Convert voxel_spacing to float if it's a string
+        if voxel_spacing and isinstance(voxel_spacing, str) and voxel_spacing != "*":
+            voxel_spacing = float(voxel_spacing)
+
+        return cls(
+            reference_type=reference_type,
+            object_name=object_name,
+            user_id=user_id,
+            session_id=session_id,
+            voxel_spacing=voxel_spacing,
+            additional_params=additional_params or {},
+        )
 
 
 class TaskConfig(BaseModel):
@@ -148,66 +255,176 @@ class TaskConfig(BaseModel):
         return v
 
 
-# Convenience functions for creating configurations
+# URI-based convenience functions (simplified interface)
 def create_simple_config(
+    input_uri: str,
     input_type: Literal["picks", "mesh", "segmentation"],
+    output_uri: str,
     output_type: Literal["picks", "mesh", "segmentation"],
-    input_object_name: str,
-    input_user_id: str,
-    input_session_id: str,
-    output_object_name: str,
-    output_user_id: str = "converter",
-    output_session_id: str = "0",
-    **kwargs,
+    individual_outputs: bool = False,
 ) -> TaskConfig:
-    """Create a simple single-selector task configuration."""
-    selector_config = SelectorConfig(
+    """Create a simple single-selector task configuration from URIs.
+
+    Args:
+        input_uri: Input copick URI string.
+        input_type: Type of input object.
+        output_uri: Output copick URI string.
+        output_type: Type of output object.
+        individual_outputs: Whether to create individual outputs.
+
+    Returns:
+        TaskConfig instance ready for use.
+
+    Example:
+        config = create_simple_config_from_uris(
+            input_uri="ribosome:user1/manual-001",
+            input_type="picks",
+            output_uri="ribosome:picks2mesh/mesh-001",
+            output_type="mesh",
+        )
+    """
+    selector_config = SelectorConfig.from_uris(
+        input_uri=input_uri,
         input_type=input_type,
+        output_uri=output_uri,
         output_type=output_type,
-        input_object_name=input_object_name,
-        input_user_id=input_user_id,
-        input_session_id=input_session_id,
-        output_object_name=output_object_name,
-        output_user_id=output_user_id,
-        output_session_id=output_session_id,
-        **kwargs,
+        individual_outputs=individual_outputs,
     )
 
     return TaskConfig(type="single_selector", selector=selector_config)
 
 
-def create_reference_config(
-    selector_config: SelectorConfig,
-    reference_type: Literal["mesh", "segmentation"],
-    reference_object_name: str,
-    reference_user_id: str,
-    reference_session_id: str,
-    reference_voxel_spacing: Optional[float] = None,
-    **additional_params,
+def create_dual_selector_config(
+    input1_uri: str,
+    input2_uri: str,
+    input_type: Literal["mesh", "segmentation"],
+    output_uri: str,
+    output_type: Literal["mesh", "segmentation"],
+    pairing_method: str = "index_order",
+    individual_outputs: bool = False,
 ) -> TaskConfig:
-    """Create a single-selector-with-reference task configuration."""
-    ref_config = ReferenceConfig(
-        reference_type=reference_type,
-        object_name=reference_object_name,
-        user_id=reference_user_id,
-        session_id=reference_session_id,
-        voxel_spacing=reference_voxel_spacing,
-        additional_params=additional_params,
+    """Create a dual-selector task configuration from URIs.
+
+    Args:
+        input1_uri: First input copick URI string.
+        input2_uri: Second input copick URI string.
+        input_type: Type of input objects (both inputs must be same type).
+        output_uri: Output copick URI string.
+        output_type: Type of output object.
+        pairing_method: How to pair inputs ("index_order", etc.).
+        individual_outputs: Whether to create individual outputs.
+
+    Returns:
+        TaskConfig instance ready for use.
+
+    Example:
+        config = create_dual_selector_config_from_uris(
+            input1_uri="membrane:user1/manual-001",
+            input2_uri="vesicle:user1/auto-001",
+            input_type="mesh",
+            output_uri="combined:meshop/union-001",
+            output_type="mesh",
+        )
+    """
+    from copick.util.uri import parse_copick_uri
+
+    # Parse both inputs
+    parse_copick_uri(input1_uri, input_type)
+    input2_params = parse_copick_uri(input2_uri, input_type)
+    parse_copick_uri(output_uri, output_type)
+
+    # Create first selector from URIs
+    selector1_config = SelectorConfig.from_uris(
+        input_uri=input1_uri,
+        input_type=input_type,
+        output_uri=output_uri,
+        output_type=output_type,
+        individual_outputs=individual_outputs,
     )
 
-    return TaskConfig(type="single_selector_with_reference", selector=selector_config, reference=ref_config)
+    # Create second selector manually (output fields not used)
+    input2_object_name = input2_params.get("object_name") or input2_params.get("name")
 
+    selector2_dict = {
+        "input_type": input_type,
+        "output_type": output_type,
+        "input_object_name": input2_object_name,
+        "input_user_id": input2_params["user_id"],
+        "input_session_id": input2_params["session_id"],
+        "output_object_name": input2_object_name,  # Not used
+        "output_user_id": input2_params["user_id"],  # Not used
+        "output_session_id": input2_params["session_id"],  # Not used
+        "individual_outputs": False,
+    }
 
-def create_boolean_config(
-    selector1_config: SelectorConfig,
-    selector2_config: SelectorConfig,
-    pairing_method: str = "index_order",
-    **additional_params,
-) -> TaskConfig:
-    """Create a dual-selector task configuration for boolean operations."""
+    # Add segmentation-specific fields if needed
+    if input_type == "segmentation":
+        seg_name = input2_params.get("name")
+        voxel_spacing = input2_params.get("voxel_spacing")
+
+        if isinstance(voxel_spacing, str) and voxel_spacing != "*":
+            voxel_spacing = float(voxel_spacing)
+
+        selector2_dict["segmentation_name"] = seg_name
+        selector2_dict["voxel_spacing"] = voxel_spacing
+
+    selector2_config = SelectorConfig(**selector2_dict)
+
     return TaskConfig(
         type="dual_selector",
         selectors=[selector1_config, selector2_config],
         pairing_method=pairing_method,
+    )
+
+
+def create_reference_config(
+    input_uri: str,
+    input_type: Literal["picks", "mesh", "segmentation"],
+    output_uri: str,
+    output_type: Literal["picks", "mesh", "segmentation"],
+    reference_uri: str,
+    reference_type: Literal["mesh", "segmentation"],
+    additional_params: Optional[Dict[str, Any]] = None,
+) -> TaskConfig:
+    """Create a single-selector-with-reference task configuration from URIs.
+
+    Args:
+        input_uri: Input copick URI string.
+        input_type: Type of input object.
+        output_uri: Output copick URI string.
+        output_type: Type of output object.
+        reference_uri: Reference copick URI string.
+        reference_type: Type of reference object.
+        additional_params: Additional parameters for reference config.
+
+    Returns:
+        TaskConfig instance ready for use.
+
+    Example:
+        config = create_reference_config_from_uris(
+            input_uri="ribosome:user1/all-001",
+            input_type="picks",
+            output_uri="ribosome:picksin/inside-001",
+            output_type="picks",
+            reference_uri="boundary:user1/boundary-001",
+            reference_type="mesh",
+        )
+    """
+    selector_config = SelectorConfig.from_uris(
+        input_uri=input_uri,
+        input_type=input_type,
+        output_uri=output_uri,
+        output_type=output_type,
+    )
+
+    reference_config = ReferenceConfig.from_uri(
+        uri=reference_uri,
+        reference_type=reference_type,
         additional_params=additional_params,
+    )
+
+    return TaskConfig(
+        type="single_selector_with_reference",
+        selector=selector_config,
+        reference=reference_config,
     )

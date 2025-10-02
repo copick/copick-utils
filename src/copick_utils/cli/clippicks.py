@@ -5,16 +5,17 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
+from copick.util.uri import parse_copick_uri
 
 from copick_utils.cli.util import (
     add_distance_options,
-    add_mesh_input_options,
-    add_pick_input_options,
-    add_picks_output_options,
-    add_segmentation_input_options,
+    add_input_option,
+    add_output_option,
+    add_reference_mesh_option,
+    add_reference_seg_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import ReferenceConfig, SelectorConfig, TaskConfig
+from copick_utils.converters.config_models import create_reference_config
 from copick_utils.logical.distance_operations import limit_picks_by_distance_lazy_batch
 
 
@@ -31,43 +32,36 @@ from copick_utils.logical.distance_operations import limit_picks_by_distance_laz
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@add_pick_input_options
+@add_input_option("picks")
 @optgroup.group("\nReference Options", help="Options for reference surface (provide either mesh or segmentation).")
-@add_mesh_input_options(prefix="ref", required=False)
-@add_segmentation_input_options(
-    prefix="ref",
-    include_multilabel=False,
-    required=False,
-)
+@add_reference_mesh_option(required=False)
+@add_reference_seg_option(required=False)
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_distance_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output picks.")
-@add_picks_output_options(default_tool="clippicks")
+@add_output_option("picks", default_tool="clippicks")
 @add_debug_option
 def clippicks(
     config,
     run_names,
-    pick_object_name,
-    pick_user_id,
-    pick_session_id,
-    ref_mesh_object_name,
-    ref_mesh_user_id,
-    ref_mesh_session_id,
-    ref_seg_name,
-    ref_seg_user_id,
-    ref_seg_session_id,
-    ref_voxel_spacing,
+    input_uri,
+    ref_mesh_uri,
+    ref_seg_uri,
     max_distance,
     mesh_voxel_spacing,
     workers,
-    pick_object_name_output,
-    pick_user_id_output,
-    pick_session_id_output,
+    output_uri,
     debug,
 ):
     """
     Limit picks to those within a certain distance of a reference surface.
+
+    \b
+    URI Format:
+        Picks: object_name:user_id/session_id
+        Meshes: object_name:user_id/session_id
+        Segmentations: name:user_id/session_id@voxel_spacing
 
     \b
     The reference surface can be either a mesh or a segmentation.
@@ -76,85 +70,63 @@ def clippicks(
     \b
     Examples:
         # Limit picks to those near reference mesh surface
-        copick clippicks --pick-session-id "all-001" --ref-mesh-session-id "boundary-001" --max-distance 50.0 --pick-session-id "limited-001"
-        \b
+        copick logical clippicks -i "ribosome:user1/all-001" -rm "boundary:user1/boundary-001" -o "ribosome:clippicks/limited-001" --max-distance 50.0
+
         # Limit using segmentation as reference
-        copick clippicks --pick-session-id "all-001" --ref-seg-session-id "mask-001" --ref-voxel-spacing 10.0 --max-distance 100.0 --pick-session-id "limited-001"
+        copick logical clippicks -i "ribosome:user1/all-001" -rs "mask:user1/mask-001@10.0" -o "ribosome:clippicks/limited-001" --max-distance 100.0
     """
 
     logger = get_logger(__name__, debug=debug)
 
     # Validate that exactly one reference type is provided
-    ref_mesh_provided = bool(ref_mesh_object_name or ref_mesh_user_id or ref_mesh_session_id)
-    ref_seg_provided = bool(ref_seg_name or ref_seg_user_id or ref_seg_session_id)
-
-    if not ref_mesh_provided and not ref_seg_provided:
-        raise click.BadParameter("Must provide either reference mesh or reference segmentation")
-    if ref_mesh_provided and ref_seg_provided:
-        raise click.BadParameter("Cannot provide both reference mesh and reference segmentation")
-
-    if ref_seg_provided and not ref_voxel_spacing:
-        raise click.BadParameter("--ref-voxel-spacing is required when using reference segmentation")
+    if not ref_mesh_uri and not ref_seg_uri:
+        raise click.BadParameter("Must provide either --ref-mesh or --ref-seg")
+    if ref_mesh_uri and ref_seg_uri:
+        raise click.BadParameter("Cannot provide both --ref-mesh and --ref-seg")
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    logger.info(f"Limiting picks by distance for object '{pick_object_name}'")
-    logger.info(f"Source picks pattern: {pick_user_id}/{pick_session_id}")
-    if ref_mesh_provided:
-        logger.info(f"Reference mesh: {ref_mesh_object_name} ({ref_mesh_user_id}/{ref_mesh_session_id})")
+    # Determine reference type and URI
+    reference_uri = ref_mesh_uri or ref_seg_uri
+    reference_type = "mesh" if ref_mesh_uri else "segmentation"
+
+    # Create config directly from URIs with additional params
+    try:
+        task_config = create_reference_config(
+            input_uri=input_uri,
+            input_type="picks",
+            output_uri=output_uri,
+            output_type="picks",
+            reference_uri=reference_uri,
+            reference_type=reference_type,
+            additional_params={"max_distance": max_distance, "mesh_voxel_spacing": mesh_voxel_spacing},
+        )
+    except ValueError as e:
+        raise click.BadParameter(str(e)) from e
+
+    # Extract parameters for logging
+    input_params = parse_copick_uri(input_uri, "picks")
+    output_params = parse_copick_uri(output_uri, "picks")
+    ref_params = parse_copick_uri(reference_uri, reference_type)
+
+    logger.info(f"Limiting picks by distance for object '{input_params['object_name']}'")
+    logger.info(f"Source picks pattern: {input_params['user_id']}/{input_params['session_id']}")
+    if reference_type == "mesh":
+        logger.info(f"Reference mesh: {ref_params['object_name']} ({ref_params['user_id']}/{ref_params['session_id']})")
     else:
-        logger.info(f"Reference segmentation: {ref_seg_name} ({ref_seg_user_id}/{ref_seg_session_id})")
+        logger.info(
+            f"Reference segmentation: {ref_params['name']} ({ref_params['user_id']}/{ref_params['session_id']})",
+        )
     logger.info(f"Maximum distance: {max_distance} angstroms")
-    logger.info(f"Target picks template: {pick_object_name_output} ({pick_user_id_output}/{pick_session_id_output})")
-
-    # Create type-safe Pydantic configuration
-    selector_config = SelectorConfig(
-        input_type="picks",
-        output_type="picks",
-        input_object_name=pick_object_name,
-        input_user_id=pick_user_id,
-        input_session_id=pick_session_id,
-        output_object_name=pick_object_name_output,
-        output_user_id=pick_user_id_output,
-        output_session_id=pick_session_id_output,
-    )
-
-    # Create reference configuration
-    if ref_mesh_provided:
-        reference_config = ReferenceConfig(
-            reference_type="mesh",
-            object_name=ref_mesh_object_name,
-            user_id=ref_mesh_user_id,
-            session_id=ref_mesh_session_id,
-            additional_params={
-                "max_distance": max_distance,
-                "mesh_voxel_spacing": mesh_voxel_spacing,
-            },
-        )
-    else:
-        reference_config = ReferenceConfig(
-            reference_type="segmentation",
-            object_name=ref_seg_name,
-            user_id=ref_seg_user_id,
-            session_id=ref_seg_session_id,
-            voxel_spacing=ref_voxel_spacing,
-            additional_params={
-                "max_distance": max_distance,
-                "mesh_voxel_spacing": mesh_voxel_spacing,
-            },
-        )
-
-    config = TaskConfig(
-        type="single_selector_with_reference",
-        selector=selector_config,
-        reference=reference_config,
+    logger.info(
+        f"Target picks template: {output_params['object_name']} ({output_params['user_id']}/{output_params['session_id']})",
     )
 
     # Parallel discovery and processing - no sequential bottleneck!
     results = limit_picks_by_distance_lazy_batch(
         root=root,
-        config=config,
+        config=task_config,
         run_names=run_names_list,
         workers=workers,
     )

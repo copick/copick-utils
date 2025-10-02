@@ -3,15 +3,15 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
+from copick.util.uri import parse_copick_uri
 
-from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import (
-    add_mesh_input_options,
+    add_input_option,
     add_mesh_voxelization_options,
-    add_segmentation_output_options,
+    add_output_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.converters.config_models import create_simple_config
 from copick_utils.converters.segmentation_from_mesh import segmentation_from_mesh_lazy_batch
 
 
@@ -28,7 +28,7 @@ from copick_utils.converters.segmentation_from_mesh import segmentation_from_mes
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@add_mesh_input_options
+@add_input_option("mesh")
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_mesh_voxelization_options
 @optgroup.option(
@@ -39,57 +39,59 @@ from copick_utils.converters.segmentation_from_mesh import segmentation_from_mes
 )
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
-@add_segmentation_output_options(default_tool="mesh2seg", include_tomo_type=False)
+@add_output_option("segmentation", default_tool="mesh2seg")
 @add_debug_option
 def mesh2seg(
     config,
     run_names,
-    mesh_object_name,
-    mesh_user_id,
-    mesh_session_id,
+    input_uri,
     mode,
     boundary_sampling_density,
     invert,
     tomo_type,
     workers,
-    seg_name_output,
-    seg_user_id_output,
-    seg_session_id_output,
-    voxel_spacing_output,
-    multilabel_output,
+    output_uri,
     debug,
 ):
     """
     Convert meshes to segmentation volumes with multiple voxelization modes.
 
     \b
+    URI Format:
+        Meshes: object_name:user_id/session_id
+        Segmentations: name:user_id/session_id@voxel_spacing?multilabel=true
+
+    \b
+    Pattern Matching:
+        - Exact: "membrane:user1/session1"
+        - Glob: "membrane:user1/session*" or "membrane:*/manual-*"
+        - Regex: "re:membrane:user\\d+/session\\d+"
+        - Wildcard: "membrane" (expands to "membrane:*/*")
+
+    \b
     Voxelization modes:
-    - watertight: Fill entire interior volume using ray casting
-    - boundary: Voxelize only the surface with controllable sampling density
+        - watertight: Fill entire interior volume using ray casting
+        - boundary: Voxelize only the surface with controllable sampling density
 
     \b
     Additional options:
-    - --invert: Fill outside instead of inside (watertight mode)
-    - --boundary-sampling-density: Surface sampling density (boundary mode)
-
-    \b
-    Supports flexible input/output selection modes:
-    - One-to-one: exact session ID → exact session ID
-    - Many-to-many: regex pattern → template with {input_session_id}
+        - --invert: Fill outside instead of inside (watertight mode)
+        - --boundary-sampling-density: Surface sampling density (boundary mode)
 
     \b
     Examples:
         # Convert mesh interior to segmentation (default)
-        copick convert mesh2seg --mesh-session-id "manual-001" --seg-session-id "from-mesh-001"
-        \b
+        copick convert mesh2seg -i "membrane:user1/manual-001" -o "membrane:mesh2seg/from-mesh-001@10.0"
+
         # Convert mesh boundary only with high sampling density
-        copick convert mesh2seg --mode boundary --boundary-sampling-density 2.0 --mesh-session-id "manual-001" --seg-session-id "boundary-001"
-        \b
+        copick convert mesh2seg --mode boundary --boundary-sampling-density 2.0 \\
+            -i "membrane:user1/manual-001" -o "membrane:mesh2seg/boundary-001@10.0"
+
         # Invert watertight mesh (fill outside)
-        copick convert mesh2seg --invert --mesh-session-id "manual-001" --seg-session-id "inverted-001"
-        \b
-        # Convert all manual meshes using pattern matching
-        copick convert mesh2seg --mesh-session-id "manual-.*" --seg-session-id "from-mesh-{input_session_id}"
+        copick convert mesh2seg --invert -i "membrane:user1/manual-001" -o "membrane:mesh2seg/inverted-001@10.0"
+
+        # Convert all manual meshes using pattern matching with multilabel output
+        copick convert mesh2seg -i "membrane:user1/manual-.*" -o "membrane:mesh2seg/from-mesh-{input_session_id}@10.0?multilabel=true"
     """
 
     logger = get_logger(__name__, debug=debug)
@@ -97,44 +99,41 @@ def mesh2seg(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Validate placeholder requirements
+    # Create config directly from URIs
     try:
-        validate_conversion_placeholders(mesh_session_id, seg_session_id_output, individual_outputs=False)
+        task_config = create_simple_config(
+            input_uri=input_uri,
+            input_type="mesh",
+            output_uri=output_uri,
+            output_type="segmentation",
+        )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
-    logger.info(f"Converting mesh to segmentation for object '{mesh_object_name}'")
-    logger.info(f"Source mesh pattern: {mesh_user_id}/{mesh_session_id}")
-    logger.info(f"Target segmentation template: {seg_name_output} ({seg_user_id_output}/{seg_session_id_output})")
+    # Extract parameters for logging and processing
+    input_params = parse_copick_uri(input_uri, "mesh")
+    output_params = parse_copick_uri(output_uri, "segmentation")
+
+    voxel_spacing_output = output_params["voxel_spacing"]
+    if isinstance(voxel_spacing_output, str):
+        voxel_spacing_output = float(voxel_spacing_output)
+    multilabel_output = output_params.get("multilabel", False)
+
+    logger.info(f"Converting mesh to segmentation for object '{input_params['object_name']}'")
+    logger.info(f"Source mesh pattern: {input_params['user_id']}/{input_params['session_id']}")
+    logger.info(
+        f"Target segmentation template: {output_params['name']} ({output_params['user_id']}/{output_params['session_id']})",
+    )
     logger.info(f"Mode: {mode}, voxel spacing: {voxel_spacing_output}, multilabel: {multilabel_output}")
     if mode == "boundary":
         logger.info(f"Boundary sampling density: {boundary_sampling_density}")
     if invert:
         logger.info("Volume inversion: enabled")
 
-    # Create type-safe Pydantic configuration
-    selector_config = SelectorConfig(
-        input_type="mesh",
-        output_type="segmentation",
-        input_object_name=mesh_object_name,
-        input_user_id=mesh_user_id,
-        input_session_id=mesh_session_id,
-        output_object_name=seg_name_output,
-        output_user_id=seg_user_id_output,
-        output_session_id=seg_session_id_output,
-        segmentation_name=seg_name_output,
-        voxel_spacing=voxel_spacing_output,
-    )
-
-    config = TaskConfig(
-        type="single_selector",
-        selector=selector_config,
-    )
-
     # Parallel discovery and processing - no sequential bottleneck!
     results = segmentation_from_mesh_lazy_batch(
         root=root,
-        config=config,
+        config=task_config,
         run_names=run_names_list,
         workers=workers,
         voxel_spacing=voxel_spacing_output,

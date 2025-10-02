@@ -4,14 +4,14 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
+from copick.util.uri import parse_copick_uri
 
-from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import (
-    add_mesh_input_options,
-    add_mesh_output_options,
+    add_input_option,
+    add_output_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.converters.config_models import create_simple_config
 from copick_utils.process.hull import hull_lazy_batch
 
 
@@ -28,7 +28,7 @@ from copick_utils.process.hull import hull_lazy_batch
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@add_mesh_input_options
+@add_input_option("mesh")
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
     "--hull-type",
@@ -38,19 +38,22 @@ from copick_utils.process.hull import hull_lazy_batch
 )
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options(default_tool="hull")
+@add_output_option("mesh", default_tool="hull")
+@optgroup.option(
+    "--individual-meshes/--no-individual-meshes",
+    "-im",
+    is_flag=True,
+    default=False,
+    help="Create individual meshes for each instance (enables {instance_id} placeholder).",
+)
 @add_debug_option
 def hull(
     config,
     run_names,
-    mesh_object_name,
-    mesh_user_id,
-    mesh_session_id,
+    input_uri,
     hull_type,
     workers,
-    mesh_object_name_output,
-    mesh_user_id_output,
-    mesh_session_id_output,
+    output_uri,
     individual_meshes,
     debug,
 ):
@@ -58,17 +61,20 @@ def hull(
     Compute hull operations on meshes.
 
     \b
+    URI Format:
+        Meshes: object_name:user_id/session_id
+
+    \b
     Currently supports convex hull computation, where the convex hull is the
     smallest convex shape that contains all vertices of the original mesh.
 
     \b
     Examples:
-        # Compute convex hull for all meshes of type "my-mesh"
-        copick hull -mo my-mesh -mu user1 -ms session1 -moo hull -muo hull -mso hull-session
+        # Compute convex hull for meshes
+        copick process hull -i "membrane:user1/session1" -o "membrane:hull/hull-session"
 
-        \b
         # Process specific runs
-        copick hull -r run1 -r run2 -mo my-mesh -mu user1 -ms session1 --hull-type convex
+        copick process hull -r run1 -r run2 -i "membrane:user1/session1" -o "membrane:hull/convex-001" --hull-type convex
     """
 
     logger = get_logger(__name__, debug=debug)
@@ -76,40 +82,32 @@ def hull(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Validate placeholder requirements
+    # Create config directly from URIs
     try:
-        validate_conversion_placeholders(mesh_session_id, mesh_session_id_output, individual_meshes)
+        task_config = create_simple_config(
+            input_uri=input_uri,
+            input_type="mesh",
+            output_uri=output_uri,
+            output_type="mesh",
+            individual_outputs=individual_meshes,
+        )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
-    logger.info(f"Computing {hull_type} hull for meshes '{mesh_object_name}'")
-    logger.info(f"Source mesh pattern: {mesh_user_id}/{mesh_session_id}")
+    # Extract parameters for logging
+    input_params = parse_copick_uri(input_uri, "mesh")
+    output_params = parse_copick_uri(output_uri, "mesh")
+
+    logger.info(f"Computing {hull_type} hull for meshes '{input_params['object_name']}'")
+    logger.info(f"Source mesh pattern: {input_params['user_id']}/{input_params['session_id']}")
     logger.info(
-        f"Target mesh template: {mesh_object_name_output or mesh_object_name} ({mesh_user_id_output}/{mesh_session_id_output})",
-    )
-
-    # Create type-safe Pydantic configuration
-    selector_config = SelectorConfig(
-        input_type="mesh",
-        output_type="mesh",
-        input_object_name=mesh_object_name,
-        input_user_id=mesh_user_id,
-        input_session_id=mesh_session_id,
-        output_object_name=mesh_object_name_output or mesh_object_name,
-        output_user_id=mesh_user_id_output,
-        output_session_id=mesh_session_id_output,
-        individual_outputs=individual_meshes,
-    )
-
-    config = TaskConfig(
-        type="single_selector",
-        selector=selector_config,
+        f"Target mesh template: {output_params['object_name']} ({output_params['user_id']}/{output_params['session_id']})",
     )
 
     # Parallel discovery and processing - no sequential bottleneck!
     results = hull_lazy_batch(
         root=root,
-        config=config,
+        config=task_config,
         run_names=run_names_list,
         workers=workers,
         hull_type=hull_type,

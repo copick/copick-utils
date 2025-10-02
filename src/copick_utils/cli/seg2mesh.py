@@ -3,15 +3,15 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
+from copick.util.uri import parse_copick_uri
 
-from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import (
+    add_input_option,
     add_marching_cubes_options,
-    add_mesh_output_options,
-    add_segmentation_input_options,
+    add_output_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.converters.config_models import create_simple_config
 from copick_utils.converters.mesh_from_segmentation import mesh_from_segmentation_lazy_batch
 
 
@@ -28,26 +28,28 @@ from copick_utils.converters.mesh_from_segmentation import mesh_from_segmentatio
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@add_segmentation_input_options(include_multilabel=False)
+@add_input_option("segmentation")
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_marching_cubes_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options(default_tool="seg2mesh")
+@add_output_option("mesh", default_tool="seg2mesh")
+@optgroup.option(
+    "--individual-meshes/--no-individual-meshes",
+    "-im",
+    is_flag=True,
+    default=False,
+    help="Create individual meshes for each instance (enables {instance_id} placeholder).",
+)
 @add_debug_option
 def seg2mesh(
     config,
     run_names,
-    seg_name,
-    seg_user_id,
-    seg_session_id,
-    voxel_spacing,
+    input_uri,
     level,
     step_size,
     workers,
-    mesh_object_name_output,
-    mesh_user_id_output,
-    mesh_session_id_output,
+    output_uri,
     individual_meshes,
     debug,
 ):
@@ -55,17 +57,17 @@ def seg2mesh(
     Convert segmentation volumes to meshes using marching cubes.
 
     \b
-    Supports flexible input/output selection modes:
-    - One-to-one: exact session ID → exact session ID
-    - Many-to-many: regex pattern → template with {input_session_id}
+    URI Format:
+        Segmentations: name:user_id/session_id@voxel_spacing
+        Meshes: object_name:user_id/session_id
 
     \b
     Examples:
         # Convert single segmentation to mesh
-        copick convert seg2mesh --seg-session-id "manual-001" --mesh-session-id "from-seg-001"
-        \b
+        copick convert seg2mesh -i "membrane:user1/manual-001@10.0" -o "membrane:seg2mesh/from-seg-001"
+
         # Convert all manual segmentations using pattern matching
-        copick convert seg2mesh --seg-session-id "manual-.*" --mesh-session-id "from-seg-{input_session_id}"
+        copick convert seg2mesh -i "membrane:user1/manual-.*@10.0" -o "membrane:seg2mesh/from-seg-{input_session_id}"
     """
 
     logger = get_logger(__name__, debug=debug)
@@ -73,41 +75,35 @@ def seg2mesh(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Validate placeholder requirements
+    # Create config directly from URIs
     try:
-        validate_conversion_placeholders(seg_session_id, mesh_session_id_output, individual_outputs=individual_meshes)
+        task_config = create_simple_config(
+            input_uri=input_uri,
+            input_type="segmentation",
+            output_uri=output_uri,
+            output_type="mesh",
+            individual_outputs=individual_meshes,
+        )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
-    logger.info(f"Converting segmentation to mesh for '{seg_name}'")
-    logger.info(f"Source segmentation pattern: {seg_name} ({seg_user_id}/{seg_session_id})")
-    logger.info(f"Target mesh template: {mesh_object_name_output} ({mesh_user_id_output}/{mesh_session_id_output})")
+    # Extract parameters for logging
+    input_params = parse_copick_uri(input_uri, "segmentation")
+    output_params = parse_copick_uri(output_uri, "mesh")
+
+    logger.info(f"Converting segmentation to mesh for '{input_params['name']}'")
+    logger.info(
+        f"Source segmentation pattern: {input_params['name']} ({input_params['user_id']}/{input_params['session_id']})",
+    )
+    logger.info(
+        f"Target mesh template: {output_params['object_name']} ({output_params['user_id']}/{output_params['session_id']})",
+    )
     logger.info(f"Marching cubes level: {level}, step size: {step_size}")
-
-    # Create type-safe Pydantic configuration
-    selector_config = SelectorConfig(
-        input_type="segmentation",
-        output_type="mesh",
-        input_object_name=mesh_object_name_output,
-        input_user_id=seg_user_id,
-        input_session_id=seg_session_id,
-        output_object_name=mesh_object_name_output,
-        output_user_id=mesh_user_id_output,
-        output_session_id=mesh_session_id_output,
-        individual_outputs=individual_meshes,
-        segmentation_name=seg_name,
-        voxel_spacing=voxel_spacing,
-    )
-
-    config = TaskConfig(
-        type="single_selector",
-        selector=selector_config,
-    )
 
     # Parallel discovery and processing - no sequential bottleneck!
     results = mesh_from_segmentation_lazy_batch(
         root=root,
-        config=config,
+        config=task_config,
         run_names=run_names_list,
         workers=workers,
         level=level,

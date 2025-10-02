@@ -3,6 +3,9 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
+from copick.util.uri import parse_copick_uri
+
+from copick_utils.cli.util import add_input_option, add_output_option
 
 
 @click.command(
@@ -17,21 +20,7 @@ from copick.util.log import get_logger
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@optgroup.option(
-    "--segmentation-name",
-    required=True,
-    help="Name of the segmentations to process.",
-)
-@optgroup.option(
-    "--segmentation-user-id",
-    required=True,
-    help="User ID of the segmentations to process.",
-)
-@optgroup.option(
-    "--session-id-pattern",
-    required=True,
-    help="Session ID pattern (regex) or exact session ID to match segmentations.",
-)
+@add_input_option("segmentation")
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
     "--method",
@@ -70,42 +59,39 @@ from copick.util.log import get_logger
     help="Number of worker processes.",
 )
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
-@optgroup.option(
-    "--output-session-id-template",
-    help="Template for output session IDs. Use {input_session_id} as placeholder. Default: same as input.",
-)
-@optgroup.option(
-    "--output-user-id",
-    default="skel",
-    help="User ID for output segmentations.",
-)
+@add_output_option("segmentation", default_tool="skel")
 @add_debug_option
 def skeletonize(
     config,
     run_names,
-    segmentation_name,
-    segmentation_user_id,
-    session_id_pattern,
+    input_uri,
     method,
     remove_noise,
     min_object_size,
     remove_short_branches,
     min_branch_length,
     workers,
-    output_session_id_template,
-    output_user_id,
+    output_uri,
     debug,
 ):
-    """3D skeletonization of segmentations using regex pattern matching.
+    """3D skeletonization of segmentations using pattern matching.
 
+    \b
+    URI Format:
+        Segmentations: name:user_id/session_id@voxel_spacing
+
+    \b
     This command can process multiple segmentations by matching session IDs against
-    a regex pattern. This is useful for processing the output of connected components
+    a pattern. This is useful for processing the output of connected components
     separation (e.g., pattern "inst-.*" to match "inst-0", "inst-1", etc.).
 
+    \b
     Examples:
-    - Exact match: --session-id-pattern "inst-0"
-    - Regex pattern: --session-id-pattern "inst-.*"
-    - Regex pattern: --session-id-pattern "inst-[0-9]+"
+        # Skeletonize exact match
+        copick process skeletonize -i "membrane:user1/inst-0@10.0" -o "membrane:skel/skel-0@10.0"
+
+        # Skeletonize all instances using pattern
+        copick process skeletonize -i "membrane:user1/inst-.*@10.0" -o "membrane:skel/skel-{input_session_id}@10.0"
     """
     from copick_utils.process.skeletonize import skeletonize_batch
 
@@ -114,21 +100,31 @@ def skeletonize(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
+    # Parse input URI
+    try:
+        input_params = parse_copick_uri(input_uri, "segmentation")
+    except ValueError as e:
+        raise click.BadParameter(f"Invalid input URI: {e}") from e
+
+    segmentation_name = input_params["name"]
+    segmentation_user_id = input_params["user_id"]
+    session_id_pattern = input_params["session_id"]
+
+    # Parse output URI
+    try:
+        output_params = parse_copick_uri(output_uri, "segmentation")
+    except ValueError as e:
+        raise click.BadParameter(f"Invalid output URI: {e}") from e
+
+    output_user_id = output_params["user_id"]
+    output_session_id_template = output_params["session_id"]
+
     logger.info(f"Skeletonizing segmentations '{segmentation_name}'")
     logger.info(f"Source segmentations: {segmentation_user_id} matching pattern '{session_id_pattern}'")
     logger.info(f"Method: {method}, output user ID: {output_user_id}")
     logger.info(f"Preprocessing: remove_noise={remove_noise} (min_size={min_object_size})")
     logger.info(f"Post-processing: remove_short_branches={remove_short_branches} (min_length={min_branch_length})")
-
-    if output_session_id_template:
-        logger.info(f"Output session ID template: '{output_session_id_template}'")
-    else:
-        logger.info("Output session IDs: same as input")
-
-    if run_names_list:
-        logger.info(f"Processing {len(run_names_list)} specific runs")
-    else:
-        logger.info(f"Processing all {len(root.runs)} runs")
+    logger.info(f"Output session ID template: '{output_session_id_template}'")
 
     results = skeletonize_batch(
         root=root,

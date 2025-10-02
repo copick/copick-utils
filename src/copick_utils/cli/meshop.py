@@ -5,15 +5,15 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
+from copick.util.uri import parse_copick_uri
 
-from copick_utils.cli.input_output_selection import validate_conversion_placeholders
 from copick_utils.cli.util import (
     add_boolean_operation_option,
-    add_mesh_input_options,
-    add_mesh_output_options,
+    add_dual_input_options,
+    add_output_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.converters.config_models import create_dual_selector_config
 
 
 @click.command(
@@ -29,28 +29,28 @@ from copick_utils.converters.config_models import SelectorConfig, TaskConfig
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@add_mesh_input_options
-@add_mesh_input_options(suffix="2")
+@add_dual_input_options("mesh")
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_boolean_operation_option
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options(default_tool="meshop")
+@add_output_option("mesh", default_tool="meshop")
+@optgroup.option(
+    "--individual-meshes/--no-individual-meshes",
+    "-im",
+    is_flag=True,
+    default=False,
+    help="Create individual meshes for each instance (enables {instance_id} placeholder).",
+)
 @add_debug_option
 def meshop(
     config,
     run_names,
-    mesh_object_name,
-    mesh_user_id,
-    mesh_session_id,
-    mesh_object_name2,
-    mesh_user_id2,
-    mesh_session_id2,
+    input1_uri,
+    input2_uri,
     operation,
     workers,
-    mesh_object_name_output,
-    mesh_user_id_output,
-    mesh_session_id_output,
+    output_uri,
     individual_meshes,
     debug,
 ):
@@ -58,62 +58,55 @@ def meshop(
     Perform boolean operations between two meshes.
 
     \b
-    Supports the following operations:
-    - union: Combine both meshes using boolean union
-    - difference: First mesh minus second mesh
-    - intersection: Common volume of both meshes
-    - exclusion: Exclusive or (XOR) of both meshes
-    - concatenate: Simple concatenation without boolean operations
+    URI Format:
+        Meshes: object_name:user_id/session_id
 
     \b
-    Supports flexible input/output selection modes:
-    - One-to-one: exact session IDs → exact session ID
-    - Many-to-many: regex patterns → template with {input_session_id}
+    Supports the following operations:
+        - union: Combine both meshes using boolean union
+        - difference: First mesh minus second mesh
+        - intersection: Common volume of both meshes
+        - exclusion: Exclusive or (XOR) of both meshes
+        - concatenate: Simple concatenation without boolean operations
 
     \b
     Examples:
         # Union of two mesh sets
-        copick logical meshop --operation union --mesh-session-id "manual-001" --input2-session-id "auto-001" --mesh-session-id "union-001"
-        \b
+        copick logical meshop --operation union -i1 "membrane:user1/manual-001" -i2 "vesicle:user1/auto-001" -o "combined:meshop/union-001"
+
         # Difference operation with pattern matching
-        copick logical meshop --operation difference --mesh-session-id "manual-.*" --input2-session-id "mask-.*" --mesh-session-id "diff-{input_session_id}"
+        copick logical meshop --operation difference -i1 "membrane:user1/manual-.*" -i2 "mask:user1/mask-.*" -o "membrane:meshop/diff-{input_session_id}"
     """
-    from copick_utils.logical.mesh_operations import (
-        mesh_concatenate,
-        mesh_difference,
-        mesh_exclusion,
-        mesh_intersection,
-        mesh_union,
-    )
 
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Validate placeholder requirements
+    # Create config directly from URIs
     try:
-        validate_conversion_placeholders(mesh_session_id, mesh_session_id_output, individual_meshes)
+        task_config = create_dual_selector_config(
+            input1_uri=input1_uri,
+            input2_uri=input2_uri,
+            input_type="mesh",
+            output_uri=output_uri,
+            output_type="mesh",
+            individual_outputs=individual_meshes,
+        )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
 
-    logger.info(f"Performing {operation} operation on meshes for object '{mesh_object_name}'")
-    logger.info(f"First mesh pattern: {mesh_user_id}/{mesh_session_id}")
-    logger.info(f"Second mesh pattern: {mesh_user_id2}/{mesh_session_id2}")
+    # Extract parameters for logging
+    input1_params = parse_copick_uri(input1_uri, "mesh")
+    input2_params = parse_copick_uri(input2_uri, "mesh")
+    output_params = parse_copick_uri(output_uri, "mesh")
+
+    logger.info(f"Performing {operation} operation on meshes for object '{input1_params['object_name']}'")
+    logger.info(f"First mesh pattern: {input1_params['user_id']}/{input1_params['session_id']}")
+    logger.info(f"Second mesh pattern: {input2_params['user_id']}/{input2_params['session_id']}")
     logger.info(
-        f"Target mesh template: {mesh_object_name_output or mesh_object_name} ({mesh_user_id_output}/{mesh_session_id_output})",
+        f"Target mesh template: {output_params['object_name']} ({output_params['user_id']}/{output_params['session_id']})",
     )
-
-    # Select the appropriate converter function based on operation
-    converter_functions = {
-        "union": mesh_union,
-        "difference": mesh_difference,
-        "intersection": mesh_intersection,
-        "exclusion": mesh_exclusion,
-        "concatenate": mesh_concatenate,
-    }
-
-    converter_functions[operation]
 
     # Import the appropriate lazy batch converter based on operation
     from copick_utils.logical.mesh_operations import (
@@ -135,41 +128,10 @@ def meshop(
 
     lazy_batch_function = lazy_batch_functions[operation]
 
-    # Create type-safe Pydantic selector configurations
-    selector1_config = SelectorConfig(
-        input_type="mesh",
-        output_type="mesh",
-        input_object_name=mesh_object_name,
-        input_user_id=mesh_user_id,
-        input_session_id=mesh_session_id,
-        output_object_name=mesh_object_name_output,
-        output_user_id=mesh_user_id_output,
-        output_session_id=mesh_session_id_output,
-        individual_outputs=individual_meshes,
-    )
-
-    selector2_config = SelectorConfig(
-        input_type="mesh",
-        output_type="mesh",
-        input_object_name=mesh_object_name2,
-        input_user_id=mesh_user_id2,
-        input_session_id=mesh_session_id2,
-        output_object_name=mesh_object_name2,  # Not used for second input
-        output_user_id=mesh_user_id2,  # Not used for second input
-        output_session_id=mesh_session_id2,  # Not used for second input
-        individual_outputs=False,  # Not used for second input
-    )
-
-    config = TaskConfig(
-        type="dual_selector",
-        selectors=[selector1_config, selector2_config],
-        pairing_method="index_order",
-    )
-
     # Parallel discovery and processing - no sequential bottleneck!
     results = lazy_batch_function(
         root=root,
-        config=config,
+        config=task_config,
         run_names=run_names_list,
         workers=workers,
     )

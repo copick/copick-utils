@@ -5,8 +5,9 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
+from copick.util.uri import parse_copick_uri
 
-from copick_utils.cli.util import add_mesh_output_options
+from copick_utils.cli.util import add_output_option
 
 
 @click.command(
@@ -49,7 +50,7 @@ from copick_utils.cli.util import add_mesh_output_options
     help="Number of worker processes.",
 )
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options(default_tool="validbox", include_individual_mesh=False)
+@add_output_option("mesh", default_tool="validbox")
 @add_debug_option
 def validbox(
     config,
@@ -58,13 +59,15 @@ def validbox(
     tomo_type,
     angle,
     workers,
-    mesh_object_name_output,
-    mesh_user_id_output,
-    mesh_session_id_output,
+    output_uri,
     debug,
 ):
     """
     Generate valid area box meshes for tomographic reconstructions.
+
+    \b
+    URI Format:
+        Meshes: object_name:user_id/session_id
 
     \b
     Creates box meshes representing the valid imaging area of tomographic
@@ -74,24 +77,27 @@ def validbox(
     \b
     Examples:
         # Generate validbox meshes for all runs
-        copick process validbox --voxel-spacing 10.0 --mesh-object-name "validbox" --mesh-user-id "auto" --mesh-session-id "0"
-        \b
+        copick process validbox --voxel-spacing 10.0 -o "validbox:auto/0"
+
         # Generate with rotation and specific tomogram type
-        copick process validbox --voxel-spacing 10.0 --angle 45.0 --tomo-type "imod" --mesh-object-name "validbox" --mesh-user-id "rotated" --mesh-session-id "45deg"
+        copick process validbox --voxel-spacing 10.0 --angle 45.0 --tomo-type "imod" -o "validbox:rotated/45deg"
     """
     from copick_utils.process.validbox import validbox_batch
 
     logger = get_logger(__name__, debug=debug)
 
-    # Set default values based on user requirements
-    if not mesh_object_name_output:
-        mesh_object_name_output = "valid-area"
-
-    if not mesh_session_id_output or mesh_session_id_output == "0":
-        mesh_session_id_output = f"{angle}deg"
-
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
+
+    # Parse output URI
+    try:
+        output_params = parse_copick_uri(output_uri, "mesh")
+    except ValueError as e:
+        raise click.BadParameter(f"Invalid output URI: {e}") from e
+
+    mesh_object_name_output = output_params["object_name"]
+    mesh_user_id_output = output_params["user_id"]
+    mesh_session_id_output = output_params["session_id"]
 
     logger.info(f"Generating validbox meshes for object '{mesh_object_name_output}'")
     logger.info(f"Voxel spacing: {voxel_spacing}, tomogram type: {tomo_type}")

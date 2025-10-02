@@ -3,15 +3,15 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
+from copick.util.uri import parse_copick_uri
 
-from copick_utils.cli.input_output_selection import validate_placeholders
 from copick_utils.cli.util import (
     add_clustering_options,
-    add_mesh_output_options,
-    add_pick_input_options,
+    add_input_option,
+    add_output_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import SelectorConfig, TaskConfig
+from copick_utils.converters.config_models import create_simple_config
 from copick_utils.converters.surface_from_picks import surface_from_picks_lazy_batch
 
 
@@ -28,7 +28,7 @@ from copick_utils.converters.surface_from_picks import surface_from_picks_lazy_b
     multiple=True,
     help="Specific run names to process (default: all runs).",
 )
-@add_pick_input_options
+@add_input_option("picks")
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
     "--surface-method",
@@ -45,14 +45,19 @@ from copick_utils.converters.surface_from_picks import surface_from_picks_lazy_b
 @add_clustering_options
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
-@add_mesh_output_options(default_tool="picks2surface")
+@add_output_option("mesh", default_tool="picks2surface")
+@optgroup.option(
+    "--individual-meshes/--no-individual-meshes",
+    "-im",
+    is_flag=True,
+    default=False,
+    help="Create individual meshes for each instance (enables {instance_id} placeholder).",
+)
 @add_debug_option
 def picks2surface(
     config,
     run_names,
-    pick_object_name,
-    pick_user_id,
-    pick_session_id,
+    input_uri,
     surface_method,
     grid_resolution,
     use_clustering,
@@ -62,9 +67,7 @@ def picks2surface(
     clustering_n_clusters,
     all_clusters,
     workers,
-    mesh_object_name,
-    mesh_user_id,
-    mesh_session_id,
+    output_uri,
     individual_meshes,
     debug,
 ):
@@ -72,21 +75,20 @@ def picks2surface(
     Convert picks to 2D surface meshes.
 
     \b
-    Supports flexible input/output selection modes:
-    - One-to-one: exact session ID → exact session ID
-    - One-to-many: exact session ID → template with {instance_id}
-    - Many-to-many: regex pattern → template with {input_session_id} and {instance_id}
+    URI Format:
+        Picks: object_name:user_id/session_id
+        Meshes: object_name:user_id/session_id
 
     \b
     Examples:
         # Convert single pick set to single surface mesh
-        picks2surface --pick-session-id "manual-001" --mesh-session-id "surface-001"
-        \b
+        copick convert picks2surface -i "membrane:user1/manual-001" -o "membrane:picks2surface/surface-001"
+
         # Create individual surface meshes from clusters
-        picks2surface --pick-session-id "manual-001" --mesh-session-id "surface-{instance_id}" --individual-meshes
-        \b
+        copick convert picks2surface -i "membrane:user1/manual-001" -o "membrane:picks2surface/surface-{instance_id}" --individual-meshes
+
         # Convert all manual picks using pattern matching
-        picks2surface --pick-session-id "manual-.*" --mesh-session-id "surface-{input_session_id}"
+        copick convert picks2surface -i "membrane:user1/manual-.*" -o "membrane:picks2surface/surface-{input_session_id}"
     """
 
     logger = get_logger(__name__, debug=debug)
@@ -94,11 +96,21 @@ def picks2surface(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Validate placeholder requirements
+    # Create config directly from URIs
     try:
-        validate_placeholders(pick_session_id, mesh_session_id, individual_meshes)
+        task_config = create_simple_config(
+            input_uri=input_uri,
+            input_type="picks",
+            output_uri=output_uri,
+            output_type="mesh",
+            individual_outputs=individual_meshes,
+        )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
+
+    # Extract parameters for logging
+    input_params = parse_copick_uri(input_uri, "picks")
+    output_params = parse_copick_uri(output_uri, "mesh")
 
     # Prepare clustering parameters
     clustering_params = {}
@@ -107,32 +119,16 @@ def picks2surface(
     elif clustering_method == "kmeans":
         clustering_params = {"n_clusters": clustering_n_clusters}
 
-    logger.info(f"Converting picks to {surface_method} surface mesh for object '{pick_object_name}'")
-    logger.info(f"Source picks pattern: {pick_user_id}/{pick_session_id}")
-    logger.info(f"Target mesh template: {mesh_object_name} ({mesh_user_id}/{mesh_session_id})")
-
-    # Create type-safe Pydantic configuration
-    selector_config = SelectorConfig(
-        input_type="picks",
-        output_type="mesh",
-        input_object_name=pick_object_name,
-        input_user_id=pick_user_id,
-        input_session_id=pick_session_id,
-        output_object_name=mesh_object_name,
-        output_user_id=mesh_user_id,
-        output_session_id=mesh_session_id,
-        individual_outputs=individual_meshes,
-    )
-
-    config = TaskConfig(
-        type="single_selector",
-        selector=selector_config,
+    logger.info(f"Converting picks to {surface_method} surface mesh for object '{input_params['object_name']}'")
+    logger.info(f"Source picks pattern: {input_params['user_id']}/{input_params['session_id']}")
+    logger.info(
+        f"Target mesh template: {output_params['object_name']} ({output_params['user_id']}/{output_params['session_id']})",
     )
 
     # Parallel discovery and processing - no sequential bottleneck!
     results = surface_from_picks_lazy_batch(
         root=root,
-        config=config,
+        config=task_config,
         run_names=run_names_list,
         workers=workers,
         surface_method=surface_method,
