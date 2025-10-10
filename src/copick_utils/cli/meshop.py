@@ -13,7 +13,7 @@ from copick_utils.cli.util import (
     add_output_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import create_dual_selector_config
+from copick_utils.util.config_models import create_dual_selector_config
 
 
 @click.command(
@@ -83,7 +83,7 @@ def meshop(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Create config directly from URIs
+    # Create config directly from URIs with smart defaults
     try:
         task_config = create_dual_selector_config(
             input1_uri=input1_uri,
@@ -92,6 +92,7 @@ def meshop(
             output_uri=output_uri,
             output_type="mesh",
             individual_outputs=individual_meshes,
+            command_name="meshop",
         )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e

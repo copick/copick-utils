@@ -13,8 +13,7 @@ from copick_utils.cli.util import (
     add_reference_seg_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import create_reference_config
-from copick_utils.logical.distance_operations import limit_segmentation_by_distance_lazy_batch
+from copick_utils.util.config_models import create_reference_config
 
 
 @click.command(
@@ -36,12 +35,6 @@ from copick_utils.logical.distance_operations import limit_segmentation_by_dista
 @add_reference_seg_option(required=False)
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_distance_options
-@optgroup.option(
-    "--tomo-type",
-    "-tt",
-    default="wbp",
-    help="Type of tomogram to use as reference.",
-)
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
 @add_output_option("segmentation", default_tool="clipseg")
@@ -54,7 +47,6 @@ def clipseg(
     ref_seg_uri,
     max_distance,
     mesh_voxel_spacing,
-    tomo_type,
     workers,
     output_uri,
     debug,
@@ -79,6 +71,7 @@ def clipseg(
         # Limit using another segmentation as reference
         copick logical clipseg -i "membrane:user1/full-001@10.0" -rs "mask:user1/mask-001@10.0" -o "membrane:clipseg/limited-001@10.0" --max-distance 100.0
     """
+    from copick_utils.logical.distance_operations import limit_segmentation_by_distance_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -102,7 +95,7 @@ def clipseg(
         voxel_spacing_output = float(voxel_spacing_output)
     multilabel_output = output_params_temp.get("multilabel", False)
 
-    # Create config directly from URIs with additional params
+    # Create config directly from URIs with additional params and smart defaults
     try:
         task_config = create_reference_config(
             input_uri=input_uri,
@@ -117,6 +110,7 @@ def clipseg(
                 "voxel_spacing": voxel_spacing_output,
                 "is_multilabel": multilabel_output,
             },
+            command_name="clipseg",
         )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e

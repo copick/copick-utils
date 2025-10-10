@@ -13,8 +13,7 @@ from copick_utils.cli.util import (
     add_reference_seg_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import create_reference_config
-from copick_utils.logical.distance_operations import limit_mesh_by_distance_lazy_batch
+from copick_utils.util.config_models import create_reference_config
 
 
 @click.command(
@@ -80,6 +79,7 @@ def clipmesh(
         # Limit using segmentation as reference
         copick logical clipmesh -i "membrane:user1/full-001" -rs "mask:user1/mask-001@10.0" -o "membrane:clipmesh/limited-001" --max-distance 100.0
     """
+    from copick_utils.logical.distance_operations import limit_mesh_by_distance_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -106,6 +106,7 @@ def clipmesh(
             reference_uri=reference_uri,
             reference_type=reference_type,
             additional_params={"max_distance": max_distance, "mesh_voxel_spacing": mesh_voxel_spacing},
+            command_name="clipmesh",
         )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e

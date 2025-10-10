@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from copick.util.log import get_logger
 
-from copick_utils.converters.config_models import ReferenceConfig, SelectorConfig, TaskConfig
+from copick_utils.util.config_models import ReferenceConfig, SelectorConfig, TaskConfig
 
 if TYPE_CHECKING:
     from copick.models import CopickRoot, CopickRun

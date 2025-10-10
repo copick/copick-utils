@@ -14,8 +14,7 @@ from copick_utils.cli.util import (
     add_reference_seg_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import create_reference_config
-from copick_utils.logical.point_operations import picks_exclusion_by_mesh_lazy_batch
+from copick_utils.util.config_models import create_reference_config
 
 
 @click.command(
@@ -71,6 +70,7 @@ def picksout(
         # Exclude picks inside segmentation
         copick logical picksout -i "ribosome:user1/all-001" -rs "mask:user1/mask-001@10.0" -o "ribosome:picksout/outside-001"
     """
+    from copick_utils.logical.point_operations import picks_exclusion_by_mesh_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -87,7 +87,7 @@ def picksout(
     reference_uri = ref_mesh_uri or ref_seg_uri
     reference_type = "mesh" if ref_mesh_uri else "segmentation"
 
-    # Create config directly from URIs
+    # Create config directly from URIs with smart defaults
     try:
         task_config = create_reference_config(
             input_uri=input_uri,
@@ -96,6 +96,7 @@ def picksout(
             output_type="picks",
             reference_uri=reference_uri,
             reference_type=reference_type,
+            command_name="picksout",
         )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e

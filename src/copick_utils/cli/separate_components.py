@@ -3,9 +3,9 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
-from copick.util.uri import parse_copick_uri
+from copick.util.uri import expand_output_uri, parse_copick_uri
 
-from copick_utils.cli.util import add_input_option
+from copick_utils.cli.util import add_input_option, add_output_option
 
 
 @click.command(
@@ -47,16 +47,7 @@ from copick_utils.cli.util import add_input_option
     help="Number of worker processes.",
 )
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
-@optgroup.option(
-    "--session-id-prefix",
-    default="inst-",
-    help="Prefix for output segmentation session IDs.",
-)
-@optgroup.option(
-    "--output-user-id",
-    default="components",
-    help="User ID for output segmentations.",
-)
+@add_output_option("segmentation", default_tool="components")
 @add_debug_option
 def separate_components(
     config,
@@ -66,8 +57,7 @@ def separate_components(
     min_size,
     multilabel,
     workers,
-    session_id_prefix,
-    output_user_id,
+    output_uri,
     debug,
 ):
     """Separate connected components in segmentations into individual segmentations.
@@ -78,16 +68,19 @@ def separate_components(
 
     \b
     For multilabel segmentations, connected components analysis is performed on each
-    label separately. Output segmentations are created with session IDs using the
-    specified prefix and incremental numbering (e.g., "inst-0", "inst-1", etc.).
+    label separately. Output segmentations use {instance_id} placeholder for auto-numbering
+    (e.g., "inst-0", "inst-1", etc.).
 
     \b
     Examples:
-        # Separate components from single segmentation
-        copick process separate_components -i "membrane:user1/manual-001@10.0" --session-id-prefix "inst-" --output-user-id "components"
+        # Separate components with smart defaults (auto user_id and session template)
+        copick process separate_components -i "membrane:user1/manual-001@10.0" -o "{instance_id}"
 
-        # Process binary segmentation
-        copick process separate_components -i "membrane:user1/manual-001@10.0" --binary --session-id-prefix "comp-"
+        # Custom session prefix
+        copick process separate_components -i "membrane:user1/manual-001@10.0" -o "membrane:components/inst-{instance_id}"
+
+        # Full URI specification
+        copick process separate_components -i "membrane:user1/manual-001@10.0" -o "membrane:components/comp-{instance_id}@10.0"
     """
     from copick_utils.process.connected_components import separate_components_batch
 
@@ -96,6 +89,19 @@ def separate_components(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
     connectivity_int = int(connectivity)
+
+    # Expand output URI with smart defaults (individual_outputs=True for {instance_id})
+    try:
+        output_uri = expand_output_uri(
+            output_uri=output_uri,
+            input_uri=input_uri,
+            input_type="segmentation",
+            output_type="segmentation",
+            command_name="components",
+            individual_outputs=True,
+        )
+    except ValueError as e:
+        raise click.BadParameter(f"Error expanding output URI: {e}") from e
 
     # Parse input URI
     try:
@@ -107,9 +113,22 @@ def separate_components(
     segmentation_user_id = input_params["user_id"]
     segmentation_session_id = input_params["session_id"]
 
+    # Parse output URI (now fully expanded)
+    try:
+        output_params = parse_copick_uri(output_uri, "segmentation")
+    except ValueError as e:
+        raise click.BadParameter(f"Invalid output URI: {e}") from e
+
+    output_user_id = output_params["user_id"]
+    output_session_id_template = output_params["session_id"]
+
+    # Validate that output_session_id_template contains {instance_id}
+    if "{instance_id}" not in output_session_id_template:
+        raise click.BadParameter("Output URI must contain {instance_id} placeholder for separate_components command")
+
     logger.info(f"Separating connected components for segmentation '{segmentation_name}'")
     logger.info(f"Source segmentation: {segmentation_user_id}/{segmentation_session_id}")
-    logger.info(f"Output prefix: {session_id_prefix}, user ID: {output_user_id}")
+    logger.info(f"Output template: {output_params['name']} ({output_user_id}/{output_session_id_template})")
     logger.info(f"Connectivity: {connectivity_int}, min size: {min_size} voxels")
     logger.info(f"Processing as {'multilabel' if multilabel else 'binary'} segmentation")
 
@@ -120,7 +139,7 @@ def separate_components(
         segmentation_session_id=segmentation_session_id,
         connectivity=connectivity_int,
         min_size=min_size,
-        session_id_prefix=session_id_prefix,
+        session_id_template=output_session_id_template,
         output_user_id=output_user_id,
         multilabel=multilabel,
         run_names=run_names_list,

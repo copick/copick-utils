@@ -3,7 +3,7 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
-from copick.util.uri import parse_copick_uri
+from copick.util.uri import expand_output_uri, parse_copick_uri
 
 from copick_utils.cli.util import add_input_option, add_output_option
 
@@ -100,6 +100,19 @@ def skeletonize(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
+    # Expand output URI with smart defaults
+    try:
+        output_uri = expand_output_uri(
+            output_uri=output_uri,
+            input_uri=input_uri,
+            input_type="segmentation",
+            output_type="segmentation",
+            command_name="skeletonize",
+            individual_outputs=False,
+        )
+    except ValueError as e:
+        raise click.BadParameter(f"Error expanding output URI: {e}") from e
+
     # Parse input URI
     try:
         input_params = parse_copick_uri(input_uri, "segmentation")
@@ -110,7 +123,7 @@ def skeletonize(
     segmentation_user_id = input_params["user_id"]
     session_id_pattern = input_params["session_id"]
 
-    # Parse output URI
+    # Parse output URI (now fully expanded)
     try:
         output_params = parse_copick_uri(output_uri, "segmentation")
     except ValueError as e:

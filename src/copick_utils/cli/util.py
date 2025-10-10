@@ -335,17 +335,23 @@ def add_input_option(object_type: str, func: click.Command = None) -> Callable:
 
 def add_output_option(object_type: str, func: click.Command = None, default_tool: str = None) -> Callable:
     """
-    Add --output/-o option for URI-based output specification.
+    Add --output/-o option for URI-based output specification with smart defaults.
 
-    Supports copick URI format with pattern matching and placeholder templates:
-    - Picks/Meshes: object_name:user_id/session_id
-    - Segmentations: name:user_id/session_id@voxel_spacing?multilabel=true
+    Supports copick URI format with smart defaults and pattern matching:
+    - Full format: object_name:user_id/session_id or name:user_id/session_id@voxel_spacing
+    - Smart defaults: Omit components to inherit from input (e.g., just "membrane")
     - Templates: session_id can include {input_session_id} or {instance_id}
+
+    Smart defaults:
+    - Name/object omitted → inherits from input
+    - user_id omitted → uses command name (e.g., "mesh2seg")
+    - session_id omitted → auto-template based on input pattern
+    - voxel_spacing omitted → inherits from input (segmentation only)
 
     Args:
         object_type (str): Type of object ('picks', 'mesh', 'segmentation').
         func (click.Command, optional): The Click command to which the option will be added.
-        default_tool (str, optional): Default user_id if not specified in URI.
+        default_tool (str, optional): Default user_id if not specified in URI (deprecated, auto-detected).
 
     Returns:
         Callable: The Click command with the output option added.
@@ -354,15 +360,17 @@ def add_output_option(object_type: str, func: click.Command = None, default_tool
     def add_output_option_decorator(_func: click.Command) -> click.Command:
         """Add --output option to command."""
         # Determine help text based on object type
-        format_examples = {
-            "picks": "object_name:user_id/session_id",
-            "mesh": "object_name:user_id/session_id",
-            "segmentation": "name:user_id/session_id@voxel_spacing",
+        shorthand_examples = {
+            "picks": '"ribosome", "ribosome/my-session", or "/my-session"',
+            "mesh": '"membrane", "membrane/my-session", or "/my-session"',
+            "segmentation": '"membrane", "membrane/my-session", or "/my-session"',
         }
 
+        voxel_suffix = "@voxel_spacing" if object_type == "segmentation" else ""
         help_text = (
-            f"Output {object_type} URI (format: {format_examples.get(object_type, 'URI')}). "
-            f"Supports placeholders: {{input_session_id}}, {{instance_id}}."
+            f"Output {object_type} URI. "
+            f"Supports smart defaults (e.g., {shorthand_examples.get(object_type, 'shorthand')}). "
+            f"Full format: object_name:user_id/session_id{voxel_suffix}."
         )
 
         opt = optgroup.option(
@@ -490,3 +498,35 @@ def add_reference_seg_option(func: click.Command = None, required: bool = False)
         return add_reference_seg_option_decorator
     else:
         return add_reference_seg_option_decorator(func)
+
+
+def add_tomogram_option(func: click.Command = None, required: bool = True) -> Callable:
+    """
+    Add --tomogram/-t option for tomogram URI specification.
+
+    Tomogram URI format: tomo_type@voxel_spacing
+    Example: "wbp@10.0"
+
+    Args:
+        func (click.Command, optional): The Click command to which the option will be added.
+        required (bool): Whether the option is required. Default is True.
+
+    Returns:
+        Callable: The Click command with the tomogram option added.
+    """
+
+    def add_tomogram_option_decorator(_func: click.Command) -> click.Command:
+        """Add --tomogram option to command."""
+        opt = optgroup.option(
+            "--tomogram",
+            "-t",
+            "tomogram_uri",
+            required=required,
+            help="Tomogram URI (format: tomo_type@voxel_spacing). Example: 'wbp@10.0'",
+        )
+        return opt(_func)
+
+    if func is None:
+        return add_tomogram_option_decorator
+    else:
+        return add_tomogram_option_decorator(func)

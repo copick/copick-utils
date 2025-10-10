@@ -65,7 +65,6 @@ def segmentation_boolean_operation(
     user_id: str,
     operation: str,
     voxel_spacing: float,
-    tomo_type: str = "wbp",
     is_multilabel: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
@@ -81,7 +80,6 @@ def segmentation_boolean_operation(
         user_id: User ID for the output segmentation
         operation: Type of boolean operation ('union', 'difference', 'intersection', 'exclusion')
         voxel_spacing: Voxel spacing for the output segmentation
-        tomo_type: Type of tomogram to use for reference dimensions
         is_multilabel: Whether the segmentation is multilabel
         **kwargs: Additional keyword arguments
 
@@ -142,7 +140,6 @@ def segmentation_union(
     session_id: str,
     user_id: str,
     voxel_spacing: float,
-    tomo_type: str = "wbp",
     is_multilabel: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
@@ -156,7 +153,6 @@ def segmentation_union(
         user_id,
         "union",
         voxel_spacing,
-        tomo_type,
         is_multilabel,
         **kwargs,
     )
@@ -170,7 +166,6 @@ def segmentation_difference(
     session_id: str,
     user_id: str,
     voxel_spacing: float,
-    tomo_type: str = "wbp",
     is_multilabel: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
@@ -184,7 +179,6 @@ def segmentation_difference(
         user_id,
         "difference",
         voxel_spacing,
-        tomo_type,
         is_multilabel,
         **kwargs,
     )
@@ -198,7 +192,6 @@ def segmentation_intersection(
     session_id: str,
     user_id: str,
     voxel_spacing: float,
-    tomo_type: str = "wbp",
     is_multilabel: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
@@ -212,7 +205,6 @@ def segmentation_intersection(
         user_id,
         "intersection",
         voxel_spacing,
-        tomo_type,
         is_multilabel,
         **kwargs,
     )
@@ -226,7 +218,6 @@ def segmentation_exclusion(
     session_id: str,
     user_id: str,
     voxel_spacing: float,
-    tomo_type: str = "wbp",
     is_multilabel: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
@@ -240,7 +231,6 @@ def segmentation_exclusion(
         user_id,
         "exclusion",
         voxel_spacing,
-        tomo_type,
         is_multilabel,
         **kwargs,
     )

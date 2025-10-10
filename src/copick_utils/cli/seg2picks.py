@@ -11,8 +11,7 @@ from copick_utils.cli.util import (
     add_segmentation_processing_options,
     add_workers_option,
 )
-from copick_utils.converters.config_models import create_simple_config
-from copick_utils.converters.picks_from_segmentation import picks_from_segmentation_lazy_batch
+from copick_utils.util.config_models import create_simple_config
 
 
 @click.command(
@@ -63,19 +62,21 @@ def seg2picks(
         # Convert all manual segmentations using pattern matching
         copick convert seg2picks -i "membrane:user1/manual-.*@10.0" -o "membrane:seg2picks/centroid-{input_session_id}"
     """
+    from copick_utils.converters.picks_from_segmentation import picks_from_segmentation_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Create config directly from URIs
+    # Create config directly from URIs with smart defaults
     try:
         task_config = create_simple_config(
             input_uri=input_uri,
             input_type="segmentation",
             output_uri=output_uri,
             output_type="picks",
+            command_name="seg2picks",
         )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e

@@ -13,7 +13,7 @@ from copick_utils.cli.util import (
     add_output_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import create_dual_selector_config
+from copick_utils.util.config_models import create_dual_selector_config
 
 
 @click.command(
@@ -33,10 +33,11 @@ from copick_utils.converters.config_models import create_dual_selector_config
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_boolean_operation_option
 @optgroup.option(
-    "--tomo-type",
-    "-tt",
-    default="wbp",
-    help="Type of tomogram to use as reference.",
+    "--voxel-spacing",
+    "-vs",
+    type=float,
+    required=True,
+    help="Voxel spacing for input and output segmentations.",
 )
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
@@ -48,7 +49,7 @@ def segop(
     input1_uri,
     input2_uri,
     operation,
-    tomo_type,
+    voxel_spacing,
     workers,
     output_uri,
     debug,
@@ -58,7 +59,7 @@ def segop(
 
     \b
     URI Format:
-        Segmentations: name:user_id/session_id@voxel_spacing
+        Segmentations: name:user_id/session_id (voxel spacing specified via --voxel-spacing)
 
     \b
     Supports the following boolean operations:
@@ -69,15 +70,15 @@ def segop(
 
     \b
     Note: Both input segmentations should be binary (non-multilabel) for meaningful results.
-    Both inputs must have the same voxel spacing.
+    Voxel spacing is specified globally and applies to both inputs and output.
 
     \b
     Examples:
         # Union of two segmentation sets
-        copick logical segop --operation union -i1 "membrane:user1/manual-001@10.0" -i2 "vesicle:user1/auto-001@10.0" -o "combined:segop/union-001@10.0"
+        copick logical segop --operation union --voxel-spacing 10.0 -i1 "membrane:user1/manual-001" -i2 "vesicle:user1/auto-001" -o "combined"
 
         # Difference operation with pattern matching
-        copick logical segop --operation difference -i1 "membrane:user1/manual-.*@10.0" -i2 "mask:user1/mask-.*@10.0" -o "membrane:segop/diff-{input_session_id}@10.0"
+        copick logical segop --operation difference -vs 10.0 -i1 "membrane:user1/manual-.*" -i2 "mask:user1/mask-.*" -o "membrane"
     """
 
     logger = get_logger(__name__, debug=debug)
@@ -85,14 +86,20 @@ def segop(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Create config directly from URIs
+    # Append voxel spacing to URIs
+    input1_uri_full = f"{input1_uri}@{voxel_spacing}"
+    input2_uri_full = f"{input2_uri}@{voxel_spacing}"
+    output_uri_full = f"{output_uri}@{voxel_spacing}" if "@" not in output_uri else output_uri
+
+    # Create config directly from URIs with smart defaults
     try:
         task_config = create_dual_selector_config(
-            input1_uri=input1_uri,
-            input2_uri=input2_uri,
+            input1_uri=input1_uri_full,
+            input2_uri=input2_uri_full,
             input_type="segmentation",
-            output_uri=output_uri,
+            output_uri=output_uri_full,
             output_type="segmentation",
+            command_name="segop",
         )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
@@ -100,11 +107,7 @@ def segop(
     # Extract parameters for logging
     input1_params = parse_copick_uri(input1_uri, "segmentation")
     input2_params = parse_copick_uri(input2_uri, "segmentation")
-    output_params = parse_copick_uri(output_uri, "segmentation")
-
-    voxel_spacing_output = output_params["voxel_spacing"]
-    if isinstance(voxel_spacing_output, str):
-        voxel_spacing_output = float(voxel_spacing_output)
+    output_params = parse_copick_uri(output_uri_full, "segmentation")
 
     logger.info(f"Performing {operation} operation on segmentations for '{input1_params['name']}'")
     logger.info(f"First segmentation pattern: {input1_params['user_id']}/{input1_params['session_id']}")
@@ -137,8 +140,7 @@ def segop(
         config=task_config,
         run_names=run_names_list,
         workers=workers,
-        voxel_spacing=voxel_spacing_output,
-        tomo_type=tomo_type,
+        voxel_spacing=voxel_spacing,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)

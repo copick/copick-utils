@@ -11,8 +11,7 @@ from copick_utils.cli.util import (
     add_output_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import create_simple_config
-from copick_utils.converters.mesh_from_picks import mesh_from_picks_lazy_batch
+from copick_utils.util.config_models import create_simple_config
 
 
 @click.command(
@@ -104,6 +103,7 @@ def picks2mesh(
         # Convert all manual picks using pattern matching
         copick convert picks2mesh -i "ribosome:user1/manual-.*" -o "ribosome:picks2mesh/mesh-{input_session_id}"
     """
+    from copick_utils.converters.mesh_from_picks import mesh_from_picks_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
@@ -113,7 +113,7 @@ def picks2mesh(
     if mesh_type == "alpha_shape" and alpha is None:
         raise click.BadParameter("Alpha parameter is required for alpha shapes")
 
-    # Create config directly from URIs
+    # Create config directly from URIs with smart defaults
     try:
         config = create_simple_config(
             input_uri=input_uri,
@@ -121,6 +121,7 @@ def picks2mesh(
             output_uri=output_uri,
             output_type="mesh",
             individual_outputs=individual_meshes,
+            command_name="picks2mesh",
         )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e

@@ -84,15 +84,17 @@ class SelectorConfig(BaseModel):
         output_uri: str,
         output_type: Literal["picks", "mesh", "segmentation"],
         individual_outputs: bool = False,
+        command_name: Optional[str] = None,
     ) -> "SelectorConfig":
         """Create SelectorConfig from input/output URIs.
 
         Args:
             input_uri: Input copick URI string.
             input_type: Type of input object ('picks', 'mesh', 'segmentation').
-            output_uri: Output copick URI string.
+            output_uri: Output copick URI string (supports smart defaults).
             output_type: Type of output object ('picks', 'mesh', 'segmentation').
             individual_outputs: Whether to create individual outputs.
+            command_name: Name of the command (used for smart defaults in output_uri).
 
         Returns:
             SelectorConfig instance with parsed URI components.
@@ -100,12 +102,22 @@ class SelectorConfig(BaseModel):
         Raises:
             ValueError: If URI parsing fails or required fields are missing.
         """
-        from copick.util.uri import parse_copick_uri
+        from copick.util.uri import expand_output_uri, parse_copick_uri
+
+        # Expand output URI with smart defaults
+        output_uri = expand_output_uri(
+            output_uri=output_uri,
+            input_uri=input_uri,
+            input_type=input_type,
+            output_type=output_type,
+            command_name=command_name,
+            individual_outputs=individual_outputs,
+        )
 
         # Parse input URI
         input_params = parse_copick_uri(input_uri, input_type)
 
-        # Parse output URI
+        # Parse output URI (now fully expanded)
         output_params = parse_copick_uri(output_uri, output_type)
 
         # Extract common fields
@@ -262,25 +274,28 @@ def create_simple_config(
     output_uri: str,
     output_type: Literal["picks", "mesh", "segmentation"],
     individual_outputs: bool = False,
+    command_name: Optional[str] = None,
 ) -> TaskConfig:
     """Create a simple single-selector task configuration from URIs.
 
     Args:
         input_uri: Input copick URI string.
         input_type: Type of input object.
-        output_uri: Output copick URI string.
+        output_uri: Output copick URI string (supports smart defaults).
         output_type: Type of output object.
         individual_outputs: Whether to create individual outputs.
+        command_name: Name of the command (used for smart defaults in output_uri).
 
     Returns:
         TaskConfig instance ready for use.
 
     Example:
-        config = create_simple_config_from_uris(
+        config = create_simple_config(
             input_uri="ribosome:user1/manual-001",
             input_type="picks",
-            output_uri="ribosome:picks2mesh/mesh-001",
+            output_uri="ribosome",
             output_type="mesh",
+            command_name="picks2mesh",
         )
     """
     selector_config = SelectorConfig.from_uris(
@@ -289,6 +304,7 @@ def create_simple_config(
         output_uri=output_uri,
         output_type=output_type,
         individual_outputs=individual_outputs,
+        command_name=command_name,
     )
 
     return TaskConfig(type="single_selector", selector=selector_config)
@@ -302,6 +318,7 @@ def create_dual_selector_config(
     output_type: Literal["mesh", "segmentation"],
     pairing_method: str = "index_order",
     individual_outputs: bool = False,
+    command_name: Optional[str] = None,
 ) -> TaskConfig:
     """Create a dual-selector task configuration from URIs.
 
@@ -309,21 +326,23 @@ def create_dual_selector_config(
         input1_uri: First input copick URI string.
         input2_uri: Second input copick URI string.
         input_type: Type of input objects (both inputs must be same type).
-        output_uri: Output copick URI string.
+        output_uri: Output copick URI string (supports smart defaults).
         output_type: Type of output object.
         pairing_method: How to pair inputs ("index_order", etc.).
         individual_outputs: Whether to create individual outputs.
+        command_name: Name of the command (used for smart defaults in output_uri).
 
     Returns:
         TaskConfig instance ready for use.
 
     Example:
-        config = create_dual_selector_config_from_uris(
+        config = create_dual_selector_config(
             input1_uri="membrane:user1/manual-001",
             input2_uri="vesicle:user1/auto-001",
             input_type="mesh",
-            output_uri="combined:meshop/union-001",
+            output_uri="combined",
             output_type="mesh",
+            command_name="meshop",
         )
     """
     from copick.util.uri import parse_copick_uri
@@ -340,6 +359,7 @@ def create_dual_selector_config(
         output_uri=output_uri,
         output_type=output_type,
         individual_outputs=individual_outputs,
+        command_name=command_name,
     )
 
     # Create second selector manually (output fields not used)
@@ -385,29 +405,32 @@ def create_reference_config(
     reference_uri: str,
     reference_type: Literal["mesh", "segmentation"],
     additional_params: Optional[Dict[str, Any]] = None,
+    command_name: Optional[str] = None,
 ) -> TaskConfig:
     """Create a single-selector-with-reference task configuration from URIs.
 
     Args:
         input_uri: Input copick URI string.
         input_type: Type of input object.
-        output_uri: Output copick URI string.
+        output_uri: Output copick URI string (supports smart defaults).
         output_type: Type of output object.
         reference_uri: Reference copick URI string.
         reference_type: Type of reference object.
         additional_params: Additional parameters for reference config.
+        command_name: Name of the command (used for smart defaults in output_uri).
 
     Returns:
         TaskConfig instance ready for use.
 
     Example:
-        config = create_reference_config_from_uris(
+        config = create_reference_config(
             input_uri="ribosome:user1/all-001",
             input_type="picks",
-            output_uri="ribosome:picksin/inside-001",
+            output_uri="ribosome",
             output_type="picks",
             reference_uri="boundary:user1/boundary-001",
             reference_type="mesh",
+            command_name="picksin",
         )
     """
     selector_config = SelectorConfig.from_uris(
@@ -415,6 +438,7 @@ def create_reference_config(
         input_type=input_type,
         output_uri=output_uri,
         output_type=output_type,
+        command_name=command_name,
     )
 
     reference_config = ReferenceConfig.from_uri(

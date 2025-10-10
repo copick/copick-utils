@@ -7,9 +7,8 @@ from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 from copick.util.uri import parse_copick_uri
 
-from copick_utils.cli.util import add_input_option, add_output_option, add_workers_option
-from copick_utils.converters.config_models import create_simple_config
-from copick_utils.converters.picks_from_mesh import picks_from_mesh_lazy_batch
+from copick_utils.cli.util import add_input_option, add_output_option, add_tomogram_option, add_workers_option
+from copick_utils.util.config_models import create_simple_config
 
 
 @click.command(
@@ -26,12 +25,7 @@ from copick_utils.converters.picks_from_mesh import picks_from_mesh_lazy_batch
     help="Specific run names to process (default: all runs).",
 )
 @add_input_option("mesh")
-@optgroup.option(
-    "--tomo-type",
-    "-tt",
-    default="wbp",
-    help="Type of tomogram to use as reference.",
-)
+@add_tomogram_option(required=True)
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
     "--sampling-type",
@@ -44,12 +38,6 @@ from copick_utils.converters.picks_from_mesh import picks_from_mesh_lazy_batch
     type=int,
     default=1000,
     help="Number of points to sample (ignored for 'vertices' type).",
-)
-@optgroup.option(
-    "--voxel-spacing",
-    type=float,
-    required=True,
-    help="Voxel spacing for coordinate scaling.",
 )
 @optgroup.option(
     "--min-dist",
@@ -87,10 +75,9 @@ def mesh2picks(
     config,
     run_names,
     input_uri,
-    tomo_type,
+    tomogram_uri,
     sampling_type,
     n_points,
-    voxel_spacing,
     min_dist,
     edge_dist,
     include_normals,
@@ -107,27 +94,42 @@ def mesh2picks(
     URI Format:
         Meshes: object_name:user_id/session_id
         Picks: object_name:user_id/session_id
+        Tomograms: tomo_type@voxel_spacing
 
     \b
     Examples:
         # Convert single mesh to picks with surface sampling
-        copick convert mesh2picks -i "boundary:user1/boundary-001" -o "boundary:mesh2picks/sampled-001" --sampling-type surface --voxel-spacing 10.0
+        copick convert mesh2picks -i "boundary:user1/boundary-001" --tomogram wbp@10.0 --sampling-type surface -o "boundary"
 
         # Convert all boundary meshes using pattern matching
-        copick convert mesh2picks -i "boundary:user1/boundary-.*" -o "boundary:mesh2picks/sampled-{input_session_id}" --sampling-type inside --voxel-spacing 10.0
+        copick convert mesh2picks -i "boundary:user1/boundary-.*" -t wbp@10.0 --sampling-type inside -o "{input_session_id}"
     """
+    from copick_utils.converters.picks_from_mesh import picks_from_mesh_lazy_batch
+
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Create config directly from URIs
+    # Parse tomogram URI to extract tomo_type and voxel_spacing
+    try:
+        tomogram_params = parse_copick_uri(tomogram_uri, "tomogram")
+    except ValueError as e:
+        raise click.BadParameter(f"Invalid tomogram URI: {e}") from e
+
+    tomo_type = tomogram_params["tomo_type"]
+    voxel_spacing = tomogram_params["voxel_spacing"]
+    if isinstance(voxel_spacing, str):
+        voxel_spacing = float(voxel_spacing)
+
+    # Create config directly from URIs with smart defaults
     try:
         task_config = create_simple_config(
             input_uri=input_uri,
             input_type="mesh",
             output_uri=output_uri,
             output_type="picks",
+            command_name="mesh2picks",
         )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
@@ -141,6 +143,7 @@ def mesh2picks(
     logger.info(
         f"Target picks template: {output_params['object_name']} ({output_params['user_id']}/{output_params['session_id']})",
     )
+    logger.info(f"Tomogram: {tomo_type}@{voxel_spacing}")
     logger.info(f"Sampling type: {sampling_type}, n_points: {n_points}")
 
     # Parallel discovery and processing with consistent architecture!

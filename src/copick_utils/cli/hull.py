@@ -11,8 +11,7 @@ from copick_utils.cli.util import (
     add_output_option,
     add_workers_option,
 )
-from copick_utils.converters.config_models import create_simple_config
-from copick_utils.process.hull import hull_lazy_batch
+from copick_utils.util.config_models import create_simple_config
 
 
 @click.command(
@@ -76,13 +75,14 @@ def hull(
         # Process specific runs
         copick process hull -r run1 -r run2 -i "membrane:user1/session1" -o "membrane:hull/convex-001" --hull-type convex
     """
+    from copick_utils.process.hull import hull_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Create config directly from URIs
+    # Create config directly from URIs with smart defaults
     try:
         task_config = create_simple_config(
             input_uri=input_uri,
@@ -90,6 +90,7 @@ def hull(
             output_uri=output_uri,
             output_type="mesh",
             individual_outputs=individual_meshes,
+            command_name="hull",
         )
     except ValueError as e:
         raise click.BadParameter(str(e)) from e

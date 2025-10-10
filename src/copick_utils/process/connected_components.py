@@ -116,9 +116,10 @@ def separate_segmentation_components(
     segmentation: "CopickSegmentation",
     connectivity: int = 26,
     min_size: int = 0,
-    session_id_prefix: str = "inst-",
+    session_id_template: str = "inst-{instance_id}",
     output_user_id: str = "components",
     multilabel: bool = True,
+    session_id_prefix: str = None,  # Deprecated, kept for backward compatibility
 ) -> List["CopickSegmentation"]:
     """
     Separate connected components in a segmentation into individual segmentations.
@@ -127,13 +128,17 @@ def separate_segmentation_components(
         segmentation: Input segmentation to process
         connectivity: Connectivity for connected components (6, 18, or 26)
         min_size: Minimum size of components to keep
-        session_id_prefix: Prefix for output segmentation session IDs
+        session_id_template: Template for output session IDs with {instance_id} placeholder
         output_user_id: User ID for output segmentations
         multilabel: Whether to treat input as multilabel segmentation
+        session_id_prefix: Deprecated. Use session_id_template instead.
 
     Returns:
         List of created segmentations, one per component
     """
+    # Handle deprecated session_id_prefix parameter
+    if session_id_prefix is not None:
+        session_id_template = f"{session_id_prefix}{{instance_id}}"
     # Get the segmentation volume
     volume = segmentation.numpy()
     if volume is None:
@@ -171,7 +176,7 @@ def separate_segmentation_components(
 
             # Create segmentations for each component
             for component_vol in individual_components:
-                session_id = f"{session_id_prefix}{component_count}"
+                session_id = session_id_template.replace("{instance_id}", str(component_count))
 
                 # Create new segmentation
                 output_seg = run.new_segmentation(
@@ -204,7 +209,7 @@ def separate_segmentation_components(
 
         # Create segmentations for each component
         for component_vol in individual_components:
-            session_id = f"{session_id_prefix}{component_count}"
+            session_id = session_id_template.replace("{instance_id}", str(component_count))
 
             # Create new segmentation
             output_seg = run.new_segmentation(
@@ -232,7 +237,7 @@ def _separate_components_worker(
     segmentation_session_id: str,
     connectivity: int,
     min_size: int,
-    session_id_prefix: str,
+    session_id_template: str,
     output_user_id: str,
     multilabel: bool,
     root: "CopickRoot",
@@ -256,7 +261,7 @@ def _separate_components_worker(
             segmentation=segmentation,
             connectivity=connectivity,
             min_size=min_size,
-            session_id_prefix=session_id_prefix,
+            session_id_template=session_id_template,
             output_user_id=output_user_id,
             multilabel=multilabel,
         )
@@ -279,11 +284,12 @@ def separate_components_batch(
     segmentation_session_id: str,
     connectivity: int = 26,
     min_size: int = 0,
-    session_id_prefix: str = "inst-",
+    session_id_template: str = "inst-{instance_id}",
     output_user_id: str = "components",
     multilabel: bool = True,
     run_names: Optional[List[str]] = None,
     workers: int = 8,
+    session_id_prefix: str = None,  # Deprecated, kept for backward compatibility
 ) -> Dict[str, Any]:
     """
     Batch separate connected components across multiple runs.
@@ -295,16 +301,21 @@ def separate_components_batch(
         segmentation_session_id: Session ID of the segmentation to process
         connectivity: Connectivity for connected components (6, 18, or 26). Default is 26.
         min_size: Minimum size of components to keep. Default is 0.
-        session_id_prefix: Prefix for output segmentation session IDs. Default is "inst-".
+        session_id_template: Template for output session IDs with {instance_id} placeholder. Default is "inst-{instance_id}".
         output_user_id: User ID for output segmentations. Default is "components".
         multilabel: Whether to treat input as multilabel segmentation. Default is True.
         run_names: List of run names to process. If None, processes all runs.
         workers: Number of worker processes. Default is 8.
+        session_id_prefix: Deprecated. Use session_id_template instead.
 
     Returns:
         Dictionary with processing results and statistics
     """
     from copick.ops.run import map_runs
+
+    # Handle deprecated session_id_prefix parameter
+    if session_id_prefix is not None:
+        session_id_template = f"{session_id_prefix}{{instance_id}}"
 
     runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
 
@@ -319,7 +330,7 @@ def separate_components_batch(
         segmentation_session_id=segmentation_session_id,
         connectivity=connectivity,
         min_size=min_size,
-        session_id_prefix=session_id_prefix,
+        session_id_template=session_id_template,
         output_user_id=output_user_id,
         multilabel=multilabel,
     )
