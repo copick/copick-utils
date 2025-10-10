@@ -79,6 +79,7 @@ hull = "copick_utils.cli.processing_commands:hull"
 [project.entry-points."copick.logical.commands"]
 meshop = "copick_utils.cli.logical_commands:meshop"
 segop = "copick_utils.cli.logical_commands:segop"
+enclosed = "copick_utils.cli.logical_commands:enclosed"
 clipmesh = "copick_utils.cli.logical_commands:clipmesh"
 clipseg = "copick_utils.cli.logical_commands:clipseg"
 clippicks = "copick_utils.cli.logical_commands:clippicks"
