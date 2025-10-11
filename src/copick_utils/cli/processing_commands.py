@@ -1,5 +1,6 @@
 """CLI commands for segmentation processing operations."""
 
+from copick_utils.cli.filter_components import filter_components
 from copick_utils.cli.fit_spline import fit_spline
 from copick_utils.cli.hull import hull
 from copick_utils.cli.separate_components import separate_components
@@ -12,5 +13,6 @@ __all__ = [
     "hull",
     "skeletonize",
     "separate_components",
+    "filter_components",
     "fit_spline",
 ]

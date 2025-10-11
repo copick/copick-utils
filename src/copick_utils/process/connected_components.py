@@ -1,6 +1,6 @@
 """Connected components processing for segmentation volumes."""
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from scipy import ndimage
@@ -12,19 +12,20 @@ if TYPE_CHECKING:
 
 def separate_connected_components_3d(
     volume: np.ndarray,
-    connectivity: int = 26,
-    min_size: int = 0,
+    voxel_spacing: float,
+    connectivity: Union[int, str] = "all",
+    min_size: Optional[float] = None,
 ) -> Tuple[np.ndarray, int, Dict[int, Dict[str, Any]]]:
     """
     Separate connected components in a 3D binary or labeled volume.
 
     Args:
         volume: 3D binary or labeled segmentation volume
-        connectivity: Connectivity for connected components (6, 18, or 26 for 3D)
-            - 6: faces only (6-connected)
-            - 18: faces and edges (18-connected)
-            - 26: faces, edges, and corners (26-connected, default)
-        min_size: Minimum size of components to keep (default: 0, keep all)
+        voxel_spacing: Voxel spacing in angstroms
+        connectivity: Connectivity for connected components (default: "all")
+            String format: "face" (6-connected), "face-edge" (18-connected), "all" (26-connected)
+            Legacy int format: 6, 18, or 26 (for backward compatibility)
+        min_size: Minimum component volume in cubic angstroms (Å³) to keep (None = keep all)
 
     Returns:
         Tuple of (labeled_volume, num_components, component_info):
@@ -35,15 +36,26 @@ def separate_connected_components_3d(
     # Convert to binary if not already
     binary_volume = volume > 0 if volume.dtype != bool else volume.copy()
 
+    # Map connectivity to integer (support both string and legacy int format)
+    if isinstance(connectivity, str):
+        connectivity_map = {
+            "face": 6,
+            "face-edge": 18,
+            "all": 26,
+        }
+        connectivity_int = connectivity_map.get(connectivity, 26)
+    else:
+        connectivity_int = connectivity
+
     # Define connectivity structure
-    if connectivity == 6:
+    if connectivity_int == 6:
         structure = ndimage.generate_binary_structure(3, 1)  # faces only
-    elif connectivity == 18:
+    elif connectivity_int == 18:
         structure = ndimage.generate_binary_structure(3, 2)  # faces + edges
-    elif connectivity == 26:
+    elif connectivity_int == 26:
         structure = ndimage.generate_binary_structure(3, 3)  # all neighbors
     else:
-        raise ValueError("Connectivity must be 6, 18, or 26 for 3D volumes")
+        raise ValueError("Connectivity must be 6, 18, or 26 (or 'face', 'face-edge', 'all')")
 
     # Label connected components
     labeled_volume, num_components = ndimage.label(binary_volume, structure=structure)
@@ -56,16 +68,20 @@ def separate_connected_components_3d(
 
     print(f"Found {len(props)} connected components")
 
+    # Calculate voxel volume in cubic angstroms
+    voxel_volume = voxel_spacing**3
+
     # Filter by size if specified
-    if min_size > 0:
+    if min_size is not None and min_size > 0:
         for prop in props:
-            if prop.area < min_size:
+            component_volume = prop.area * voxel_volume
+            if component_volume < min_size:
                 labeled_volume[labeled_volume == prop.label] = 0
 
         # Relabel after filtering
         labeled_volume, num_components = ndimage.label(labeled_volume > 0, structure=structure)
         props = measure.regionprops(labeled_volume)
-        print(f"After filtering by size (min={min_size}): {num_components} components")
+        print(f"After filtering by size (min={min_size} Å³): {num_components} components")
 
     # Store component information
     for _i, prop in enumerate(props, 1):
@@ -114,8 +130,8 @@ def print_component_stats(component_info: Dict[int, Dict[str, Any]]) -> None:
 
 def separate_segmentation_components(
     segmentation: "CopickSegmentation",
-    connectivity: int = 26,
-    min_size: int = 0,
+    connectivity: Union[int, str] = "all",
+    min_size: Optional[float] = None,
     session_id_template: str = "inst-{instance_id}",
     output_user_id: str = "components",
     multilabel: bool = True,
@@ -126,8 +142,10 @@ def separate_segmentation_components(
 
     Args:
         segmentation: Input segmentation to process
-        connectivity: Connectivity for connected components (6, 18, or 26)
-        min_size: Minimum size of components to keep
+        connectivity: Connectivity for connected components (default: "all")
+            String format: "face" (6-connected), "face-edge" (18-connected), "all" (26-connected)
+            Legacy int format: 6, 18, or 26 (for backward compatibility)
+        min_size: Minimum component volume in cubic angstroms (Å³) to keep (None = keep all)
         session_id_template: Template for output session IDs with {instance_id} placeholder
         output_user_id: User ID for output segmentations
         multilabel: Whether to treat input as multilabel segmentation
@@ -167,6 +185,7 @@ def separate_segmentation_components(
             # Separate connected components
             labeled_vol, n_components, component_info = separate_connected_components_3d(
                 binary_vol,
+                voxel_spacing=voxel_size,
                 connectivity=connectivity,
                 min_size=min_size,
             )
@@ -200,6 +219,7 @@ def separate_segmentation_components(
         # Separate connected components
         labeled_vol, n_components, component_info = separate_connected_components_3d(
             volume,
+            voxel_spacing=voxel_size,
             connectivity=connectivity,
             min_size=min_size,
         )
@@ -235,8 +255,8 @@ def _separate_components_worker(
     segmentation_name: str,
     segmentation_user_id: str,
     segmentation_session_id: str,
-    connectivity: int,
-    min_size: int,
+    connectivity: Union[int, str],
+    min_size: Optional[float],
     session_id_template: str,
     output_user_id: str,
     multilabel: bool,
@@ -282,8 +302,8 @@ def separate_components_batch(
     segmentation_name: str,
     segmentation_user_id: str,
     segmentation_session_id: str,
-    connectivity: int = 26,
-    min_size: int = 0,
+    connectivity: Union[int, str] = "all",
+    min_size: Optional[float] = None,
     session_id_template: str = "inst-{instance_id}",
     output_user_id: str = "components",
     multilabel: bool = True,
@@ -299,8 +319,10 @@ def separate_components_batch(
         segmentation_name: Name of the segmentation to process
         segmentation_user_id: User ID of the segmentation to process
         segmentation_session_id: Session ID of the segmentation to process
-        connectivity: Connectivity for connected components (6, 18, or 26). Default is 26.
-        min_size: Minimum size of components to keep. Default is 0.
+        connectivity: Connectivity for connected components (default: "all")
+            String format: "face" (6-connected), "face-edge" (18-connected), "all" (26-connected)
+            Legacy int format: 6, 18, or 26 (for backward compatibility)
+        min_size: Minimum component volume in cubic angstroms (Å³) to keep (None = keep all)
         session_id_template: Template for output session IDs with {instance_id} placeholder. Default is "inst-{instance_id}".
         output_user_id: User ID for output segmentations. Default is "components".
         multilabel: Whether to treat input as multilabel segmentation. Default is True.

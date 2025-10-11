@@ -24,15 +24,16 @@ from copick_utils.cli.util import add_input_option, add_output_option
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
     "--connectivity",
-    type=click.Choice(["6", "18", "26"]),
-    default="26",
-    help="Connectivity for connected components analysis (6, 18, or 26).",
+    "-c",
+    type=click.Choice(["face", "face-edge", "all"]),
+    default="all",
+    help="Connectivity for connected components (face=6-connected, face-edge=18-connected, all=26-connected).",
 )
 @optgroup.option(
     "--min-size",
-    type=int,
-    default=0,
-    help="Minimum size of components to keep (in voxels).",
+    type=float,
+    default=None,
+    help="Minimum component volume in cubic angstroms (Å³) to keep (optional).",
 )
 @optgroup.option(
     "--multilabel/--binary",
@@ -88,7 +89,6 @@ def separate_components(
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
-    connectivity_int = int(connectivity)
 
     # Expand output URI with smart defaults (individual_outputs=True for {instance_id})
     try:
@@ -129,7 +129,9 @@ def separate_components(
     logger.info(f"Separating connected components for segmentation '{segmentation_name}'")
     logger.info(f"Source segmentation: {segmentation_user_id}/{segmentation_session_id}")
     logger.info(f"Output template: {output_params['name']} ({output_user_id}/{output_session_id_template})")
-    logger.info(f"Connectivity: {connectivity_int}, min size: {min_size} voxels")
+    logger.info(f"Connectivity: {connectivity}")
+    if min_size is not None:
+        logger.info(f"Minimum size: {min_size} Å³")
     logger.info(f"Processing as {'multilabel' if multilabel else 'binary'} segmentation")
 
     results = separate_components_batch(
@@ -137,7 +139,7 @@ def separate_components(
         segmentation_name=segmentation_name,
         segmentation_user_id=segmentation_user_id,
         segmentation_session_id=segmentation_session_id,
-        connectivity=connectivity_int,
+        connectivity=connectivity,
         min_size=min_size,
         session_id_template=output_session_id_template,
         output_user_id=output_user_id,

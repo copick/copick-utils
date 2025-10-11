@@ -71,6 +71,7 @@ picks2surface = "copick_utils.cli.conversion_commands:picks2surface"
 
 [project.entry-points."copick.process.commands"]
 separate_components = "copick_utils.cli.processing_commands:separate_components"
+filter_components = "copick_utils.cli.processing_commands:filter_components"
 skeletonize = "copick_utils.cli.processing_commands:skeletonize"
 fit_spline = "copick_utils.cli.processing_commands:fit_spline"
 validbox = "copick_utils.cli.processing_commands:validbox"
