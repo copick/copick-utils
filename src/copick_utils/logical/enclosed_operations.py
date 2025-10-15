@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _find_enclosed_components(
+def _remove_enclosed_components(
     seg_inner: np.ndarray,
     seg_outer: np.ndarray,
     voxel_spacing: float,
@@ -24,7 +24,7 @@ def _find_enclosed_components(
     max_size: Optional[float] = None,
 ) -> Tuple[np.ndarray, int, list]:
     """
-    Find connected components in seg_inner that are fully surrounded by seg_outer.
+    Remove connected components from seg_inner that are fully surrounded by seg_outer.
 
     Args:
         seg_inner: Binary mask of inner segmentation (numpy array)
@@ -39,13 +39,13 @@ def _find_enclosed_components(
         max_size: Maximum component volume in cubic angstroms (Å³) to consider (None = no maximum)
 
     Returns:
-        Tuple of (updated_outer_seg, num_added, component_info)
-        - updated_outer_seg: Updated outer segmentation with enclosed components added
-        - num_added: Number of components that were added
+        Tuple of (seg_inner_cleaned, num_removed, component_info)
+        - seg_inner_cleaned: Cleaned inner segmentation with enclosed components removed
+        - num_removed: Number of components that were removed
         - component_info: List of dicts with info about each component
     """
     # Create a copy to avoid modifying the original
-    seg_outer_updated = seg_outer.copy()
+    seg_inner_cleaned = seg_inner.copy()
 
     # Map connectivity string to numeric value
     connectivity_map = {
@@ -65,7 +65,7 @@ def _find_enclosed_components(
     voxel_volume = voxel_spacing**3
 
     component_info = []
-    num_added = 0
+    num_removed = 0
 
     # Check each component
     for component_id in range(1, num_components + 1):
@@ -87,8 +87,8 @@ def _find_enclosed_components(
         # Check if dilated component is fully contained in outer segmentation
         is_surrounded = bool(np.all(dilated_component <= seg_outer))
 
-        # Decide whether to add
-        should_add = is_surrounded and passes_size_filter
+        # Decide whether to remove
+        should_remove = is_surrounded and passes_size_filter
 
         # Store information
         info = {
@@ -97,16 +97,16 @@ def _find_enclosed_components(
             "volume": component_volume,
             "is_surrounded": is_surrounded,
             "passes_size_filter": passes_size_filter,
-            "added": should_add,
+            "removed": should_remove,
         }
         component_info.append(info)
 
-        # If surrounded and passes size filter, add to outer segmentation
-        if should_add:
-            seg_outer_updated = np.logical_or(seg_outer_updated, component_mask)
-            num_added += 1
+        # If surrounded and passes size filter, remove from inner segmentation
+        if should_remove:
+            seg_inner_cleaned = np.logical_and(seg_inner_cleaned, ~component_mask)
+            num_removed += 1
 
-    return seg_outer_updated.astype(np.uint8), num_added, component_info
+    return seg_inner_cleaned.astype(np.uint8), num_removed, component_info
 
 
 def segmentation_enclosed(
@@ -125,14 +125,13 @@ def segmentation_enclosed(
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
     """
-    Find enclosed components in segmentation1 (inner) that are surrounded by segmentation2 (outer),
-    and add them to segmentation2.
+    Remove enclosed components from segmentation1 (inner) that are surrounded by segmentation2 (outer).
 
     Args:
-        segmentation1: Inner CopickSegmentation object (source of enclosed components)
-        segmentation2: Outer CopickSegmentation object (absorbing segmentation)
+        segmentation1: Inner CopickSegmentation object (segmentation to clean)
+        segmentation2: Outer CopickSegmentation object (reference/enclosing segmentation)
         run: CopickRun object
-        object_name: Name for the output segmentation
+        object_name: Name for the output segmentation (cleaned version of segmentation1)
         session_id: Session ID for the output segmentation
         user_id: User ID for the output segmentation
         voxel_spacing: Voxel spacing for the output segmentation in angstroms
@@ -146,7 +145,7 @@ def segmentation_enclosed(
 
     Returns:
         Tuple of (CopickSegmentation object, stats dict) or None if operation failed.
-        Stats dict contains 'voxels_created' and 'components_added'.
+        Stats dict contains 'voxels_kept', 'components_removed', and 'components_evaluated'.
     """
     try:
         # Load segmentation arrays
@@ -176,8 +175,8 @@ def segmentation_enclosed(
         bool1 = seg1_array.astype(bool)
         bool2 = seg2_array.astype(bool)
 
-        # Find and add enclosed components
-        result_array, num_added, component_info = _find_enclosed_components(
+        # Remove enclosed components from inner segmentation
+        result_array, num_removed, component_info = _remove_enclosed_components(
             bool1,
             bool2,
             voxel_spacing=voxel_spacing,
@@ -187,7 +186,7 @@ def segmentation_enclosed(
             max_size=max_size,
         )
 
-        # Create output segmentation
+        # Create output segmentation (cleaned version of segmentation1)
         output_seg = run.new_segmentation(
             name=object_name,
             user_id=user_id,
@@ -201,13 +200,13 @@ def segmentation_enclosed(
         output_seg.from_numpy(result_array)
 
         stats = {
-            "voxels_created": int(np.sum(result_array)),
-            "components_added": num_added,
+            "voxels_kept": int(np.sum(result_array)),
+            "components_removed": num_removed,
             "components_evaluated": len(component_info),
         }
         logger.info(
-            f"Added {stats['components_added']}/{stats['components_evaluated']} enclosed components "
-            f"({stats['voxels_created']} total voxels)",
+            f"Removed {stats['components_removed']}/{stats['components_evaluated']} enclosed components "
+            f"({stats['voxels_kept']} voxels remaining)",
         )
         return output_seg, stats
 
@@ -219,5 +218,5 @@ def segmentation_enclosed(
 # Lazy batch converter for new architecture
 segmentation_enclosed_lazy_batch = create_lazy_batch_converter(
     converter_func=segmentation_enclosed,
-    task_description="Finding and absorbing enclosed segmentation components",
+    task_description="Removing enclosed segmentation components",
 )

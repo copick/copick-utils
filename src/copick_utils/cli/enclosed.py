@@ -13,7 +13,7 @@ from copick_utils.util.config_models import create_dual_selector_config
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="Find and absorb enclosed components from one segmentation into another.",
+    short_help="Remove enclosed components from a segmentation.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -78,23 +78,31 @@ def enclosed(
     debug,
 ):
     """
-    Find and absorb enclosed components from one segmentation into another.
+    Remove enclosed components from a segmentation.
 
     This command identifies connected components in the first segmentation (inner) that are
-    completely surrounded by the second segmentation (outer), and adds them to the outer
-    segmentation. Useful for filling holes or capturing isolated regions.
+    completely surrounded by the second segmentation (outer), and removes them from the inner
+    segmentation. Useful for cleaning up noise, artifacts, or unwanted fragments.
 
     \b
     URI Format:
         Segmentations: name:user_id/session_id (voxel spacing specified via --voxel-spacing)
 
     \b
-    Examples:
-        # Find small vesicles enclosed by membrane and add them to membrane
-        copick logical enclosed -vs 10.0 -i1 "vesicle:user1/auto-001" -i2 "membrane:user1/manual-001" -o "membrane_filled"
+    Algorithm:
+        1. Label connected components in the inner segmentation (input1)
+        2. Dilate each component by the specified margin
+        3. Check if the dilated component is fully contained within the outer segmentation (input2)
+        4. If enclosed (and within size limits), remove the component from the inner segmentation
+        5. Output cleaned version of the inner segmentation
 
-        # With size filtering (volumes in Å³) and custom margin
-        copick logical enclosed -vs 10.0 -i1 "fragments:user1/.*" -i2 "cell:user1/.*" -o "cell" --min-size 100000 --max-size 10000000 --margin 2
+    \b
+    Examples:
+        # Remove small vesicle fragments that are enclosed by membrane
+        copick logical enclosed -vs 10.0 -i1 "vesicle:user1/auto-001" -i2 "membrane:user1/manual-001" -o "vesicle_clean"
+
+        # Remove noise fragments with size filtering (volumes in Å³)
+        copick logical enclosed -vs 10.0 -i1 "fragments:user1/.*" -i2 "cell:user1/.*" -o "cleaned" --min-size 1000 --max-size 100000 --margin 2
     """
 
     logger = get_logger(__name__, debug=debug)
@@ -125,9 +133,11 @@ def enclosed(
     input2_params = parse_copick_uri(input2_uri, "segmentation")
     output_params = parse_copick_uri(output_uri_full, "segmentation")
 
-    logger.info(f"Finding enclosed components from '{input1_params['name']}' within '{input2_params['name']}'")
-    logger.info(f"Inner segmentation pattern: {input1_params['user_id']}/{input1_params['session_id']}")
-    logger.info(f"Outer segmentation pattern: {input2_params['user_id']}/{input2_params['session_id']}")
+    logger.info(
+        f"Removing enclosed components from '{input1_params['name']}' using '{input2_params['name']}' as reference",
+    )
+    logger.info(f"Segmentation to clean: {input1_params['user_id']}/{input1_params['session_id']}")
+    logger.info(f"Reference segmentation: {input2_params['user_id']}/{input2_params['session_id']}")
     logger.info(
         f"Target segmentation template: {output_params['name']} ({output_params['user_id']}/{output_params['session_id']})",
     )
@@ -158,9 +168,9 @@ def enclosed(
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
-    total_voxels = sum(result.get("voxels_created", 0) for result in results.values() if result)
+    total_voxels_kept = sum(result.get("voxels_kept", 0) for result in results.values() if result)
     total_processed = sum(result.get("processed", 0) for result in results.values() if result)
-    total_components = sum(result.get("components_added", 0) for result in results.values() if result)
+    total_components_removed = sum(result.get("components_removed", 0) for result in results.values() if result)
 
     # Collect all errors
     all_errors = []
@@ -170,8 +180,8 @@ def enclosed(
 
     logger.info(f"Completed: {successful}/{len(results)} runs processed successfully")
     logger.info(f"Total enclosed operations completed: {total_processed}")
-    logger.info(f"Total components added: {total_components}")
-    logger.info(f"Total voxels created: {total_voxels}")
+    logger.info(f"Total components removed: {total_components_removed}")
+    logger.info(f"Total voxels remaining in cleaned segmentations: {total_voxels_kept}")
 
     if all_errors:
         logger.warning(f"Encountered {len(all_errors)} errors during processing")
