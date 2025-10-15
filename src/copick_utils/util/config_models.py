@@ -227,7 +227,7 @@ class ReferenceConfig(BaseModel):
 class TaskConfig(BaseModel):
     """Pydantic model for complete task configuration."""
 
-    type: Literal["single_selector", "dual_selector", "single_selector_with_reference"]
+    type: Literal["single_selector", "dual_selector", "multi_selector", "single_selector_with_reference"]
     selector: Optional[SelectorConfig] = None
     selectors: Optional[List[SelectorConfig]] = None
     reference: Optional[ReferenceConfig] = None
@@ -249,11 +249,13 @@ class TaskConfig(BaseModel):
     @field_validator("selectors")
     @classmethod
     def validate_dual_selectors(cls, v, info):
-        """Validate dual selector configuration."""
+        """Validate selector configuration."""
         values = info.data
         config_type = values.get("type")
         if config_type == "dual_selector" and (v is None or len(v) != 2):
             raise ValueError("exactly 2 selectors required for dual_selector type")
+        if config_type == "multi_selector" and (v is None or len(v) < 2):
+            raise ValueError("at least 2 selectors required for multi_selector type")
         return v
 
     @field_validator("reference")
@@ -393,6 +395,98 @@ def create_dual_selector_config(
     return TaskConfig(
         type="dual_selector",
         selectors=[selector1_config, selector2_config],
+        pairing_method=pairing_method,
+    )
+
+
+def create_multi_selector_config(
+    input_uris: List[str],
+    input_type: Literal["mesh", "segmentation"],
+    output_uri: str,
+    output_type: Literal["mesh", "segmentation"],
+    pairing_method: str = "n_way",
+    individual_outputs: bool = False,
+    command_name: Optional[str] = None,
+) -> TaskConfig:
+    """
+    Create a multi-selector task configuration from N input URIs.
+
+    Args:
+        input_uris: List of input copick URI strings (N≥2)
+        input_type: Type of input objects (all must be same type)
+        output_uri: Output copick URI string
+        output_type: Type of output object
+        pairing_method: How to pair inputs ("n_way")
+        individual_outputs: Whether to create individual outputs
+        command_name: Name of command for smart defaults
+
+    Returns:
+        TaskConfig with multi_selector type
+
+    Raises:
+        ValueError: If fewer than 2 input URIs provided
+
+    Example:
+        config = create_multi_selector_config(
+            input_uris=[
+                "membrane:user1/manual-*",
+                "vesicle:user2/auto-*",
+                "ribosome:user3/pred-*"
+            ],
+            input_type="segmentation",
+            output_uri="merged",
+            output_type="segmentation",
+            command_name="segop",
+        )
+    """
+    from copick.util.uri import parse_copick_uri
+
+    if len(input_uris) < 2:
+        raise ValueError(f"At least 2 input URIs required, got {len(input_uris)}")
+
+    # Create selector for first input (determines output config)
+    first_selector = SelectorConfig.from_uris(
+        input_uri=input_uris[0],
+        input_type=input_type,
+        output_uri=output_uri,
+        output_type=output_type,
+        individual_outputs=individual_outputs,
+        command_name=command_name,
+    )
+
+    selectors = [first_selector]
+
+    # Create selectors for remaining inputs (output fields unused)
+    for input_uri in input_uris[1:]:
+        params = parse_copick_uri(input_uri, input_type)
+        object_name = params.get("object_name") or params.get("name")
+
+        selector_dict = {
+            "input_type": input_type,
+            "output_type": output_type,
+            "input_object_name": object_name,
+            "input_user_id": params["user_id"],
+            "input_session_id": params["session_id"],
+            "output_object_name": object_name,  # Not used
+            "output_user_id": params["user_id"],  # Not used
+            "output_session_id": params["session_id"],  # Not used
+            "individual_outputs": False,
+        }
+
+        # Add segmentation-specific fields
+        if input_type == "segmentation":
+            voxel_spacing = params.get("voxel_spacing")
+            if isinstance(voxel_spacing, str) and voxel_spacing != "*":
+                voxel_spacing = float(voxel_spacing)
+
+            selector_dict["segmentation_name"] = object_name
+            selector_dict["voxel_spacing"] = voxel_spacing
+
+        selectors.append(SelectorConfig(**selector_dict))
+
+    return TaskConfig(
+        type="multi_selector",
+        selectors=selectors,
         pairing_method=pairing_method,
     )
 

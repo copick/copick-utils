@@ -338,6 +338,58 @@ def pair_tasks_within_run(
     return paired_tasks
 
 
+def pair_multi_tasks_within_run(
+    tasks_list: List[List[Dict[str, Any]]],
+    input_type: str = "segmentation",
+) -> List[Dict[str, Any]]:
+    """
+    Pair tasks from N selectors within a single run for N-way operations.
+
+    Args:
+        tasks_list: List of task lists from N selectors
+        input_type: Type of input objects
+
+    Returns:
+        List of N-way paired tasks with inputs as a list
+    """
+    # Use plural parameter name for N inputs
+    if input_type == "mesh":
+        param_name = "meshes"
+    elif input_type == "segmentation":
+        param_name = "segmentations"
+    else:
+        param_name = "inputs"
+
+    paired_tasks = []
+
+    # Pair in order across all selectors
+    min_length = min(len(tasks) for tasks in tasks_list) if tasks_list else 0
+
+    for i in range(min_length):
+        # Collect all input objects at this index
+        input_objects = []
+        for tasks in tasks_list:
+            task = tasks[i]
+            # Extract input object using various possible keys
+            input_obj = task.get("segmentation") or task.get("mesh") or task.get("picks") or task.get("input_object")
+            input_objects.append(input_obj)
+
+        # Create combined task with list of inputs
+        first_task = tasks_list[0][i]
+        paired_task = {
+            param_name: input_objects,  # List of N input objects
+            "object_name": first_task["output_object_name"],
+            "user_id": first_task["output_user_id"],
+            "session_id": first_task["output_session_id"],
+            "voxel_spacing": first_task.get("voxel_spacing"),
+            "is_multilabel": False,
+        }
+
+        paired_tasks.append(paired_task)
+
+    return paired_tasks
+
+
 def lazy_conversion_worker(
     run: "CopickRun",
     config: TaskConfig,
@@ -375,6 +427,23 @@ def lazy_conversion_worker(
             tasks = pair_tasks_within_run(tasks1, tasks2, input_type)
 
             # Add additional parameters to all tasks
+            if config.additional_params:
+                for task in tasks:
+                    task.update(config.additional_params)
+
+        elif config.type == "multi_selector":
+            # N-way operation (N≥2)
+            # Discover tasks for all selectors
+            tasks_list = []
+            for selector in config.selectors:
+                selector_tasks = discover_tasks_for_run(run, selector)
+                tasks_list.append(selector_tasks)
+
+            # Use input type from first selector
+            input_type = config.selectors[0].input_type
+            tasks = pair_multi_tasks_within_run(tasks_list, input_type)
+
+            # Add additional parameters
             if config.additional_params:
                 for task in tasks:
                     task.update(config.additional_params)

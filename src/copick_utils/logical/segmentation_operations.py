@@ -1,6 +1,6 @@
 """Boolean operations on segmentations (union, intersection, difference, exclusion)."""
 
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import numpy as np
 from copick.util.log import get_logger
@@ -236,6 +236,83 @@ def segmentation_exclusion(
     )
 
 
+def segmentation_multi_union(
+    segmentations: List["CopickSegmentation"],
+    run: "CopickRun",
+    object_name: str,
+    session_id: str,
+    user_id: str,
+    voxel_spacing: float,
+    is_multilabel: bool = False,
+    **kwargs,
+) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
+    """
+    Perform N-way union of multiple segmentations.
+
+    All input segmentations are converted to binary and combined using logical OR.
+
+    Args:
+        segmentations: List of CopickSegmentation objects (N≥2)
+        run: CopickRun object
+        object_name: Name for output segmentation
+        session_id: Session ID for output
+        user_id: User ID for output
+        voxel_spacing: Voxel spacing for output
+        is_multilabel: Whether output is multilabel (default: False for binary union)
+        **kwargs: Additional arguments
+
+    Returns:
+        Tuple of (CopickSegmentation, stats) or None if failed
+    """
+    try:
+        if len(segmentations) < 2:
+            logger.error("Need at least 2 segmentations for N-way union")
+            return None
+
+        # Load all segmentation arrays
+        arrays = []
+        for i, seg in enumerate(segmentations):
+            arr = seg.numpy()
+            if arr is None or arr.size == 0:
+                logger.error(f"Could not load segmentation {i+1} (session: {seg.session_id})")
+                return None
+            arrays.append(arr)
+
+        # Verify all have same shape
+        ref_shape = arrays[0].shape
+        for i, arr in enumerate(arrays[1:], start=2):
+            if arr.shape != ref_shape:
+                logger.error(f"Shape mismatch in segmentation {i}: {arr.shape} vs {ref_shape}")
+                return None
+
+        # Perform N-way union (accumulative logical OR)
+        result = arrays[0].astype(bool)
+        for arr in arrays[1:]:
+            result = np.logical_or(result, arr.astype(bool))
+
+        result_array = result.astype(np.uint8)
+
+        # Create output segmentation
+        output_seg = run.new_segmentation(
+            name=object_name,
+            user_id=user_id,
+            session_id=session_id,
+            is_multilabel=is_multilabel,
+            voxel_size=voxel_spacing,
+            exist_ok=True,
+        )
+
+        output_seg.from_numpy(result_array)
+
+        stats = {"voxels_created": int(np.sum(result_array))}
+        logger.info(f"Created {len(segmentations)}-way union with {stats['voxels_created']} voxels")
+        return output_seg, stats
+
+    except Exception as e:
+        logger.error(f"Error performing N-way union: {e}")
+        return None
+
+
 # Create batch workers for each operation
 _segmentation_union_worker = create_batch_worker(segmentation_union, "segmentation", "segmentation", min_points=0)
 _segmentation_difference_worker = create_batch_worker(
@@ -313,4 +390,10 @@ segmentation_intersection_lazy_batch = create_lazy_batch_converter(
 segmentation_exclusion_lazy_batch = create_lazy_batch_converter(
     converter_func=segmentation_exclusion,
     task_description="Computing segmentation exclusions",
+)
+
+# Lazy batch converter for N-way union
+segmentation_multi_union_lazy_batch = create_lazy_batch_converter(
+    converter_func=segmentation_multi_union,
+    task_description="Computing N-way segmentation unions",
 )

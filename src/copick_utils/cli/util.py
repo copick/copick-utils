@@ -442,6 +442,54 @@ def add_dual_input_options(object_type: str, func: click.Command = None) -> Call
         return add_dual_input_options_decorator(func)
 
 
+def add_multi_input_options(object_type: str, func: click.Command = None) -> Callable:
+    """
+    Add --input/-i option for multiple URI-based inputs.
+
+    Supports specifying the same flag multiple times for N-way operations.
+    Example: -i input1 -i input2 -i input3
+
+    Pattern Support:
+    - Glob (default): Use * and ? wildcards (e.g., 'name:user*/session-*')
+    - Regex: Prefix with 're:' (e.g., 're:name:user\\d+/session-\\d+')
+
+    Args:
+        object_type (str): Type of object ('mesh', 'segmentation').
+        func (click.Command, optional): The Click command to which the option will be added.
+
+    Returns:
+        Callable: The Click command with the multi-input option added.
+    """
+
+    def add_multi_input_options_decorator(_func: click.Command) -> click.Command:
+        """Add --input option to command."""
+        format_examples = {
+            "mesh": "object_name:user_id/session_id",
+            "segmentation": "name:user_id/session_id@voxel_spacing",
+        }
+
+        help_text = (
+            f"Input {object_type} URI (format: {format_examples.get(object_type, 'URI')}). "
+            f"Can be specified multiple times for N-way operations. "
+            f"Supports glob patterns (default) or regex patterns (re: prefix)."
+        )
+
+        opt = optgroup.option(
+            "--input",
+            "-i",
+            "input_uris",
+            multiple=True,
+            required=True,
+            help=help_text,
+        )
+        return opt(_func)
+
+    if func is None:
+        return add_multi_input_options_decorator
+    else:
+        return add_multi_input_options_decorator(func)
+
+
 def add_reference_mesh_option(func: click.Command = None, required: bool = False) -> Callable:
     """
     Add --ref-mesh/-rm option for reference mesh input.
