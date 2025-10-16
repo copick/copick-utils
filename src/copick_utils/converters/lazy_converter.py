@@ -448,6 +448,46 @@ def lazy_conversion_worker(
                 for task in tasks:
                     task.update(config.additional_params)
 
+        elif config.type == "single_selector_multi_union":
+            # Single input pattern that expands to N-way union
+            discovered_tasks = discover_tasks_for_run(run, config.selector)
+
+            if len(discovered_tasks) < 2:
+                # Not enough matches for union operation
+                return {
+                    "processed": 0,
+                    "errors": [
+                        f"Pattern matched {len(discovered_tasks)} segmentation(s) in {run.name}, but union requires at least 2",
+                    ],
+                }
+
+            # Extract all input objects from discovered tasks
+            input_type = config.selector.input_type
+            if input_type == "segmentation":
+                param_name = "segmentations"
+                input_key = "segmentation"
+            elif input_type == "mesh":
+                param_name = "meshes"
+                input_key = "mesh"
+            else:
+                param_name = "inputs"
+                input_key = "input_object"
+
+            input_objects = [task[input_key] for task in discovered_tasks]
+
+            # Create single N-way task from all matched objects
+            first_task = discovered_tasks[0]
+            tasks = [
+                {
+                    param_name: input_objects,
+                    "object_name": first_task["output_object_name"],
+                    "user_id": first_task["output_user_id"],
+                    "session_id": first_task["output_session_id"],
+                    "voxel_spacing": first_task.get("voxel_spacing"),
+                    "is_multilabel": False,
+                },
+            ]
+
         else:
             raise ValueError(f"Unknown config type: {config.type}")
 

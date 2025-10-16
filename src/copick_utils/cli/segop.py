@@ -70,7 +70,7 @@ def segop(
 
     \b
     Operations:
-        - union: Combine segmentations (logical OR) - accepts N≥2 inputs
+        - union: Combine segmentations (logical OR) - accepts N≥1 inputs
         - difference: First minus second - requires exactly 2 inputs
         - intersection: Common voxels (logical AND) - requires exactly 2 inputs
         - exclusion: Exclusive or (XOR) - requires exactly 2 inputs
@@ -80,8 +80,19 @@ def segop(
     Voxel spacing applies globally to all inputs and output.
 
     \b
+    Single-Input Pattern Expansion (union only):
+        When providing a single -i flag with a pattern, the union operation will
+        expand the pattern within each run and merge all matching segmentations.
+        This is useful for combining multiple versions/annotations within each run.
+
+    \b
     Examples:
-        # N-way union with glob patterns (merge multiple segmentations)
+        # Single-input union: merge all matching segmentations within each run
+        copick logical segop --operation union -vs 10.0 \\
+            -i "membrane:user*/manual-*" \\
+            -o "merged"
+
+        # N-way union with multiple -i flags (merge across different objects)
         copick logical segop --operation union -vs 10.0 \\
             -i "membrane:user1/manual-*" \\
             -i "vesicle:user2/auto-*" \\
@@ -110,9 +121,9 @@ def segop(
             raise click.BadParameter(
                 f"'{operation}' operation requires exactly 2 inputs, got {num_inputs}. Provide exactly 2 -i flags.",
             )
-    elif operation == "union" and num_inputs < 2:
+    elif operation == "union" and num_inputs < 1:
         raise click.BadParameter(
-            f"'{operation}' operation requires at least 2 inputs, got {num_inputs}. Provide 2 or more -i flags.",
+            f"'{operation}' operation requires at least 1 input, got {num_inputs}. Provide 1 or more -i flags.",
         )
 
     root = copick.from_file(config)
@@ -124,7 +135,19 @@ def segop(
 
     # Create appropriate config based on input count
     try:
-        if num_inputs == 2:
+        if num_inputs == 1:
+            # Single input with pattern expansion (only for union)
+            from copick_utils.util.config_models import create_single_selector_config
+
+            task_config = create_single_selector_config(
+                input_uri=input_uris_full[0],
+                input_type="segmentation",
+                output_uri=output_uri_full,
+                output_type="segmentation",
+                command_name="segop",
+                operation=operation,
+            )
+        elif num_inputs == 2:
             # Use existing dual selector for 2-input operations
             task_config = create_dual_selector_config(
                 input1_uri=input_uris_full[0],
@@ -147,16 +170,29 @@ def segop(
         raise click.BadParameter(str(e)) from e
 
     # Logging
-    logger.info(f"Performing {operation} operation on {num_inputs} segmentations")
-    for i, uri in enumerate(input_uris, start=1):
-        params = parse_copick_uri(uri, "segmentation")
-        logger.info(f"  Input {i}: {params['name']} ({params['user_id']}/{params['session_id']})")
+    if num_inputs == 1:
+        logger.info(f"Performing {operation} operation with pattern-based input expansion")
+        params = parse_copick_uri(input_uris[0], "segmentation")
+        logger.info(f"  Pattern: {params['name']} ({params['user_id']}/{params['session_id']})")
+        logger.info("  Note: Pattern will be expanded to multiple segmentations per run")
+    else:
+        logger.info(f"Performing {operation} operation on {num_inputs} segmentations")
+        for i, uri in enumerate(input_uris, start=1):
+            params = parse_copick_uri(uri, "segmentation")
+            logger.info(f"  Input {i}: {params['name']} ({params['user_id']}/{params['session_id']})")
 
     output_params = parse_copick_uri(output_uri_full, "segmentation")
     logger.info(f"Target: {output_params['name']} ({output_params['user_id']}/{output_params['session_id']})")
 
     # Select appropriate lazy batch converter
-    if num_inputs == 2:
+    if num_inputs == 1:
+        # Single input with pattern expansion (only union supports this)
+        from copick_utils.logical.segmentation_operations import segmentation_multi_union_lazy_batch
+
+        lazy_batch_functions = {
+            "union": segmentation_multi_union_lazy_batch,
+        }
+    elif num_inputs == 2:
         # Use existing dual converters
         from copick_utils.logical.segmentation_operations import (
             segmentation_difference_lazy_batch,

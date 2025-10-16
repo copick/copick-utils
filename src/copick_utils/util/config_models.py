@@ -227,7 +227,13 @@ class ReferenceConfig(BaseModel):
 class TaskConfig(BaseModel):
     """Pydantic model for complete task configuration."""
 
-    type: Literal["single_selector", "dual_selector", "multi_selector", "single_selector_with_reference"]
+    type: Literal[
+        "single_selector",
+        "dual_selector",
+        "multi_selector",
+        "single_selector_with_reference",
+        "single_selector_multi_union",
+    ]
     selector: Optional[SelectorConfig] = None
     selectors: Optional[List[SelectorConfig]] = None
     reference: Optional[ReferenceConfig] = None
@@ -244,6 +250,8 @@ class TaskConfig(BaseModel):
             raise ValueError("selector is required for single_selector type")
         elif config_type == "single_selector_with_reference" and v is None:
             raise ValueError("selector is required for single_selector_with_reference type")
+        elif config_type == "single_selector_multi_union" and v is None:
+            raise ValueError("selector is required for single_selector_multi_union type")
         return v
 
     @field_validator("selectors")
@@ -310,6 +318,62 @@ def create_simple_config(
     )
 
     return TaskConfig(type="single_selector", selector=selector_config)
+
+
+def create_single_selector_config(
+    input_uri: str,
+    input_type: Literal["mesh", "segmentation"],
+    output_uri: str,
+    output_type: Literal["mesh", "segmentation"],
+    command_name: Optional[str] = None,
+    operation: str = "union",
+) -> TaskConfig:
+    """
+    Create a single-selector config for pattern expansion to N-way operations.
+
+    Used when a single input URI with pattern should expand to multiple objects
+    within each run, then perform an N-way operation on all matched objects.
+
+    Args:
+        input_uri: Input copick URI string (may contain patterns)
+        input_type: Type of input objects
+        output_uri: Output copick URI string
+        output_type: Type of output object
+        command_name: Name of command for smart defaults
+        operation: Operation type (currently only "union" supported)
+
+    Returns:
+        TaskConfig with single_selector_multi_union type
+
+    Raises:
+        ValueError: If operation is not "union"
+
+    Example:
+        config = create_single_selector_config(
+            input_uri="membrane:user*/manual-*@10.0",
+            input_type="segmentation",
+            output_uri="merged",
+            output_type="segmentation",
+            command_name="segop",
+            operation="union",
+        )
+    """
+    if operation != "union":
+        raise ValueError(f"Single-input pattern expansion only supports 'union' operation, got '{operation}'")
+
+    selector = SelectorConfig.from_uris(
+        input_uri=input_uri,
+        input_type=input_type,
+        output_uri=output_uri,
+        output_type=output_type,
+        individual_outputs=False,
+        command_name=command_name,
+    )
+
+    return TaskConfig(
+        type="single_selector_multi_union",
+        selector=selector,
+    )
 
 
 def create_dual_selector_config(
