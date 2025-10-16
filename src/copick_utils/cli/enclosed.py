@@ -110,9 +110,9 @@ def enclosed(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Append voxel spacing to URIs
-    input1_uri_full = f"{input1_uri}@{voxel_spacing}"
-    input2_uri_full = f"{input2_uri}@{voxel_spacing}"
+    # Append voxel spacing to URIs (only if not already present)
+    input1_uri_full = f"{input1_uri}@{voxel_spacing}" if "@" not in input1_uri else input1_uri
+    input2_uri_full = f"{input2_uri}@{voxel_spacing}" if "@" not in input2_uri else input2_uri
     output_uri_full = f"{output_uri}@{voxel_spacing}" if "@" not in output_uri else output_uri
 
     # Create config directly from URIs with smart defaults
