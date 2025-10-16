@@ -1,9 +1,29 @@
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
+
 import numpy as np
 import zarr
+from copick.util.log import get_logger
 from scipy.ndimage import zoom
 
+from copick_utils.converters.converter_common import (
+    create_batch_converter,
+    create_batch_worker,
+)
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
-def from_picks(pick, seg_volume, radius: float = 10.0, label_value: int = 1, voxel_spacing: float = 10):
+if TYPE_CHECKING:
+    from copick.models import CopickObject, CopickPicks, CopickRun, CopickSegmentation
+
+logger = get_logger(__name__)
+
+
+def from_picks(
+    pick: "CopickPicks",
+    seg_volume: np.ndarray,
+    radius: float = 10.0,
+    label_value: int = 1,
+    voxel_spacing: float = 10,
+) -> np.ndarray:
     """
     Paints picks into a segmentation volume as spheres.
 
@@ -74,7 +94,7 @@ def from_picks(pick, seg_volume, radius: float = 10.0, label_value: int = 1, vox
     return seg_volume
 
 
-def downsample_to_exact_shape(array, target_shape):
+def downsample_to_exact_shape(array: np.ndarray, target_shape: tuple) -> np.ndarray:
     """
     Downsamples a 3D array to match the target shape using nearest-neighbor interpolation.
     Ensures that the resulting array has the exact target shape.
@@ -83,17 +103,17 @@ def downsample_to_exact_shape(array, target_shape):
     return zoom(array, zoom_factors, order=0)
 
 
-def segmentation_from_picks(
-    radius,
-    painting_segmentation_name,
-    run,
-    voxel_spacing,
-    tomo_type,
-    pickable_object,
-    pick_set,
-    user_id="paintedPicks",
-    session_id="0",
-):
+def _create_segmentation_from_picks_legacy(
+    radius: float,
+    painting_segmentation_name: str,
+    run: "CopickRun",
+    voxel_spacing: float,
+    tomo_type: str,
+    pickable_object: "CopickObject",
+    pick_set: "CopickPicks",
+    user_id: str = "paintedPicks",
+    session_id: str = "0",
+) -> "CopickSegmentation":
     """
     Paints picks from a run into a multiscale segmentation array, representing them as spheres in 3D space.
 
@@ -185,3 +205,93 @@ def segmentation_from_picks(
         segmentation_group[level_name][:] = scaled_array
 
     return seg
+
+
+def segmentation_from_picks(
+    picks: "CopickPicks",
+    run: "CopickRun",
+    object_name: str,
+    session_id: str,
+    user_id: str,
+    radius: float,
+    voxel_spacing: float,
+    tomo_type: str = "wbp",
+) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
+    """
+    Convert CopickPicks to a segmentation by painting spheres.
+
+    Args:
+        picks: CopickPicks object to convert
+        run: CopickRun object
+        object_name: Name for the output segmentation
+        session_id: Session ID for the output segmentation
+        user_id: User ID for the output segmentation
+        radius: Radius of the spheres in physical units
+        voxel_spacing: Voxel spacing for the segmentation
+        tomo_type: Type of tomogram to use as reference
+
+    Returns:
+        Tuple of (CopickSegmentation object, stats dict) or None if creation failed.
+        Stats dict contains 'points_converted' and 'voxels_created'.
+    """
+    try:
+        # Get the pickable object for label information
+        root = run.root
+        pickable_object = root.get_object(picks.pickable_object_name)
+        if not pickable_object:
+            logger.error(f"Object '{picks.pickable_object_name}' not found in config")
+            return None
+
+        if not picks.points:
+            logger.error("No points found in pick set")
+            return None
+
+        # Create segmentation using the legacy function
+        seg = _create_segmentation_from_picks_legacy(
+            radius=radius,
+            painting_segmentation_name=object_name,
+            run=run,
+            voxel_spacing=voxel_spacing,
+            tomo_type=tomo_type,
+            pickable_object=pickable_object,
+            pick_set=picks,
+            user_id=user_id,
+            session_id=session_id,
+        )
+
+        # Calculate statistics
+        # For now, we don't have easy access to the actual voxel count, so we estimate
+        # based on number of spheres and their volume
+        sphere_volume_voxels = (4 / 3) * np.pi * (radius / voxel_spacing) ** 3
+        estimated_voxels = int(len(picks.points) * sphere_volume_voxels)
+
+        stats = {
+            "points_converted": len(picks.points),
+            "voxels_created": estimated_voxels,
+        }
+        logger.info(f"Created segmentation from {stats['points_converted']} picks")
+        return seg, stats
+
+    except Exception as e:
+        logger.error(f"Error creating segmentation: {e}")
+        return None
+
+
+# Create worker function using common infrastructure
+_segmentation_from_picks_worker = create_batch_worker(segmentation_from_picks, "segmentation", "picks", min_points=1)
+
+
+# Create batch converter using common infrastructure
+segmentation_from_picks_batch = create_batch_converter(
+    segmentation_from_picks,
+    "Converting picks to segmentations",
+    "segmentation",
+    "picks",
+    min_points=1,
+)
+
+# Lazy batch converter for new architecture
+segmentation_from_picks_lazy_batch = create_lazy_batch_converter(
+    converter_func=segmentation_from_picks,
+    task_description="Converting picks to segmentations",
+)
