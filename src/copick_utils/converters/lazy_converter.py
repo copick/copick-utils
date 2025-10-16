@@ -272,6 +272,16 @@ def pair_tasks_within_run(
 
     paired_tasks = []
 
+    # Determine input key based on type (matches discover_tasks_for_run)
+    if input_type == "mesh":
+        input_key = "mesh"
+    elif input_type == "segmentation":
+        input_key = "segmentation"
+    elif input_type == "picks":
+        input_key = "picks"
+    else:
+        input_key = "input_object"
+
     # Pair in order (same logic as current segop.py)
     for i, task1 in enumerate(tasks1):
         if i < len(tasks2):
@@ -279,8 +289,8 @@ def pair_tasks_within_run(
 
             # Create combined task for boolean operation with type-specific parameter names
             paired_task = {
-                param1: task1["input_object"],
-                param2: task2["input_object"],
+                param1: task1[input_key],
+                param2: task2[input_key],
                 "object_name": task1["output_object_name"],
                 "user_id": task1["output_user_id"],
                 "session_id": task1["output_session_id"],
