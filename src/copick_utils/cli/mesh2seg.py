@@ -118,7 +118,7 @@ def mesh2seg(
     voxel_spacing_output = output_params["voxel_spacing"]
     if isinstance(voxel_spacing_output, str):
         voxel_spacing_output = float(voxel_spacing_output)
-    multilabel_output = output_params.get("multilabel", False)
+    multilabel_output = output_params.get("multilabel") or False
 
     logger.info(f"Converting mesh to segmentation for object '{input_params['object_name']}'")
     logger.info(f"Source mesh pattern: {input_params['user_id']}/{input_params['session_id']}")

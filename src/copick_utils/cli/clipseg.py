@@ -93,7 +93,7 @@ def clipseg(
     voxel_spacing_output = output_params_temp["voxel_spacing"]
     if isinstance(voxel_spacing_output, str):
         voxel_spacing_output = float(voxel_spacing_output)
-    multilabel_output = output_params_temp.get("multilabel", False)
+    multilabel_output = output_params_temp.get("multilabel") or False
 
     # Create config directly from URIs with additional params and smart defaults
     try:
