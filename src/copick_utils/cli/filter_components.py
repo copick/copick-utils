@@ -27,7 +27,7 @@ from copick_utils.cli.util import add_input_option, add_output_option, add_worke
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
     "--connectivity",
-    "-c",
+    "-cn",
     type=click.Choice(["face", "face-edge", "all"]),
     default="all",
     help="Connectivity for connected components (face=6-connected, face-edge=18-connected, all=26-connected).",

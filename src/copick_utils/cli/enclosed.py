@@ -42,7 +42,7 @@ from copick_utils.util.config_models import create_dual_selector_config
 )
 @optgroup.option(
     "--connectivity",
-    "-c",
+    "-cn",
     type=click.Choice(["face", "face-edge", "all"]),
     default="all",
     help="Connectivity for connected components (face=6-connected, face-edge=18-connected, all=26-connected).",
