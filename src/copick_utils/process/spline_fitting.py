@@ -4,9 +4,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
+from copick.util.uri import get_copick_objects_by_type
 from scipy.spatial.distance import pdist, squareform
-
-from copick_utils.util.pattern_matching import find_matching_segmentations
 
 if TYPE_CHECKING:
     from copick.models import CopickPicks, CopickRoot, CopickRun, CopickSegmentation
@@ -271,9 +270,9 @@ class SkeletonSplineFitter:
         return {
             "n_points": len(self.regularized_points),
             "total_length": total_length,
-            "average_spacing": total_length / (len(self.regularized_points) - 1)
-            if len(self.regularized_points) > 1
-            else 0,
+            "average_spacing": (
+                total_length / (len(self.regularized_points) - 1) if len(self.regularized_points) > 1 else 0
+            ),
             "mean_curvature": np.mean(curvatures) if curvatures else 0,
             "max_curvature": np.max(curvatures) if curvatures else 0,
             "curvatures": curvatures,
@@ -499,10 +498,6 @@ def fit_spline_to_segmentation(
         return None
 
 
-# Alias for backwards compatibility
-find_matching_segmentations_for_spline = find_matching_segmentations
-
-
 def _fit_spline_worker(
     run: "CopickRun",
     segmentation_name: str,
@@ -522,12 +517,15 @@ def _fit_spline_worker(
 ) -> Dict[str, Any]:
     """Worker function for batch spline fitting."""
     try:
-        # Find matching segmentations
-        matching_segmentations = find_matching_segmentations_for_spline(
-            run=run,
-            segmentation_name=segmentation_name,
-            segmentation_user_id=segmentation_user_id,
-            session_id_pattern=session_id_pattern,
+        # Find matching segmentations using copick's official URI resolution
+        matching_segmentations = get_copick_objects_by_type(
+            root=run.root,
+            object_type="segmentation",
+            run_name=run.name,
+            name=segmentation_name,
+            user_id=segmentation_user_id,
+            session_id=session_id_pattern,
+            pattern_type="glob",
         )
 
         if not matching_segmentations:

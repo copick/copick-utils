@@ -3,11 +3,10 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import numpy as np
+from copick.util.uri import get_copick_objects_by_type
 from scipy import ndimage
 from skimage import morphology
 from skimage.morphology import remove_small_objects, skeletonize
-
-from copick_utils.util.pattern_matching import find_matching_segmentations
 
 if TYPE_CHECKING:
     from copick.models import CopickRoot, CopickRun, CopickSegmentation
@@ -208,12 +207,15 @@ def _skeletonize_worker(
 ) -> Dict[str, Any]:
     """Worker function for batch skeletonization."""
     try:
-        # Find matching segmentations
-        matching_segmentations = find_matching_segmentations(
-            run=run,
-            segmentation_name=segmentation_name,
-            segmentation_user_id=segmentation_user_id,
-            session_id_pattern=session_id_pattern,
+        # Find matching segmentations using copick's official URI resolution
+        matching_segmentations = get_copick_objects_by_type(
+            root=run.root,
+            object_type="segmentation",
+            run_name=run.name,
+            name=segmentation_name,
+            user_id=segmentation_user_id,
+            session_id=session_id_pattern,
+            pattern_type="glob",
         )
 
         if not matching_segmentations:

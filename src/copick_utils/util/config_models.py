@@ -358,8 +358,10 @@ def create_single_selector_config(
             operation="union",
         )
     """
-    if operation != "union":
-        raise ValueError(f"Single-input pattern expansion only supports 'union' operation, got '{operation}'")
+    if operation not in ["union", "concatenate"]:
+        raise ValueError(
+            f"Single-input pattern expansion only supports 'union' and 'concatenate' operations, got '{operation}'",
+        )
 
     selector = SelectorConfig.from_uris(
         input_uri=input_uri,

@@ -107,68 +107,6 @@ def _is_regex_pattern(pattern: str) -> bool:
         return False
 
 
-def _find_matching_objects(
-    run: "CopickRun",
-    object_type: str,
-    object_name: str,
-    user_id: str,
-    session_id_pattern: str,
-    **kwargs,
-) -> List[Any]:
-    """
-    Find matching objects in a run based on type and pattern.
-
-    Args:
-        run: CopickRun to search in
-        object_type: Type of object ('picks', 'mesh', 'segmentation')
-        object_name: Name of the object
-        user_id: User ID
-        session_id_pattern: Session ID or regex pattern
-        **kwargs: Additional parameters (voxel_spacing for segmentations)
-
-    Returns:
-        List of matching copick objects
-    """
-    # Get all objects of the specified type
-    if object_type == "picks":
-        all_objects = run.get_picks(object_name=object_name, user_id=user_id)
-    elif object_type == "mesh":
-        all_objects = run.get_meshes(object_name=object_name, user_id=user_id)
-    elif object_type == "segmentation":
-        voxel_spacing = kwargs.get("voxel_spacing")
-        if voxel_spacing:
-            all_objects = run.get_segmentations(
-                name=object_name,
-                user_id=user_id,
-                voxel_size=voxel_spacing,
-            )
-        else:
-            all_objects = run.get_segmentations(name=object_name, user_id=user_id)
-    else:
-        raise ValueError(f"Unknown object type: {object_type}")
-
-    if not all_objects:
-        return []
-
-    # Apply session ID filtering
-    try:
-        pattern = re.compile(session_id_pattern)
-        is_regex = True
-    except re.error:
-        is_regex = False
-
-    matching_objects = []
-    for obj in all_objects:
-        if is_regex:
-            if pattern.match(obj.session_id):
-                matching_objects.append(obj)
-        else:
-            if obj.session_id == session_id_pattern:
-                matching_objects.append(obj)
-
-    return matching_objects
-
-
 def discover_tasks_for_run(run: "CopickRun", selector_config: SelectorConfig) -> List[Dict[str, Any]]:
     """
     Discover conversion tasks for a single run using selector configuration.
@@ -180,14 +118,31 @@ def discover_tasks_for_run(run: "CopickRun", selector_config: SelectorConfig) ->
     Returns:
         List of task dictionaries for this run
     """
-    # Find matching input objects
-    matching_inputs = _find_matching_objects(
-        run=run,
+    # Use copick's official URI resolution for proper pattern matching
+    from copick.util.uri import get_copick_objects_by_type
+
+    # Determine pattern type based on session_id
+    pattern_type = "regex" if _is_regex_pattern(selector_config.input_session_id) else "glob"
+
+    # Build filter dict based on input type
+    filters = {"pattern_type": pattern_type}
+
+    if selector_config.input_type == "picks" or selector_config.input_type == "mesh":
+        filters["object_name"] = selector_config.input_object_name
+        filters["user_id"] = selector_config.input_user_id
+        filters["session_id"] = selector_config.input_session_id
+    elif selector_config.input_type == "segmentation":
+        filters["name"] = selector_config.input_object_name
+        filters["user_id"] = selector_config.input_user_id
+        filters["session_id"] = selector_config.input_session_id
+        filters["voxel_spacing"] = selector_config.voxel_spacing
+
+    # Find matching input objects using copick's official resolution
+    matching_inputs = get_copick_objects_by_type(
+        root=run.root,
         object_type=selector_config.input_type,
-        object_name=selector_config.input_object_name,
-        user_id=selector_config.input_user_id,
-        session_id_pattern=selector_config.input_session_id,
-        voxel_spacing=selector_config.voxel_spacing,
+        run_name=run.name,
+        **filters,
     )
 
     if not matching_inputs:

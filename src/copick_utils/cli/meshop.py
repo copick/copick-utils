@@ -70,15 +70,31 @@ def meshop(
 
     \b
     Operations:
-        - union: Combine meshes using boolean union - accepts N≥2 inputs
+        - union: Combine meshes using boolean union - accepts N≥1 inputs
         - difference: First minus second - requires exactly 2 inputs
         - intersection: Common volume - requires exactly 2 inputs
         - exclusion: Exclusive or (XOR) - requires exactly 2 inputs
-        - concatenate: Simple concatenation without boolean ops - accepts N≥2 inputs
+        - concatenate: Simple concatenation without boolean ops - accepts N≥1 inputs
+
+    \b
+    Single-Input Pattern Expansion (union & concatenate):
+        When providing a single -i flag with a pattern, union/concatenate operations
+        will expand the pattern within each run and merge all matching meshes.
+        This is useful for combining multiple versions/annotations within each run.
 
     \b
     Examples:
-        # N-way union with glob patterns
+        # Single-input union: merge all matching meshes within each run
+        copick logical meshop --operation union \\
+            -i "membrane:user*/manual-*" \\
+            -o "merged"
+
+        # Single-input concatenation: concatenate all matching meshes per run
+        copick logical meshop --operation concatenate \\
+            -i "part*:user1/session-*" \\
+            -o "combined"
+
+        # N-way union with multiple -i flags (merge across different objects)
         copick logical meshop --operation union \\
             -i "membrane:user1/manual-*" \\
             -i "vesicle:user2/auto-*" \\
@@ -97,7 +113,7 @@ def meshop(
             -i "mask:user1/mask-001" \\
             -o "membrane:meshop/masked"
 
-        # N-way concatenation
+        # N-way concatenation with multiple -i flags
         copick logical meshop --operation concatenate \\
             -i "part1:user1/session" \\
             -i "part2:user1/session" \\
@@ -114,9 +130,9 @@ def meshop(
             raise click.BadParameter(
                 f"'{operation}' operation requires exactly 2 inputs, got {num_inputs}. Provide exactly 2 -i flags.",
             )
-    elif operation in ["union", "concatenate"] and num_inputs < 2:
+    elif operation in ["union", "concatenate"] and num_inputs < 1:
         raise click.BadParameter(
-            f"'{operation}' operation requires at least 2 inputs, got {num_inputs}. Provide 2 or more -i flags.",
+            f"'{operation}' operation requires at least 1 input, got {num_inputs}. Provide 1 or more -i flags.",
         )
 
     root = copick.from_file(config)
@@ -124,7 +140,19 @@ def meshop(
 
     # Create appropriate config
     try:
-        if num_inputs == 2:
+        if num_inputs == 1:
+            # Single input with pattern expansion (for union and concatenate)
+            from copick_utils.util.config_models import create_single_selector_config
+
+            task_config = create_single_selector_config(
+                input_uri=input_uris[0],
+                input_type="mesh",
+                output_uri=output_uri,
+                output_type="mesh",
+                command_name="meshop",
+                operation=operation,
+            )
+        elif num_inputs == 2:
             task_config = create_dual_selector_config(
                 input1_uri=input_uris[0],
                 input2_uri=input_uris[1],
@@ -147,16 +175,33 @@ def meshop(
         raise click.BadParameter(str(e)) from e
 
     # Logging
-    logger.info(f"Performing {operation} operation on {num_inputs} meshes")
-    for i, uri in enumerate(input_uris, start=1):
-        params = parse_copick_uri(uri, "mesh")
-        logger.info(f"  Input {i}: {params['object_name']} ({params['user_id']}/{params['session_id']})")
+    if num_inputs == 1:
+        logger.info(f"Performing {operation} operation with pattern-based input expansion")
+        params = parse_copick_uri(input_uris[0], "mesh")
+        logger.info(f"  Pattern: {params['object_name']} ({params['user_id']}/{params['session_id']})")
+        logger.info("  Note: Pattern will be expanded to multiple meshes per run")
+    else:
+        logger.info(f"Performing {operation} operation on {num_inputs} meshes")
+        for i, uri in enumerate(input_uris, start=1):
+            params = parse_copick_uri(uri, "mesh")
+            logger.info(f"  Input {i}: {params['object_name']} ({params['user_id']}/{params['session_id']})")
 
     output_params = parse_copick_uri(output_uri, "mesh")
     logger.info(f"Target: {output_params['object_name']} ({output_params['user_id']}/{output_params['session_id']})")
 
     # Select appropriate lazy batch converter
-    if num_inputs == 2:
+    if num_inputs == 1:
+        # Single input with pattern expansion (union and concatenate)
+        from copick_utils.logical.mesh_operations import (
+            mesh_multi_concatenate_lazy_batch,
+            mesh_multi_union_lazy_batch,
+        )
+
+        lazy_batch_functions = {
+            "union": mesh_multi_union_lazy_batch,
+            "concatenate": mesh_multi_concatenate_lazy_batch,
+        }
+    elif num_inputs == 2:
         from copick_utils.logical.mesh_operations import (
             mesh_concatenate_lazy_batch,
             mesh_difference_lazy_batch,
