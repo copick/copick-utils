@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Tuple
 
 import numpy as np
 import trimesh as tm
@@ -8,7 +8,7 @@ from scipy.stats.qmc import PoissonDisk
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
-    from copick.models import CopickMesh, CopickPicks, CopickRoot, CopickRun
+    from copick.models import CopickMesh, CopickPicks, CopickRun
 
 logger = get_logger(__name__)
 
@@ -457,82 +457,6 @@ def picks_from_mesh_standard(
     except Exception as e:
         logger.error(f"Error converting mesh to picks: {e}")
         return None
-
-
-def picks_from_mesh_batch(
-    root: "CopickRoot",
-    mesh_object_name: str,
-    mesh_user_id: str,
-    mesh_session_id: str,
-    sampling_type: str,
-    n_points: int,
-    pick_object_name: str,
-    pick_session_id: str,
-    pick_user_id: str,
-    voxel_spacing: float,
-    tomo_type: str = "wbp",
-    min_dist: Optional[float] = None,
-    edge_dist: float = 32.0,
-    include_normals: bool = False,
-    random_orientations: bool = False,
-    seed: Optional[int] = None,
-    run_names: Optional[List[str]] = None,
-    workers: int = 8,
-) -> Dict[str, Any]:
-    """
-    Batch convert meshes to picks across multiple runs.
-
-    Args:
-        root: The copick root containing runs to process.
-        mesh_object_name: Name of the mesh object to sample from.
-        mesh_user_id: User ID of the mesh to convert.
-        mesh_session_id: Session ID of the mesh to convert.
-        sampling_type: Type of sampling ('inside', 'surface', 'outside', 'vertices').
-        n_points: Number of points to sample (ignored for 'vertices' type).
-        pick_object_name: Name of the object for created picks.
-        pick_session_id: Session ID for created picks.
-        pick_user_id: User ID for created picks.
-        voxel_spacing: Voxel spacing for coordinate scaling.
-        tomo_type: Tomogram type for getting volume dimensions. Default is 'wbp'.
-        min_dist: Minimum distance between points. If None, uses 2 * voxel_spacing.
-        edge_dist: Distance from volume edges in voxels. Default is 32.0.
-        include_normals: Include surface normals as orientations (surface sampling only). Default is False.
-        random_orientations: Generate random orientations for points. Default is False.
-        seed: Random seed for reproducible results.
-        run_names: List of run names to process. If None, processes all runs.
-        workers: Number of worker processes. Default is 8.
-
-    Returns:
-        Dictionary with processing results and statistics.
-    """
-    from copick.ops.run import map_runs
-
-    runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-
-    results = map_runs(
-        callback=_picks_from_mesh_worker,
-        root=root,
-        runs=runs_to_process,
-        workers=workers,
-        task_desc="Converting meshes to picks",
-        mesh_object_name=mesh_object_name,
-        mesh_user_id=mesh_user_id,
-        mesh_session_id=mesh_session_id,
-        sampling_type=sampling_type,
-        n_points=n_points,
-        pick_object_name=pick_object_name,
-        pick_session_id=pick_session_id,
-        pick_user_id=pick_user_id,
-        voxel_spacing=voxel_spacing,
-        tomo_type=tomo_type,
-        min_dist=min_dist,
-        edge_dist=edge_dist,
-        include_normals=include_normals,
-        random_orientations=random_orientations,
-        seed=seed,
-    )
-
-    return results
 
 
 # Lazy batch converter for new architecture

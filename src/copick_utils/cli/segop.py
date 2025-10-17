@@ -80,12 +80,6 @@ def segop(
     Voxel spacing applies globally to all inputs and output.
 
     \b
-    Single-Input Pattern Expansion (union only):
-        When providing a single -i flag with a pattern, the union operation will
-        expand the pattern within each run and merge all matching segmentations.
-        This is useful for combining multiple versions/annotations within each run.
-
-    \b
     Examples:
         # Single-input union: merge all matching segmentations within each run
         copick logical segop --operation union -vs 10.0 \\
