@@ -5,10 +5,6 @@ import zarr
 from copick.util.log import get_logger
 from scipy.ndimage import zoom
 
-from copick_utils.converters.converter_common import (
-    create_batch_converter,
-    create_batch_worker,
-)
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
@@ -276,19 +272,6 @@ def segmentation_from_picks(
         logger.error(f"Error creating segmentation: {e}")
         return None
 
-
-# Create worker function using common infrastructure
-_segmentation_from_picks_worker = create_batch_worker(segmentation_from_picks, "segmentation", "picks", min_points=1)
-
-
-# Create batch converter using common infrastructure
-segmentation_from_picks_batch = create_batch_converter(
-    segmentation_from_picks,
-    "Converting picks to segmentations",
-    "segmentation",
-    "picks",
-    min_points=1,
-)
 
 # Lazy batch converter for new architecture
 segmentation_from_picks_lazy_batch = create_lazy_batch_converter(

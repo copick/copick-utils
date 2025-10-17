@@ -6,8 +6,6 @@ from copick.util.log import get_logger
 
 from copick_utils.converters.converter_common import (
     cluster,
-    create_batch_converter,
-    create_batch_worker,
     store_mesh_with_stats,
     validate_points,
 )
@@ -188,19 +186,6 @@ def mesh_from_picks(
         logger.critical(f"Error creating mesh: {e}")
         return None
 
-
-# Create worker function using common infrastructure
-_mesh_from_picks_worker = create_batch_worker(mesh_from_picks, "mesh", "picks", min_points=4)
-
-
-# Create batch converter using common infrastructure
-mesh_from_picks_batch = create_batch_converter(
-    mesh_from_picks,
-    "Converting picks to meshes",
-    "mesh",
-    "picks",
-    min_points=4,
-)
 
 # Lazy batch converter for new architecture
 mesh_from_picks_lazy_batch = create_lazy_batch_converter(

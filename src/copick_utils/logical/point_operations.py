@@ -6,10 +6,6 @@ import numpy as np
 import trimesh as tm
 from copick.util.log import get_logger
 
-from copick_utils.converters.converter_common import (
-    create_batch_converter,
-    create_batch_worker,
-)
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
@@ -269,27 +265,6 @@ def picks_exclusion_by_mesh(
         logger.error(f"Error filtering picks by exclusion: {e}")
         return None
 
-
-# Create batch workers
-_picks_inclusion_by_mesh_worker = create_batch_worker(picks_inclusion_by_mesh, "picks", "picks", min_points=1)
-_picks_exclusion_by_mesh_worker = create_batch_worker(picks_exclusion_by_mesh, "picks", "picks", min_points=1)
-
-# Create batch converters
-picks_inclusion_by_mesh_batch = create_batch_converter(
-    picks_inclusion_by_mesh,
-    "Filtering picks by inclusion",
-    "picks",
-    "picks",
-    min_points=1,
-)
-
-picks_exclusion_by_mesh_batch = create_batch_converter(
-    picks_exclusion_by_mesh,
-    "Filtering picks by exclusion",
-    "picks",
-    "picks",
-    min_points=1,
-)
 
 # Lazy batch converters for new architecture
 picks_inclusion_by_mesh_lazy_batch = create_lazy_batch_converter(

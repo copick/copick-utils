@@ -7,8 +7,6 @@ from sklearn.decomposition import PCA
 
 from copick_utils.converters.converter_common import (
     cluster,
-    create_batch_converter,
-    create_batch_worker,
     store_mesh_with_stats,
     validate_points,
 )
@@ -315,20 +313,7 @@ def ellipsoid_from_picks(
         return None
 
 
-# Create worker function using common infrastructure
-_ellipsoid_from_picks_worker = create_batch_worker(ellipsoid_from_picks, "ellipsoid", min_points=6)
-
-
-# Create batch converter using common infrastructure
-ellipsoid_from_picks_batch = create_batch_converter(
-    ellipsoid_from_picks,
-    "Converting picks to ellipsoid meshes",
-    "ellipsoid",
-    min_points=6,
-)
-
 # Lazy batch converter for new architecture
-
 ellipsoid_from_picks_lazy_batch = create_lazy_batch_converter(
     converter_func=ellipsoid_from_picks,
     task_description="Converting picks to ellipsoid meshes",

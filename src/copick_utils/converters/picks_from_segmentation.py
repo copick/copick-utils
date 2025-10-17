@@ -7,10 +7,6 @@ from skimage.measure import regionprops
 from skimage.morphology import ball, binary_dilation, binary_erosion
 from skimage.segmentation import watershed
 
-from copick_utils.converters.converter_common import (
-    create_batch_converter,
-    create_batch_worker,
-)
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
@@ -147,19 +143,6 @@ def picks_from_segmentation(
         logger.error(f"Error creating picks: {e}")
         return None
 
-
-# Create worker function using common infrastructure
-_picks_from_segmentation_worker = create_batch_worker(picks_from_segmentation, "picks", "segmentation", min_points=0)
-
-
-# Create batch converter using common infrastructure
-picks_from_segmentation_batch = create_batch_converter(
-    picks_from_segmentation,
-    "Converting segmentations to picks",
-    "picks",
-    "segmentation",
-    min_points=0,
-)
 
 # Lazy batch converter for new architecture
 picks_from_segmentation_lazy_batch = create_lazy_batch_converter(
