@@ -104,7 +104,6 @@ def _split_labels_worker(
     segmentation_session_id: str,
     voxel_spacing: float,
     output_user_id: str,
-    root: "CopickRoot",
 ) -> Dict[str, Any]:
     """
     Worker function for batch splitting of multilabel segmentations.
@@ -116,7 +115,6 @@ def _split_labels_worker(
         segmentation_session_id: Session ID of the input segmentation
         voxel_spacing: Voxel spacing of the segmentation
         output_user_id: User ID for output segmentations
-        root: CopickRoot (passed by map_runs)
 
     Returns:
         Dictionary with processing results and statistics
