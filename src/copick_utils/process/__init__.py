@@ -9,13 +9,11 @@ from .connected_components import (
 )
 from .skeletonize import (
     TubeSkeletonizer3D,
-    find_matching_segmentations,
     skeletonize_batch,
     skeletonize_segmentation,
 )
 from .spline_fitting import (
     SkeletonSplineFitter,
-    find_matching_segmentations_for_spline,
     fit_spline_batch,
     fit_spline_to_segmentation,
     fit_spline_to_skeleton,
@@ -34,12 +32,10 @@ __all__ = [
     "separate_components_batch",
     "TubeSkeletonizer3D",
     "skeletonize_segmentation",
-    "find_matching_segmentations",
     "skeletonize_batch",
     "SkeletonSplineFitter",
     "fit_spline_to_skeleton",
     "fit_spline_to_segmentation",
-    "find_matching_segmentations_for_spline",
     "fit_spline_batch",
     "create_validbox_mesh",
     "generate_validbox",
