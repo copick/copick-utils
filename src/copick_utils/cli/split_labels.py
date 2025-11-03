@@ -101,9 +101,9 @@ def split(
         )
 
     logger.info(f"Splitting multilabel segmentation '{segmentation_name}'")
-    logger.info(f"Input: {segmentation_user_id}/{segmentation_session_id} @ {voxel_spacing}Å")
-    logger.info(f"Output user ID: {output_user_id}")
-    logger.info(f"Workers: {workers}")
+    logger.debug(f"Input: {segmentation_user_id}/{segmentation_session_id} @ {voxel_spacing}Å")
+    logger.debug(f"Output user ID: {output_user_id}")
+    logger.debug(f"Workers: {workers}")
 
     # Import batch function
     from copick_utils.process.split_labels import split_labels_batch

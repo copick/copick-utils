@@ -47,7 +47,7 @@ def split_multilabel_segmentation(
     unique_labels = np.unique(volume)
     unique_labels = unique_labels[unique_labels > 0]  # Skip background (0)
 
-    logger.info(f"Found {len(unique_labels)} unique labels: {unique_labels.tolist()}")
+    logger.debug(f"Found {len(unique_labels)} unique labels: {unique_labels.tolist()}")
 
     output_segmentations = []
 
@@ -61,7 +61,7 @@ def split_multilabel_segmentation(
             object_name = str(label_value)
         else:
             object_name = pickable_obj.name
-            logger.info(f"Label {label_value} → object '{object_name}'")
+            logger.debug(f"Label {label_value} → object '{object_name}'")
 
         # Create binary mask for this label
         binary_mask = (volume == label_value).astype(np.uint8)
@@ -71,7 +71,7 @@ def split_multilabel_segmentation(
             logger.warning(f"Label {label_value} has no voxels, skipping")
             continue
 
-        logger.info(f"Creating segmentation for '{object_name}' with {voxel_count} voxels")
+        logger.debug(f"Creating segmentation for '{object_name}' with {voxel_count} voxels")
 
         # Create output segmentation
         try:
@@ -88,11 +88,16 @@ def split_multilabel_segmentation(
             output_seg.from_numpy(binary_mask)
             output_segmentations.append(output_seg)
 
-            logger.info(f"Successfully created segmentation '{object_name}:{output_user_id}/{input_session_id}'")
+            logger.debug(f"Successfully created segmentation '{object_name}:{output_user_id}/{input_session_id}'")
 
         except Exception as e:
             logger.exception(f"Failed to create segmentation for label {label_value} ('{object_name}'): {e}")
             continue
+
+    # Log single-line summary
+    if output_segmentations:
+        object_names = [seg.name for seg in output_segmentations]
+        logger.info(f"Run '{run.name}': Split {len(output_segmentations)} labels → {', '.join(object_names)}")
 
     return output_segmentations
 
