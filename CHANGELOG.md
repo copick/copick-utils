@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/copick/copick-utils/compare/copick-utils-v1.0.0...copick-utils-v1.0.1) (2025-12-03)
+
+
+### 🐞 Bug Fixes
+
+* bump actions/checkout from 5 to 6 ([#33](https://github.com/copick/copick-utils/issues/33)) ([2593824](https://github.com/copick/copick-utils/commit/25938240342fb8bcf1b8cdfbdf69aa80599b9569))
+* bump chanzuckerberg/github-actions from 6.10.0 to 6.11.1 ([#34](https://github.com/copick/copick-utils/issues/34)) ([ca4a9fe](https://github.com/copick/copick-utils/commit/ca4a9fec68997aa03dc7f7484069d3570061d16b))
+
 ## [1.0.0](https://github.com/copick/copick-utils/compare/copick-utils-v0.6.1...copick-utils-v1.0.0) (2025-10-16)
 
 
