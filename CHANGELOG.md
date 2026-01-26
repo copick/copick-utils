@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.0.2...copick-utils-v1.1.0) (2026-01-26)
+
+
+### ✨ Features
+
+* Add split command. ([#41](https://github.com/copick/copick-utils/issues/41)) ([479bf48](https://github.com/copick/copick-utils/commit/479bf48f9a50e3eb4066b3a41f2b399f110b2553))
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.12.2 to 6.13.0 ([#40](https://github.com/copick/copick-utils/issues/40)) ([68b21c1](https://github.com/copick/copick-utils/commit/68b21c175e2ca96946ceba9252b86c17e3382fe2))
+
 ## [1.0.2](https://github.com/copick/copick-utils/compare/copick-utils-v1.0.1...copick-utils-v1.0.2) (2026-01-06)
 
 
