@@ -28,17 +28,17 @@ def tomogram(run, input_volume, voxel_size=10, algorithm="wbp"):
         voxel_spacing = run.new_voxel_spacing(voxel_size=voxel_size)
 
     # Check if We Need to Create a New Tomogram for Given Algorithm
-    tomogram = voxel_spacing.get_tomogram(algorithm)
-    if tomogram is None:
-        tomogram = voxel_spacing.new_tomogram(tomo_type=algorithm)
+    tomo = voxel_spacing.get_tomogram(algorithm)
+    if tomo is None:
+        tomo = voxel_spacing.new_tomogram(tomo_type=algorithm)
 
     # Write the tomogram data
-    tomogram.from_numpy(input_volume)
+    tomo.from_numpy(input_volume)
 
 
 def segmentation(
     run,
-    segmentation_volume,
+    seg_vol,
     user_id,
     name="segmentation",
     session_id="0",
@@ -52,7 +52,7 @@ def segmentation(
     -----------
     run : copick.Run
         The current Copick run object.
-    segmentation_volume : np.ndarray
+    seg_vol : np.ndarray
         The segmentation data to be written.
     user_id : str
         The ID of the user creating the segmentation.
@@ -76,7 +76,7 @@ def segmentation(
 
     # If no segmentation exists or no segmentation at the given voxel size, create a new one
     if len(segmentations) == 0 or any(seg.voxel_size != voxel_size for seg in segmentations):
-        segmentation = run.new_segmentation(
+        seg = run.new_segmentation(
             voxel_size=voxel_size,
             name=name,
             session_id=session_id,
@@ -85,7 +85,7 @@ def segmentation(
         )
     else:
         # Overwrite the current segmentation at the specified voxel size if it exists
-        segmentation = next(seg for seg in segmentations if seg.voxel_size == voxel_size)
+        seg = next(seg for seg in segmentations if seg.voxel_size == voxel_size)
 
     # Write the segmentation data
-    segmentation.from_numpy(segmentation_volume, dtype=np.uint8)
+    seg.from_numpy(seg_vol, dtype=np.uint8)
