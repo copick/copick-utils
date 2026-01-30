@@ -1,5 +1,5 @@
-from copick.util.uri import resolve_copick_objects
 import numpy as np
+from copick.util.uri import resolve_copick_objects
 
 
 def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: bool = False):
@@ -20,11 +20,10 @@ def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: b
 
     # Get the tomogram from the Copick URI
     try:
-        uri = f'{algorithm}@{voxel_size}'
-        vol = resolve_copick_objects(uri, run.root, 'tomogram', run_name = run.name)
+        uri = f"{algorithm}@{voxel_size}"
+        vol = resolve_copick_objects(uri, run.root, "tomogram", run_name=run.name)
         return vol[0].numpy()
-    except: # Report which orbject is missing
-
+    except Exception as err:  # Report which orbject is missing
         # Try to resolve the tomogram using the Copick URI
         voxel_spacing_obj = run.get_voxel_spacing(voxel_size)
 
@@ -38,7 +37,7 @@ def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: b
                 f"Available spacings are: {', '.join(map(str, availableVoxelSpacings))}"
             )
             if raise_error:
-                raise ValueError(message)
+                raise ValueError(message) from err
             else:
                 print(message)
                 return None
@@ -54,13 +53,13 @@ def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: b
                 f"Available algorithms are: {', '.join(availableAlgorithms)}"
             )
             if raise_error:
-                raise ValueError(message)
+                raise ValueError(message) from err
             else:
                 print(message)
                 return None
 
 
-def segmentation(run, voxel_spacing: float, name: str, user_id=None,  session_id=None, raise_error=False):
+def segmentation(run, voxel_spacing: float, name: str, user_id=None, session_id=None, raise_error=False):
     """
     Reads a segmentation from a Copick run.
 
@@ -79,15 +78,17 @@ def segmentation(run, voxel_spacing: float, name: str, user_id=None,  session_id
     """
 
     # Fill in the missing values with wildcards
-    if user_id is None: user_id = '*'
-    if session_id is None: session_id = '*'
+    if user_id is None:
+        user_id = "*"
+    if session_id is None:
+        session_id = "*"
 
     # Try to resolve the segmentation using the Copick URI
     try:
-        uri = f'{name}:{user_id}/{session_id}@{voxel_spacing}'
-        segs = resolve_copick_objects(uri, run.root, 'segmentation', run_name = run.name)
+        uri = f"{name}:{user_id}/{session_id}@{voxel_spacing}"
+        segs = resolve_copick_objects(uri, run.root, "segmentation", run_name=run.name)
         return segs[0].numpy()
-    except:
+    except Exception as err:
         # If the query was unavailable, set the user_id and session_id to None
         user_id, session_id = None, None
 
@@ -114,7 +115,7 @@ def segmentation(run, voxel_spacing: float, name: str, user_id=None,  session_id
                 f"Available segmentations in {run.name} are:\n  " + "\n  ".join(seg_details)
             )
             if raise_error:
-                raise ValueError(message)
+                raise ValueError(message) from err
             else:
                 print(message)
                 return None
