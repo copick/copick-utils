@@ -7,7 +7,7 @@ import click
     no_args_is_help=True,
 )
 @click.option(
-    "-d",
+    "-ds",
     "--dataset",
     required=True,
     type=str,
