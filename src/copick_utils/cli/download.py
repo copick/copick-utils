@@ -5,7 +5,6 @@ import click
     short_help="Download tilt series and alignments from the CryoET Data Portal.",
     no_args_is_help=True,
 )
-
 @click.option(
     '-d', '--dataset', 
     required=True, type=str,
@@ -16,8 +15,10 @@ import click
     required=True, default='.', type=str,
     help='Output directory to save the downloaded files.',
 )
-
-def download(dataset: str, output: str):
+def project(dataset: str, output: str):
+    """
+    Download tilt series and alignments from the CryoET Data Portal for sub-tomogram averaging with py2rely.
+    """
     download_project(dataset, output)
 
 def download_project(dataset: str, output: str):

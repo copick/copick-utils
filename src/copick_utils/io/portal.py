@@ -1,10 +1,10 @@
 """
 A minimal example using minimal libraries / imports to download relevant AreTomo files from the CryoET Data Portal. Downloads the corresponding files, using the run ID as the base filename.
 """
-import multiprocessing, requests, argparse, os
+import multiprocessing, requests, os
 import pandas as pd
 import numpy as np
-import mdocfile, click
+import mdocfile
 
 import cryoet_data_portal as cdp
 import s3fs
