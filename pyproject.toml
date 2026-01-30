@@ -29,6 +29,7 @@ dependencies = [
     "trimesh",
     "manifold3d",
     "mapbox-earcut",
+    "mdocfile",
     "tqdm",
     "scikit-learn",
     "shapely",
@@ -87,6 +88,9 @@ clipseg = "copick_utils.cli.logical_commands:clipseg"
 clippicks = "copick_utils.cli.logical_commands:clippicks"
 picksin = "copick_utils.cli.logical_commands:picksin"
 picksout = "copick_utils.cli.logical_commands:picksout"
+
+[project.entry-points."copick.download.commands"]
+project = "copick_utils.cli.download_commands:project"
 
 [tool.hatch.version]
 path = "src/copick_utils/__init__.py"
