@@ -1,8 +1,11 @@
-import numpy as np
 from copick.util.uri import resolve_copick_objects
+import numpy as np
 
 
-def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: bool = False):
+def tomogram(
+    run, voxel_size: float = 10, algorithm: str = "wbp", 
+    raise_error: bool = False,
+    verbose=True):
     """
     Reads a tomogram from a Copick run.
 
@@ -12,7 +15,7 @@ def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: b
     voxel_size: float
     algorithm: str
     raise_error: bool
-
+    verbose: bool
     Returns:
     --------
     vol: np.ndarray - The tomogram.
@@ -33,14 +36,14 @@ def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: b
 
             # Report to the user which voxel spacings they can use
             message = (
-                f"[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {algorithm}"
-                f"Available spacings are: {', '.join(map(str, availableVoxelSpacings))}"
+                f"[Warning] No tomogram found for {run.name} with uri: {uri}\n"
+                f"Available voxel sizes are: {', '.join(map(str, availableVoxelSpacings))}"
             )
             if raise_error:
                 raise ValueError(message) from err
-            else:
+            elif verbose:
                 print(message)
-                return None
+            return None
 
         tomogram = voxel_spacing_obj.get_tomogram(algorithm)
         if tomogram is None:
@@ -49,17 +52,21 @@ def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: b
 
             # Report to the user which algorithms are available
             message = (
-                f"[Warning] No tomogram found for {run.name} with voxel size {voxel_size} and tomogram type {algorithm}"
-                f"Available algorithms are: {', '.join(availableAlgorithms)}"
+                f"[Warning] No tomogram found for {run.name} with uri: {uri}\n"
+                f"Available algorithms @{voxel_size}A are: {', '.join(availableAlgorithms)}"
             )
             if raise_error:
                 raise ValueError(message) from err
-            else:
+            elif verbose:
                 print(message)
-                return None
+            return None
 
 
-def segmentation(run, voxel_spacing: float, name: str, user_id=None, session_id=None, raise_error=False):
+def segmentation(
+    run, voxel_spacing: float, name: str, 
+    user_id=None, session_id=None, 
+    raise_error=False,
+    verbose=True):
     """
     Reads a segmentation from a Copick run.
 
@@ -71,63 +78,55 @@ def segmentation(run, voxel_spacing: float, name: str, user_id=None, session_id=
     user_id: str
     session_id: str
     raise_error: bool
-
+    verbose: bool
     Returns:
     --------
     seg: np.ndarray - The segmentation.
     """
 
-    # Fill in the missing values with wildcards
-    if user_id is None:
-        user_id = "*"
-    if session_id is None:
-        session_id = "*"
+    # Construct the Target URI
+    if session_id is None and user_id is None:
+        uri = f'{name}@{voxel_spacing}'
+    elif session_id is None:
+        uri = f'{name}:{user_id}@{voxel_spacing}'
+    else:
+        uri = f'{name}:{user_id}/{session_id}@{voxel_spacing}'
 
     # Try to resolve the segmentation using the Copick URI
     try:
-        uri = f"{name}:{user_id}/{session_id}@{voxel_spacing}"
         segs = resolve_copick_objects(uri, run.root, "segmentation", run_name=run.name)
         return segs[0].numpy()
     except Exception as err:
-        # If the query was unavailable, set the user_id and session_id to None
-        user_id, session_id = None, None
 
-        # Query Was Unavailable, Let's List Out All Available Segmentations
-        seg = run.get_segmentations(
-            name=name,
-            session_id=session_id,
-            user_id=user_id,
-            voxel_size=voxel_spacing,
-        )
+        # Force the voxel spacing to be a float
+        voxel_spacing = float(voxel_spacing)
 
-        # No Segmentations Are Available, Result in Error
-        if len(seg) == 0:
-            # Get all available segmentations with their metadata
-            available_segs = run.get_segmentations(voxel_size=voxel_spacing)
+        # Get all available segmentations with their metadata
+        available_segs = run.get_segmentations(voxel_size=voxel_spacing)
+
+        if len(available_segs) == 0:
+            available_segs = run.get_segmentations()
+            message = (
+                f"No segmentation found for URI: {uri}\n"
+                f"Available segmentations avaiable w/following voxel sizes: {', '.join(map(str, [s.voxel_size for s in available_segs]))}"
+            )
+        else:
             seg_info = [(s.name, s.user_id, s.session_id) for s in available_segs]
 
             # Format the information for display
             seg_details = [f"(name: {name}, user_id: {uid}, session_id: {sid})" for name, uid, sid in seg_info]
 
             message = (
-                f"\nNo segmentation found matching:\n"
+                f"\nNo segmentation at {voxel_spacing} A found matching:\n"
                 f"  name: {name}, user_id: {user_id}, session_id: {session_id}\n"
                 f"Available segmentations in {run.name} are:\n  " + "\n  ".join(seg_details)
             )
-            if raise_error:
-                raise ValueError(message) from err
-            else:
-                print(message)
-                return None
-
-        # No Segmentations Are Available, Result in Error
-        if len(seg) > 1:
-            print(
-                f"[Warning] More Than 1 Segmentation is Available for the Query Information. "
-                f"Available Segmentations are: {seg} "
-                f"Defaulting to Loading: {seg[0]}\n",
-            )
-
+        if raise_error:
+            raise ValueError(message) from err
+        elif verbose:
+            print(message)
+        else:
+            return None
 
 def coordinates(
     run,  # CoPick run object containing the segmentation data
@@ -136,6 +135,7 @@ def coordinates(
     session_id: str = None,  # Identifier of the session that generated the picks
     voxel_size: float = 10,  # Voxel size of the tomogram, used for scaling the coordinates
     raise_error: bool = False,
+    verbose: bool =True,
 ):
     """
     Reads the coordinates of the picks from a Copick run.
@@ -148,6 +148,7 @@ def coordinates(
     session_id: str
     voxel_size: float
     raise_error: bool
+    verbose: bool
 
     Returns:
     --------
@@ -172,18 +173,22 @@ def coordinates(
         )
         if raise_error:
             raise ValueError(message)
-        else:
+        elif verbose:
             print(message)
-            return None
+        return None
+
     elif len(picks) > 1:
         # Format pick information for display
         picks_info = [(p.pickable_object_name, p.user_id, p.session_id) for p in picks]
         picks_details = [f"(name: {name}, user_id: {uid}, session_id: {sid})" for name, uid, sid in picks_info]
 
-        print(
-            "[Warning] More than 1 pick is available for the query information."
-            "\nAvailable picks are:\n  " + "\n  ".join(picks_details) + f"\nDefaulting to loading:\n {picks[0]}\n",
-        )
+        if verbose:
+            print(
+                "[Warning] More than 1 pick is available for the query information."
+                "\nAvailable picks are:\n  " + "\n  ".join(picks_details) + f"\n"
+                f"Defaulting to loading:\n {picks[0]}\n",
+            )
+
     points = picks[0].points
 
     # Initialize an array to store the coordinates
