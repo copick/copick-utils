@@ -2,10 +2,7 @@ from copick.util.uri import resolve_copick_objects
 import numpy as np
 
 
-def tomogram(
-    run, voxel_size: float = 10, algorithm: str = "wbp", 
-    raise_error: bool = False,
-    verbose=True):
+def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: bool = False, verbose=True):
     """
     Reads a tomogram from a Copick run.
 
@@ -62,11 +59,7 @@ def tomogram(
             return None
 
 
-def segmentation(
-    run, voxel_spacing: float, name: str, 
-    user_id=None, session_id=None, 
-    raise_error=False,
-    verbose=True):
+def segmentation(run, voxel_spacing: float, name: str, user_id=None, session_id=None, raise_error=False, verbose=True):
     """
     Reads a segmentation from a Copick run.
 
@@ -86,18 +79,17 @@ def segmentation(
 
     # Construct the Target URI
     if session_id is None and user_id is None:
-        uri = f'{name}@{voxel_spacing}'
+        uri = f"{name}@{voxel_spacing}"
     elif session_id is None:
-        uri = f'{name}:{user_id}@{voxel_spacing}'
+        uri = f"{name}:{user_id}@{voxel_spacing}"
     else:
-        uri = f'{name}:{user_id}/{session_id}@{voxel_spacing}'
+        uri = f"{name}:{user_id}/{session_id}@{voxel_spacing}"
 
     # Try to resolve the segmentation using the Copick URI
     try:
         segs = resolve_copick_objects(uri, run.root, "segmentation", run_name=run.name)
         return segs[0].numpy()
     except Exception as err:
-
         # Force the voxel spacing to be a float
         voxel_spacing = float(voxel_spacing)
 
@@ -128,6 +120,7 @@ def segmentation(
         else:
             return None
 
+
 def coordinates(
     run,  # CoPick run object containing the segmentation data
     name: str,  # Name of the object or protein for which coordinates are being extracted
@@ -135,7 +128,7 @@ def coordinates(
     session_id: str = None,  # Identifier of the session that generated the picks
     voxel_size: float = 10,  # Voxel size of the tomogram, used for scaling the coordinates
     raise_error: bool = False,
-    verbose: bool =True,
+    verbose: bool = True,
 ):
     """
     Reads the coordinates of the picks from a Copick run.
