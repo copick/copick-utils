@@ -1,5 +1,5 @@
-from copick.util.uri import resolve_copick_objects
 import numpy as np
+from copick.util.uri import resolve_copick_objects
 
 
 def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: bool = False, verbose=True):
