@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.1.0...copick-utils-v1.2.0) (2026-01-31)
+
+
+### ✨ Features
+
+* add parser uri to readers, add function to download portal project fo… ([#43](https://github.com/copick/copick-utils/issues/43)) ([7743ee5](https://github.com/copick/copick-utils/commit/7743ee5facb6dff037f8348852c6edcd105abe25))
+
+
+### 🐞 Bug Fixes
+
+* URI in copick readers ([#45](https://github.com/copick/copick-utils/issues/45)) ([926f01d](https://github.com/copick/copick-utils/commit/926f01dfccb537bca90fd30ee59ceacb83d7f947))
+
 ## [1.1.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.0.2...copick-utils-v1.1.0) (2026-01-26)
 
 
