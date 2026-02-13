@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.2.0...copick-utils-v1.3.0) (2026-02-13)
+
+
+### ✨ Features
+
+* Update dependencies.  ([#46](https://github.com/copick/copick-utils/issues/46)) ([f13a47e](https://github.com/copick/copick-utils/commit/f13a47ee9a61ca29e9dc9f1f08e712ec95b2219c))
+
 ## [1.2.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.1.0...copick-utils-v1.2.0) (2026-01-31)
 
 
