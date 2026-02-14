@@ -6,8 +6,6 @@ import trimesh as tm
 from copick.util.log import get_logger
 
 from copick_utils.converters.converter_common import (
-    create_batch_converter,
-    create_batch_worker,
     store_mesh_with_stats,
 )
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
@@ -351,59 +349,6 @@ def mesh_multi_concatenate(
         logger.error(f"Error in N-way concatenation: {e}")
         return None
 
-
-# Create batch workers for each operation
-_mesh_union_worker = create_batch_worker(mesh_union, "mesh", "mesh", min_points=0)
-_mesh_difference_worker = create_batch_worker(mesh_difference, "mesh", "mesh", min_points=0)
-_mesh_intersection_worker = create_batch_worker(mesh_intersection, "mesh", "mesh", min_points=0)
-_mesh_exclusion_worker = create_batch_worker(mesh_exclusion, "mesh", "mesh", min_points=0)
-_mesh_concatenate_worker = create_batch_worker(mesh_concatenate, "mesh", "mesh", min_points=0)
-
-# Create batch converters
-mesh_union_batch = create_batch_converter(
-    mesh_union,
-    "Computing mesh unions",
-    "mesh",
-    "mesh",
-    min_points=0,
-    dual_input=True,
-)
-
-mesh_difference_batch = create_batch_converter(
-    mesh_difference,
-    "Computing mesh differences",
-    "mesh",
-    "mesh",
-    min_points=0,
-    dual_input=True,
-)
-
-mesh_intersection_batch = create_batch_converter(
-    mesh_intersection,
-    "Computing mesh intersections",
-    "mesh",
-    "mesh",
-    min_points=0,
-    dual_input=True,
-)
-
-mesh_exclusion_batch = create_batch_converter(
-    mesh_exclusion,
-    "Computing mesh exclusions",
-    "mesh",
-    "mesh",
-    min_points=0,
-    dual_input=True,
-)
-
-mesh_concatenate_batch = create_batch_converter(
-    mesh_concatenate,
-    "Computing mesh concatenations",
-    "mesh",
-    "mesh",
-    min_points=0,
-    dual_input=True,
-)
 
 # Lazy batch converters for new architecture
 mesh_union_lazy_batch = create_lazy_batch_converter(

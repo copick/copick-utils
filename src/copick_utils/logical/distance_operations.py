@@ -7,8 +7,6 @@ import trimesh as tm
 from copick.util.log import get_logger
 
 from copick_utils.converters.converter_common import (
-    create_batch_converter,
-    create_batch_worker,
     store_mesh_with_stats,
 )
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
@@ -551,41 +549,6 @@ def limit_picks_by_distance(
         logger.error(f"Error limiting picks by distance: {e}")
         return None
 
-
-# Create batch workers
-_limit_mesh_by_distance_worker = create_batch_worker(limit_mesh_by_distance, "mesh", "mesh", min_points=0)
-_limit_segmentation_by_distance_worker = create_batch_worker(
-    limit_segmentation_by_distance,
-    "segmentation",
-    "segmentation",
-    min_points=0,
-)
-_limit_picks_by_distance_worker = create_batch_worker(limit_picks_by_distance, "picks", "picks", min_points=1)
-
-# Create batch converters
-limit_mesh_by_distance_batch = create_batch_converter(
-    limit_mesh_by_distance,
-    "Limiting meshes by distance",
-    "mesh",
-    "mesh",
-    min_points=0,
-)
-
-limit_segmentation_by_distance_batch = create_batch_converter(
-    limit_segmentation_by_distance,
-    "Limiting segmentations by distance",
-    "segmentation",
-    "segmentation",
-    min_points=0,
-)
-
-limit_picks_by_distance_batch = create_batch_converter(
-    limit_picks_by_distance,
-    "Limiting picks by distance",
-    "picks",
-    "picks",
-    min_points=1,
-)
 
 # Lazy batch converters for new architecture
 limit_segmentation_by_distance_lazy_batch = create_lazy_batch_converter(
