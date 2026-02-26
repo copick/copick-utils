@@ -8,9 +8,11 @@ from copick.util.uri import parse_copick_uri
 from copick_utils.cli.util import (
     add_distance_options,
     add_input_option,
+    add_invert_option,
     add_output_option,
     add_reference_mesh_option,
     add_reference_seg_option,
+    add_reference_tomogram_option,
     add_workers_option,
 )
 from copick_utils.util.config_models import create_reference_config
@@ -30,11 +32,13 @@ from copick_utils.util.config_models import create_reference_config
     help="Specific run names to process (default: all runs).",
 )
 @add_input_option("mesh")
-@optgroup.group("\nReference Options", help="Options for reference surface (provide either mesh or segmentation).")
+@optgroup.group("\nReference Options", help="Options for reference surface (provide mesh, segmentation, or tomogram).")
 @add_reference_mesh_option(required=False)
 @add_reference_seg_option(required=False)
+@add_reference_tomogram_option(required=False)
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_distance_options
+@add_invert_option
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output meshes.")
 @add_output_option("mesh", default_tool="clipmesh")
@@ -52,8 +56,10 @@ def clipmesh(
     input_uri,
     ref_mesh_uri,
     ref_seg_uri,
+    ref_tomo_uri,
     max_distance,
     mesh_voxel_spacing,
+    invert,
     workers,
     output_uri,
     individual_meshes,
@@ -66,35 +72,50 @@ def clipmesh(
     URI Format:
         Meshes: object_name:user_id/session_id
         Segmentations: name:user_id/session_id@voxel_spacing
+        Tomograms: tomo_type@voxel_spacing
 
     \b
-    The reference surface can be either a mesh or a segmentation.
-    Only mesh vertices within the specified distance will be kept.
+    The reference surface can be a mesh, segmentation, or tomogram boundary.
+    By default, vertices within the specified distance will be kept.
+    Use --invert to keep vertices beyond the specified distance instead.
 
     \b
     Examples:
-        # Limit mesh to vertices near reference mesh surface
-        copick logical clipmesh -i "membrane:user1/full-001" -rm "boundary:user1/boundary-001" -o "membrane:clipmesh/limited-001" --max-distance 50.0
+        # Keep vertices within 50Å of mesh reference
+        copick logical clipmesh -i "membrane:user1/full-001" -rm "boundary:user1/boundary-001" -o "membrane:clipmesh/near-001" --max-distance 50.0
 
-        # Limit using segmentation as reference
-        copick logical clipmesh -i "membrane:user1/full-001" -rs "mask:user1/mask-001@10.0" -o "membrane:clipmesh/limited-001" --max-distance 100.0
+        # Remove vertices within 50Å of tomogram boundary (keep interior vertices)
+        copick logical clipmesh -i "membrane:user1/full-001" -rt "wbp@10.0" -o "membrane:clipmesh/interior-001" --max-distance 50.0 --invert
+
+        # Keep vertices beyond 100Å from segmentation reference
+        copick logical clipmesh -i "membrane:user1/full-001" -rs "mask:user1/mask-001@10.0" -o "membrane:clipmesh/far-001" --max-distance 100.0 --invert
     """
     from copick_utils.logical.distance_operations import limit_mesh_by_distance_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
     # Validate that exactly one reference type is provided
-    if not ref_mesh_uri and not ref_seg_uri:
-        raise click.BadParameter("Must provide either --ref-mesh or --ref-seg")
-    if ref_mesh_uri and ref_seg_uri:
-        raise click.BadParameter("Cannot provide both --ref-mesh and --ref-seg")
+    ref_count = sum(1 for ref in [ref_mesh_uri, ref_seg_uri, ref_tomo_uri] if ref)
+    if ref_count == 0:
+        raise click.BadParameter("Must provide one of --ref-mesh, --ref-seg, or --ref-tomogram")
+    if ref_count > 1:
+        raise click.BadParameter(
+            "Cannot provide multiple reference options. Choose one of --ref-mesh, --ref-seg, or --ref-tomogram",
+        )
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
     # Determine reference type and URI
-    reference_uri = ref_mesh_uri or ref_seg_uri
-    reference_type = "mesh" if ref_mesh_uri else "segmentation"
+    if ref_mesh_uri:
+        reference_uri = ref_mesh_uri
+        reference_type = "mesh"
+    elif ref_seg_uri:
+        reference_uri = ref_seg_uri
+        reference_type = "segmentation"
+    else:
+        reference_uri = ref_tomo_uri
+        reference_type = "tomogram"
 
     # Create config directly from URIs with additional params for distance operations
     try:
@@ -105,7 +126,11 @@ def clipmesh(
             output_type="mesh",
             reference_uri=reference_uri,
             reference_type=reference_type,
-            additional_params={"max_distance": max_distance, "mesh_voxel_spacing": mesh_voxel_spacing},
+            additional_params={
+                "max_distance": max_distance,
+                "mesh_voxel_spacing": mesh_voxel_spacing,
+                "invert": invert,
+            },
             command_name="clipmesh",
         )
     except ValueError as e:
@@ -120,11 +145,14 @@ def clipmesh(
     logger.info(f"Source mesh pattern: {input_params['user_id']}/{input_params['session_id']}")
     if reference_type == "mesh":
         logger.info(f"Reference mesh: {ref_params['object_name']} ({ref_params['user_id']}/{ref_params['session_id']})")
-    else:
+    elif reference_type == "segmentation":
         logger.info(
             f"Reference segmentation: {ref_params['name']} ({ref_params['user_id']}/{ref_params['session_id']})",
         )
+    else:
+        logger.info(f"Reference tomogram boundary: {ref_params['tomo_type']}@{ref_params['voxel_spacing']}")
     logger.info(f"Maximum distance: {max_distance} angstroms")
+    logger.info(f"Mode: {'keep beyond distance (invert)' if invert else 'keep within distance'}")
     logger.info(
         f"Target mesh template: {output_params['object_name']} ({output_params['user_id']}/{output_params['session_id']})",
     )

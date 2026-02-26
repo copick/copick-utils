@@ -578,3 +578,72 @@ def add_tomogram_option(func: click.Command = None, required: bool = True) -> Ca
         return add_tomogram_option_decorator
     else:
         return add_tomogram_option_decorator(func)
+
+
+def add_reference_tomogram_option(func: click.Command = None, required: bool = False) -> Callable:
+    """
+    Add --ref-tomogram/-rt option for using tomogram boundaries as a reference surface.
+
+    When specified, the tomogram volume boundaries (6 faces of the bounding box) are used
+    as the reference surface for distance calculations.
+
+    Tomogram URI format: tomo_type@voxel_spacing
+    Example: "wbp@10.0"
+
+    Args:
+        func (click.Command, optional): The Click command to which the option will be added.
+        required (bool): Whether the option is required. Default is False.
+
+    Returns:
+        Callable: The Click command with the reference tomogram option added.
+    """
+
+    def add_reference_tomogram_option_decorator(_func: click.Command) -> click.Command:
+        """Add --ref-tomogram option to command."""
+        opt = optgroup.option(
+            "--ref-tomogram",
+            "-rt",
+            "ref_tomo_uri",
+            required=required,
+            help="Reference tomogram boundary URI (format: tomo_type@voxel_spacing). "
+            "Uses tomogram volume boundaries as reference surface. Example: 'wbp@10.0'",
+        )
+        return opt(_func)
+
+    if func is None:
+        return add_reference_tomogram_option_decorator
+    else:
+        return add_reference_tomogram_option_decorator(func)
+
+
+def add_invert_option(func: click.Command = None) -> Callable:
+    """
+    Add --invert flag to invert distance filtering behavior.
+
+    When False (default): Keep data WITHIN max_distance of reference surface.
+    When True: Keep data BEYOND max_distance of reference surface (remove data within distance).
+
+    This flag applies uniformly to all reference types (mesh, segmentation, tomogram).
+
+    Args:
+        func (click.Command, optional): The Click command to which the option will be added.
+
+    Returns:
+        Callable: The Click command with the invert option added.
+    """
+
+    def add_invert_option_decorator(_func: click.Command) -> click.Command:
+        """Add --invert option to command."""
+        opt = optgroup.option(
+            "--invert/--no-invert",
+            "invert",
+            is_flag=True,
+            default=False,
+            help="Invert filtering: keep data BEYOND max_distance instead of WITHIN (default: keep within).",
+        )
+        return opt(_func)
+
+    if func is None:
+        return add_invert_option_decorator
+    else:
+        return add_invert_option_decorator(func)
