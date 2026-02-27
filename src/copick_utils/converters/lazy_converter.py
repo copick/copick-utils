@@ -205,7 +205,25 @@ def add_references_to_tasks(
     """
     reference_type = reference_config.reference_type
 
-    # Find reference objects
+    # Handle tomogram reference type (uses tomogram boundaries, not an object)
+    if reference_type == "tomogram":
+        # For tomogram references, we pass tomo_type and voxel_spacing as reference_tomogram_info
+        # The actual tomogram bounds are computed in the converter function
+        augmented_tasks = []
+        for task in tasks:
+            task["reference_mesh"] = None
+            task["reference_segmentation"] = None
+            task["reference_tomogram_info"] = (reference_config.tomo_type, reference_config.voxel_spacing)
+
+            # Add additional reference parameters
+            for key, value in reference_config.additional_params.items():
+                task[key] = value
+
+            augmented_tasks.append(task)
+
+        return augmented_tasks
+
+    # Find reference objects for mesh/segmentation
     if reference_type == "mesh":
         ref_objects = run.get_meshes(
             object_name=reference_config.object_name,
@@ -233,6 +251,7 @@ def add_references_to_tasks(
     for task in tasks:
         task[ref_key] = ref_objects[0]
         task[alt_key] = None
+        task["reference_tomogram_info"] = None  # Ensure tomogram info is None for mesh/seg references
 
         # Add additional reference parameters
         for key, value in reference_config.additional_params.items():

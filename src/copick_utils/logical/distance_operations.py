@@ -572,9 +572,9 @@ def limit_segmentation_by_distance(
 def limit_picks_by_distance(
     picks: "CopickPicks",
     run: "CopickRun",
-    pick_object_name: str,
-    pick_session_id: str,
-    pick_user_id: str,
+    output_object_name: str,
+    output_session_id: str,
+    output_user_id: str,
     reference_mesh: Optional["CopickMesh"] = None,
     reference_segmentation: Optional["CopickSegmentation"] = None,
     reference_tomogram_info: Optional[Tuple[str, float]] = None,
@@ -592,9 +592,9 @@ def limit_picks_by_distance(
         reference_segmentation: Reference CopickSegmentation
         reference_tomogram_info: Tuple of (tomo_type, voxel_spacing) for tomogram boundary reference
         run: CopickRun object
-        pick_object_name: Name for the output picks
-        pick_session_id: Session ID for the output picks
-        pick_user_id: User ID for the output picks
+        output_object_name: Name for the output picks
+        output_session_id: Session ID for the output picks
+        output_user_id: User ID for the output picks
         max_distance: Maximum distance from reference surface
         mesh_voxel_spacing: Voxel spacing for mesh voxelization (defaults to 10.0)
         invert: If False (default), keep picks within max_distance. If True, keep picks beyond max_distance.
@@ -716,7 +716,7 @@ def limit_picks_by_distance(
         valid_transforms = transforms[final_valid] if transforms is not None else None
 
         # Create output picks
-        output_picks = run.new_picks(pick_object_name, pick_session_id, pick_user_id, exist_ok=True)
+        output_picks = run.new_picks(output_object_name, output_session_id, output_user_id, exist_ok=True)
         output_picks.from_numpy(positions=valid_points, transforms=valid_transforms)
         output_picks.store()
 
