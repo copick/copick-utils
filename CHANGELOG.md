@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.3.0...copick-utils-v1.4.0) (2026-02-27)
+
+
+### ✨ Features
+
+* Expand functionality of clip*-utilities ([#48](https://github.com/copick/copick-utils/issues/48)) ([0e2ffb1](https://github.com/copick/copick-utils/commit/0e2ffb1f13eedb5d83c82d00f81660056dda8c5d))
+
 ## [1.3.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.2.0...copick-utils-v1.3.0) (2026-02-13)
 
 
