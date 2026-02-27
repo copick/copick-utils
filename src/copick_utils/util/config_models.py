@@ -155,42 +155,55 @@ class SelectorConfig(BaseModel):
 class ReferenceConfig(BaseModel):
     """Pydantic model for reference discovery configuration."""
 
-    reference_type: Literal["mesh", "segmentation"]
+    reference_type: Literal["mesh", "segmentation", "tomogram"]
     object_name: Optional[str] = None
     user_id: Optional[str] = None
     session_id: Optional[str] = None
     voxel_spacing: Optional[float] = None
+    tomo_type: Optional[str] = None
     additional_params: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("voxel_spacing")
     @classmethod
     def validate_segmentation_voxel_spacing(cls, v, info):
-        """Ensure voxel_spacing is provided for segmentation references."""
+        """Ensure voxel_spacing is provided for segmentation and tomogram references."""
         values = info.data
-        if values.get("reference_type") == "segmentation" and v is None:
-            raise ValueError("voxel_spacing is required for segmentation references")
+        ref_type = values.get("reference_type")
+        if ref_type in ("segmentation", "tomogram") and v is None:
+            raise ValueError(f"voxel_spacing is required for {ref_type} references")
         return v
 
     @field_validator("object_name")
     @classmethod
     def validate_required_fields(cls, v, info):
-        """Ensure required fields are provided."""
-        if v is None:
+        """Ensure required fields are provided for non-tomogram references."""
+        values = info.data
+        # object_name is not required for tomogram references
+        if values.get("reference_type") != "tomogram" and v is None:
             raise ValueError("object_name is required for reference configuration")
+        return v
+
+    @field_validator("tomo_type")
+    @classmethod
+    def validate_tomogram_fields(cls, v, info):
+        """Ensure tomo_type is provided for tomogram references."""
+        values = info.data
+        if values.get("reference_type") == "tomogram" and v is None:
+            raise ValueError("tomo_type is required for tomogram references")
         return v
 
     @classmethod
     def from_uri(
         cls,
         uri: str,
-        reference_type: Literal["mesh", "segmentation"],
+        reference_type: Literal["mesh", "segmentation", "tomogram"],
         additional_params: Optional[Dict[str, Any]] = None,
     ) -> "ReferenceConfig":
         """Create ReferenceConfig from a URI.
 
         Args:
             uri: Copick URI string for the reference object.
-            reference_type: Type of reference ('mesh' or 'segmentation').
+            reference_type: Type of reference ('mesh', 'segmentation', or 'tomogram').
             additional_params: Additional parameters to include in the config.
 
         Returns:
@@ -204,24 +217,40 @@ class ReferenceConfig(BaseModel):
         # Parse URI
         params = parse_copick_uri(uri, reference_type)
 
-        # Extract fields based on type
-        object_name = params.get("object_name") or params.get("name")
-        user_id = params["user_id"]
-        session_id = params["session_id"]
-        voxel_spacing = params.get("voxel_spacing")
+        if reference_type == "tomogram":
+            # For tomogram, extract tomo_type and voxel_spacing
+            tomo_type = params.get("tomo_type")
+            voxel_spacing = params.get("voxel_spacing")
 
-        # Convert voxel_spacing to float if it's a string
-        if voxel_spacing and isinstance(voxel_spacing, str) and voxel_spacing != "*":
-            voxel_spacing = float(voxel_spacing)
+            # Convert voxel_spacing to float if it's a string
+            if voxel_spacing and isinstance(voxel_spacing, str) and voxel_spacing != "*":
+                voxel_spacing = float(voxel_spacing)
 
-        return cls(
-            reference_type=reference_type,
-            object_name=object_name,
-            user_id=user_id,
-            session_id=session_id,
-            voxel_spacing=voxel_spacing,
-            additional_params=additional_params or {},
-        )
+            return cls(
+                reference_type=reference_type,
+                tomo_type=tomo_type,
+                voxel_spacing=voxel_spacing,
+                additional_params=additional_params or {},
+            )
+        else:
+            # For mesh/segmentation, extract standard fields
+            object_name = params.get("object_name") or params.get("name")
+            user_id = params["user_id"]
+            session_id = params["session_id"]
+            voxel_spacing = params.get("voxel_spacing")
+
+            # Convert voxel_spacing to float if it's a string
+            if voxel_spacing and isinstance(voxel_spacing, str) and voxel_spacing != "*":
+                voxel_spacing = float(voxel_spacing)
+
+            return cls(
+                reference_type=reference_type,
+                object_name=object_name,
+                user_id=user_id,
+                session_id=session_id,
+                voxel_spacing=voxel_spacing,
+                additional_params=additional_params or {},
+            )
 
 
 class TaskConfig(BaseModel):
@@ -563,7 +592,7 @@ def create_reference_config(
     output_uri: str,
     output_type: Literal["picks", "mesh", "segmentation"],
     reference_uri: str,
-    reference_type: Literal["mesh", "segmentation"],
+    reference_type: Literal["mesh", "segmentation", "tomogram"],
     additional_params: Optional[Dict[str, Any]] = None,
     command_name: Optional[str] = None,
 ) -> TaskConfig:
@@ -575,7 +604,7 @@ def create_reference_config(
         output_uri: Output copick URI string (supports smart defaults).
         output_type: Type of output object.
         reference_uri: Reference copick URI string.
-        reference_type: Type of reference object.
+        reference_type: Type of reference object ('mesh', 'segmentation', or 'tomogram').
         additional_params: Additional parameters for reference config.
         command_name: Name of the command (used for smart defaults in output_uri).
 
@@ -591,6 +620,17 @@ def create_reference_config(
             reference_uri="boundary:user1/boundary-001",
             reference_type="mesh",
             command_name="picksin",
+        )
+
+        # With tomogram boundary reference:
+        config = create_reference_config(
+            input_uri="ribosome:user1/all-001",
+            input_type="picks",
+            output_uri="ribosome",
+            output_type="picks",
+            reference_uri="wbp@10.0",
+            reference_type="tomogram",
+            command_name="clippicks",
         )
     """
     selector_config = SelectorConfig.from_uris(

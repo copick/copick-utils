@@ -117,6 +117,119 @@ def _create_distance_field_from_mesh(
     return _create_distance_field_from_segmentation(voxelized_array.astype(np.uint8), target_voxel_spacing)
 
 
+def _get_tomogram_bounds(
+    run: "CopickRun",
+    tomo_type: str,
+    voxel_spacing: float,
+) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+    """
+    Get tomogram physical bounds as ((0,0,0), (max_x, max_y, max_z)).
+
+    Args:
+        run: CopickRun object
+        tomo_type: Type of the tomogram (e.g., "wbp")
+        voxel_spacing: Voxel spacing of the tomogram
+
+    Returns:
+        Tuple of ((min_x, min_y, min_z), (max_x, max_y, max_z)) in physical units (angstroms)
+
+    Raises:
+        ValueError: If voxel spacing or tomogram type not found
+    """
+    import zarr
+
+    vs = run.get_voxel_spacing(voxel_spacing)
+    if vs is None:
+        available = [v.voxel_size for v in run.voxel_spacings]
+        raise ValueError(f"Voxel spacing {voxel_spacing} not found in run {run.name}. Available: {available}")
+
+    tomo = vs.get_tomogram(tomo_type)
+    if tomo is None:
+        available = [t.tomo_type for t in vs.tomograms]
+        raise ValueError(
+            f"Tomogram type '{tomo_type}' not found at voxel spacing {voxel_spacing}. Available: {available}",
+        )
+
+    # Get shape from zarr (z, y, x order)
+    zarr_array = zarr.open(tomo.zarr())["0"]
+    shape_zyx = zarr_array.shape
+    shape_xyz = shape_zyx[::-1]  # Convert to (x, y, z)
+
+    # Physical bounds in angstroms
+    max_bound = tuple(np.array(shape_xyz) * voxel_spacing)
+    return ((0.0, 0.0, 0.0), max_bound)
+
+
+def _compute_distances_to_tomogram_boundary(
+    positions: np.ndarray,
+    tomogram_bounds: Tuple[Tuple[float, float, float], Tuple[float, float, float]],
+) -> np.ndarray:
+    """
+    Compute distance from each position to nearest tomogram boundary.
+
+    The distance is the minimum distance to any of the 6 faces of the tomogram bounding box.
+
+    Args:
+        positions: Array of shape (N, 3) with positions in physical coordinates (angstroms)
+        tomogram_bounds: Tuple of ((min_x, min_y, min_z), (max_x, max_y, max_z))
+
+    Returns:
+        Array of shape (N,) with distance to nearest boundary for each position
+    """
+    min_bound = np.array(tomogram_bounds[0])
+    max_bound = np.array(tomogram_bounds[1])
+
+    # Distance to each of the 6 boundaries
+    dist_to_min = positions - min_bound  # Distance to x=0, y=0, z=0 planes
+    dist_to_max = max_bound - positions  # Distance to x=max, y=max, z=max planes
+
+    # Minimum distance across all 6 boundaries
+    all_distances = np.column_stack([dist_to_min, dist_to_max])
+    return np.min(all_distances, axis=1)
+
+
+def _create_distance_field_from_tomogram_boundary(
+    tomogram_shape: Tuple[int, int, int],
+    voxel_spacing: float,
+) -> np.ndarray:
+    """
+    Create distance field where each voxel contains the distance to the nearest tomogram boundary.
+
+    This is used for segmentation and mesh filtering where a full distance field is needed.
+
+    Args:
+        tomogram_shape: Shape of the tomogram (z, y, x) or (x, y, z) in voxels
+        voxel_spacing: Voxel spacing in physical units
+
+    Returns:
+        Distance field array with distances in physical units
+    """
+    # Create coordinate grids
+    z, y, x = np.indices(tomogram_shape)
+
+    # Distance to each boundary (in voxels)
+    dist_to_x_min = x
+    dist_to_x_max = tomogram_shape[2] - 1 - x
+    dist_to_y_min = y
+    dist_to_y_max = tomogram_shape[1] - 1 - y
+    dist_to_z_min = z
+    dist_to_z_max = tomogram_shape[0] - 1 - z
+
+    # Minimum distance to any boundary
+    distance_field_voxels = np.minimum.reduce(
+        [
+            dist_to_x_min,
+            dist_to_x_max,
+            dist_to_y_min,
+            dist_to_y_max,
+            dist_to_z_min,
+            dist_to_z_max,
+        ],
+    )
+
+    return distance_field_voxels.astype(float) * voxel_spacing
+
+
 def limit_mesh_by_distance(
     mesh: "CopickMesh",
     run: "CopickRun",
@@ -125,8 +238,10 @@ def limit_mesh_by_distance(
     output_user_id: str,
     reference_mesh: Optional["CopickMesh"] = None,
     reference_segmentation: Optional["CopickSegmentation"] = None,
+    reference_tomogram_info: Optional[Tuple[str, float]] = None,
     max_distance: float = 100.0,
     mesh_voxel_spacing: float = None,
+    invert: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickMesh", Dict[str, int]]]:
     """
@@ -134,14 +249,16 @@ def limit_mesh_by_distance(
 
     Args:
         mesh: CopickMesh to limit
-        reference_mesh: Reference CopickMesh (either this or reference_segmentation must be provided)
+        reference_mesh: Reference CopickMesh (one of mesh/segmentation/tomogram must be provided)
         reference_segmentation: Reference CopickSegmentation
+        reference_tomogram_info: Tuple of (tomo_type, voxel_spacing) for tomogram boundary reference
         run: CopickRun object
         output_object_name: Name for the output mesh
         output_session_id: Session ID for the output mesh
         output_user_id: User ID for the output mesh
         max_distance: Maximum distance from reference surface
         mesh_voxel_spacing: Voxel spacing for mesh voxelization (defaults to 10.0)
+        invert: If False (default), keep vertices within max_distance. If True, keep vertices beyond max_distance.
         **kwargs: Additional keyword arguments
 
     Returns:
@@ -149,8 +266,10 @@ def limit_mesh_by_distance(
         Stats dict contains 'vertices_created' and 'faces_created'.
     """
     try:
-        if reference_mesh is None and reference_segmentation is None:
-            raise ValueError("Either reference_mesh or reference_segmentation must be provided")
+        if reference_mesh is None and reference_segmentation is None and reference_tomogram_info is None:
+            raise ValueError(
+                "One of reference_mesh, reference_segmentation, or reference_tomogram_info must be provided",
+            )
 
         # Get the target mesh
         target_mesh = mesh.mesh
@@ -165,87 +284,104 @@ def limit_mesh_by_distance(
                 return None
             target_mesh = tm.util.concatenate(list(target_mesh.geometry.values()))
 
-        # Create distance field from reference
-        # Use mesh bounds to define coordinate space
-        mesh_bounds = np.array([target_mesh.vertices.min(axis=0), target_mesh.vertices.max(axis=0)])
+        # Handle tomogram boundary reference (direct distance calculation)
+        if reference_tomogram_info is not None:
+            tomo_type, tomo_voxel_spacing = reference_tomogram_info
+            tomogram_bounds = _get_tomogram_bounds(run, tomo_type, tomo_voxel_spacing)
+            vertex_distances = _compute_distances_to_tomogram_boundary(target_mesh.vertices, tomogram_bounds)
 
-        # Add padding for max_distance
-        padding = max_distance * 1.1
-        mesh_bounds[0] -= padding
-        mesh_bounds[1] += padding
+            # Apply invert logic
+            final_valid = vertex_distances > max_distance if invert else vertex_distances <= max_distance
 
-        field_voxel_spacing = mesh_voxel_spacing if mesh_voxel_spacing is not None else 10.0
-        field_size = mesh_bounds[1] - mesh_bounds[0]
-        field_shape = np.ceil(field_size / field_voxel_spacing).astype(int)
-
-        if reference_mesh is not None:
-            ref_mesh = reference_mesh.mesh
-            if ref_mesh is None:
-                logger.error("Could not load reference mesh data")
+            if not np.any(final_valid):
+                within_or_beyond = "beyond" if invert else "within"
+                logger.warning(f"No vertices {within_or_beyond} {max_distance} units of tomogram boundary")
                 return None
 
-            if isinstance(ref_mesh, tm.Scene):
-                if len(ref_mesh.geometry) == 0:
-                    logger.error("Reference mesh is empty")
+        # Handle mesh or segmentation reference (uses distance field)
+        else:
+            # Create distance field from reference
+            # Use mesh bounds to define coordinate space
+            mesh_bounds = np.array([target_mesh.vertices.min(axis=0), target_mesh.vertices.max(axis=0)])
+
+            # Add padding for max_distance
+            padding = max_distance * 1.1
+            mesh_bounds[0] -= padding
+            mesh_bounds[1] += padding
+
+            field_voxel_spacing = mesh_voxel_spacing if mesh_voxel_spacing is not None else 10.0
+            field_size = mesh_bounds[1] - mesh_bounds[0]
+            field_shape = np.ceil(field_size / field_voxel_spacing).astype(int)
+
+            if reference_mesh is not None:
+                ref_mesh = reference_mesh.mesh
+                if ref_mesh is None:
+                    logger.error("Could not load reference mesh data")
                     return None
-                ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
 
-            # Create distance field from mesh
-            distance_field = _create_distance_field_from_mesh(
-                ref_mesh,
-                field_shape,
-                field_voxel_spacing,
-                mesh_voxel_spacing,
-            )
+                if isinstance(ref_mesh, tm.Scene):
+                    if len(ref_mesh.geometry) == 0:
+                        logger.error("Reference mesh is empty")
+                        return None
+                    ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
 
-        else:  # reference_segmentation is not None
-            ref_seg_array = reference_segmentation.numpy()
-            if ref_seg_array is None or ref_seg_array.size == 0:
-                logger.error("Could not load reference segmentation data")
+                # Create distance field from mesh
+                distance_field = _create_distance_field_from_mesh(
+                    ref_mesh,
+                    field_shape,
+                    field_voxel_spacing,
+                    mesh_voxel_spacing,
+                )
+
+            else:  # reference_segmentation is not None
+                ref_seg_array = reference_segmentation.numpy()
+                if ref_seg_array is None or ref_seg_array.size == 0:
+                    logger.error("Could not load reference segmentation data")
+                    return None
+
+                # Convert segmentation to field coordinate space
+                seg_indices = np.array(np.where(ref_seg_array > 0)).T
+                seg_physical = seg_indices * reference_segmentation.voxel_size
+                field_coords = np.floor((seg_physical - mesh_bounds[0]) / field_voxel_spacing).astype(int)
+
+                # Create voxelized reference in field space
+                voxelized_ref = np.zeros(field_shape, dtype=bool)
+                valid_coords = (field_coords >= 0).all(axis=1) & (field_coords < field_shape).all(axis=1)
+                if np.any(valid_coords):
+                    valid_field_coords = field_coords[valid_coords]
+                    voxelized_ref[valid_field_coords[:, 0], valid_field_coords[:, 1], valid_field_coords[:, 2]] = True
+
+                distance_field = _create_distance_field_from_segmentation(
+                    voxelized_ref.astype(np.uint8),
+                    field_voxel_spacing,
+                )
+
+            # Convert mesh vertex coordinates to field indices
+            vertex_field_coords = (target_mesh.vertices - mesh_bounds[0]) / field_voxel_spacing
+            vertex_field_indices = np.floor(vertex_field_coords).astype(int)
+
+            # Check which vertices are within field bounds
+            valid_vertices = (vertex_field_indices >= 0).all(axis=1) & (vertex_field_indices < field_shape).all(axis=1)
+
+            if not np.any(valid_vertices):
+                logger.warning("No mesh vertices within distance field bounds")
                 return None
 
-            # Convert segmentation to field coordinate space
-            seg_indices = np.array(np.where(ref_seg_array > 0)).T
-            seg_physical = seg_indices * reference_segmentation.voxel_size
-            field_coords = np.floor((seg_physical - mesh_bounds[0]) / field_voxel_spacing).astype(int)
+            # Get distances for valid vertices
+            valid_indices = vertex_field_indices[valid_vertices]
+            vertex_distances = distance_field[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
 
-            # Create voxelized reference in field space
-            voxelized_ref = np.zeros(field_shape, dtype=bool)
-            valid_coords = (field_coords >= 0).all(axis=1) & (field_coords < field_shape).all(axis=1)
-            if np.any(valid_coords):
-                valid_field_coords = field_coords[valid_coords]
-                voxelized_ref[valid_field_coords[:, 0], valid_field_coords[:, 1], valid_field_coords[:, 2]] = True
+            # Apply invert logic: default keeps within distance, invert keeps beyond
+            distance_valid = vertex_distances > max_distance if invert else vertex_distances <= max_distance
 
-            distance_field = _create_distance_field_from_segmentation(
-                voxelized_ref.astype(np.uint8),
-                field_voxel_spacing,
-            )
+            # Combine bounds validity and distance validity
+            final_valid = np.zeros(len(target_mesh.vertices), dtype=bool)
+            final_valid[valid_vertices] = distance_valid
 
-        # Convert mesh vertex coordinates to field indices
-        vertex_field_coords = (target_mesh.vertices - mesh_bounds[0]) / field_voxel_spacing
-        vertex_field_indices = np.floor(vertex_field_coords).astype(int)
-
-        # Check which vertices are within field bounds
-        valid_vertices = (vertex_field_indices >= 0).all(axis=1) & (vertex_field_indices < field_shape).all(axis=1)
-
-        if not np.any(valid_vertices):
-            logger.warning("No mesh vertices within distance field bounds")
-            return None
-
-        # Get distances for valid vertices
-        valid_indices = vertex_field_indices[valid_vertices]
-        vertex_distances = distance_field[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
-
-        # Find vertices within distance threshold
-        distance_valid = vertex_distances <= max_distance
-
-        # Combine bounds validity and distance validity
-        final_valid = np.zeros(len(target_mesh.vertices), dtype=bool)
-        final_valid[valid_vertices] = distance_valid
-
-        if not np.any(final_valid):
-            logger.warning(f"No vertices within {max_distance} units of reference surface")
-            return None
+            if not np.any(final_valid):
+                within_or_beyond = "beyond" if invert else "within"
+                logger.warning(f"No vertices {within_or_beyond} {max_distance} units of reference surface")
+                return None
 
         # Create a new mesh with only valid vertices and their faces
         valid_vertex_indices = np.where(final_valid)[0]
@@ -285,7 +421,8 @@ def limit_mesh_by_distance(
             shape_name="distance-limited mesh",
         )
 
-        logger.info(f"Limited mesh to {stats['vertices_created']} vertices within {max_distance} units")
+        within_or_beyond = "beyond" if invert else "within"
+        logger.info(f"Limited mesh to {stats['vertices_created']} vertices {within_or_beyond} {max_distance} units")
         return copick_mesh, stats
 
     except Exception as e:
@@ -301,10 +438,12 @@ def limit_segmentation_by_distance(
     output_user_id: str,
     reference_mesh: Optional["CopickMesh"] = None,
     reference_segmentation: Optional["CopickSegmentation"] = None,
+    reference_tomogram_info: Optional[Tuple[str, float]] = None,
     max_distance: float = 100.0,
     voxel_spacing: float = 10.0,
     mesh_voxel_spacing: float = None,
     is_multilabel: bool = False,
+    invert: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
     """
@@ -312,8 +451,9 @@ def limit_segmentation_by_distance(
 
     Args:
         segmentation: CopickSegmentation to limit
-        reference_mesh: Reference CopickMesh (either this or reference_segmentation must be provided)
+        reference_mesh: Reference CopickMesh (one of mesh/segmentation/tomogram must be provided)
         reference_segmentation: Reference CopickSegmentation
+        reference_tomogram_info: Tuple of (tomo_type, voxel_spacing) for tomogram boundary reference
         run: CopickRun object
         output_object_name: Name for the output segmentation
         output_session_id: Session ID for the output segmentation
@@ -322,6 +462,7 @@ def limit_segmentation_by_distance(
         voxel_spacing: Voxel spacing for the output segmentation
         mesh_voxel_spacing: Voxel spacing for mesh voxelization (defaults to target voxel spacing)
         is_multilabel: Whether the segmentation is multilabel
+        invert: If False (default), keep voxels within max_distance. If True, keep voxels beyond max_distance.
         **kwargs: Additional keyword arguments
 
     Returns:
@@ -329,8 +470,10 @@ def limit_segmentation_by_distance(
         Stats dict contains 'voxels_created'.
     """
     try:
-        if reference_mesh is None and reference_segmentation is None:
-            raise ValueError("Either reference_mesh or reference_segmentation must be provided")
+        if reference_mesh is None and reference_segmentation is None and reference_tomogram_info is None:
+            raise ValueError(
+                "One of reference_mesh, reference_segmentation, or reference_tomogram_info must be provided",
+            )
 
         # Load target segmentation
         seg_array = segmentation.numpy()
@@ -339,7 +482,15 @@ def limit_segmentation_by_distance(
             return None
 
         # Create distance field from reference
-        if reference_mesh is not None:
+        if reference_tomogram_info is not None:
+            # Use tomogram boundary distance field
+            tomo_type, tomo_voxel_spacing = reference_tomogram_info
+            # Verify tomogram exists (this will raise if not found)
+            _get_tomogram_bounds(run, tomo_type, tomo_voxel_spacing)
+            # Create distance field from tomogram boundary
+            distance_field = _create_distance_field_from_tomogram_boundary(seg_array.shape, segmentation.voxel_size)
+
+        elif reference_mesh is not None:
             ref_mesh = reference_mesh.mesh
             if ref_mesh is None:
                 logger.error("Could not load reference mesh data")
@@ -384,14 +535,15 @@ def limit_segmentation_by_distance(
             # Create distance field from segmentation
             distance_field = _create_distance_field_from_segmentation(ref_seg_array, segmentation.voxel_size)
 
-        # Apply distance threshold to create mask
-        distance_mask = distance_field <= max_distance
+        # Apply distance threshold to create mask with invert support
+        distance_mask = distance_field > max_distance if invert else distance_field <= max_distance
 
         # Apply mask to target segmentation
         output_array = seg_array * distance_mask
 
         if np.sum(output_array > 0) == 0:
-            logger.warning(f"No voxels within {max_distance} units of reference surface")
+            within_or_beyond = "beyond" if invert else "within"
+            logger.warning(f"No voxels {within_or_beyond} {max_distance} units of reference surface")
             return None
 
         # Create output segmentation
@@ -408,7 +560,8 @@ def limit_segmentation_by_distance(
         output_seg.from_numpy(output_array)
 
         stats = {"voxels_created": int(np.sum(output_array > 0))}
-        logger.info(f"Limited segmentation to {stats['voxels_created']} voxels within {max_distance} units")
+        within_or_beyond = "beyond" if invert else "within"
+        logger.info(f"Limited segmentation to {stats['voxels_created']} voxels {within_or_beyond} {max_distance} units")
         return output_seg, stats
 
     except Exception as e:
@@ -419,13 +572,15 @@ def limit_segmentation_by_distance(
 def limit_picks_by_distance(
     picks: "CopickPicks",
     run: "CopickRun",
-    pick_object_name: str,
-    pick_session_id: str,
-    pick_user_id: str,
+    output_object_name: str,
+    output_session_id: str,
+    output_user_id: str,
     reference_mesh: Optional["CopickMesh"] = None,
     reference_segmentation: Optional["CopickSegmentation"] = None,
+    reference_tomogram_info: Optional[Tuple[str, float]] = None,
     max_distance: float = 100.0,
     mesh_voxel_spacing: float = None,
+    invert: bool = False,
     **kwargs,
 ) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
     """
@@ -433,14 +588,16 @@ def limit_picks_by_distance(
 
     Args:
         picks: CopickPicks to limit
-        reference_mesh: Reference CopickMesh (either this or reference_segmentation must be provided)
+        reference_mesh: Reference CopickMesh (one of mesh/segmentation/tomogram must be provided)
         reference_segmentation: Reference CopickSegmentation
+        reference_tomogram_info: Tuple of (tomo_type, voxel_spacing) for tomogram boundary reference
         run: CopickRun object
-        pick_object_name: Name for the output picks
-        pick_session_id: Session ID for the output picks
-        pick_user_id: User ID for the output picks
+        output_object_name: Name for the output picks
+        output_session_id: Session ID for the output picks
+        output_user_id: User ID for the output picks
         max_distance: Maximum distance from reference surface
         mesh_voxel_spacing: Voxel spacing for mesh voxelization (defaults to 10.0)
+        invert: If False (default), keep picks within max_distance. If True, keep picks beyond max_distance.
         **kwargs: Additional keyword arguments
 
     Returns:
@@ -448,8 +605,10 @@ def limit_picks_by_distance(
         Stats dict contains 'points_created'.
     """
     try:
-        if reference_mesh is None and reference_segmentation is None:
-            raise ValueError("Either reference_mesh or reference_segmentation must be provided")
+        if reference_mesh is None and reference_segmentation is None and reference_tomogram_info is None:
+            raise ValueError(
+                "One of reference_mesh, reference_segmentation, or reference_tomogram_info must be provided",
+            )
 
         # Load pick data
         points, transforms = picks.numpy()
@@ -459,92 +618,111 @@ def limit_picks_by_distance(
 
         pick_positions = points[:, :3]  # Use only x, y, z coordinates
 
-        # We need a coordinate space to create the distance field
-        # Use the reference segmentation's coordinate space, or create one for mesh references
-        if reference_segmentation is not None:
-            ref_seg_array = reference_segmentation.numpy()
-            if ref_seg_array is None or ref_seg_array.size == 0:
-                logger.error("Could not load reference segmentation data")
+        # Handle tomogram boundary reference (direct distance calculation, no distance field)
+        if reference_tomogram_info is not None:
+            tomo_type, tomo_voxel_spacing = reference_tomogram_info
+            tomogram_bounds = _get_tomogram_bounds(run, tomo_type, tomo_voxel_spacing)
+            pick_distances = _compute_distances_to_tomogram_boundary(pick_positions, tomogram_bounds)
+
+            # Apply invert logic: default keeps within distance, invert keeps beyond
+            final_valid = pick_distances > max_distance if invert else pick_distances <= max_distance
+
+            if not np.any(final_valid):
+                within_or_beyond = "beyond" if invert else "within"
+                logger.warning(f"No picks {within_or_beyond} {max_distance} units of tomogram boundary")
                 return None
 
-            # Use reference segmentation's coordinate space
-            field_voxel_spacing = reference_segmentation.voxel_size
-            distance_field = _create_distance_field_from_segmentation(ref_seg_array, field_voxel_spacing)
-
-            # Convert pick coordinates to voxel indices in reference segmentation space
-            pick_voxel_coords = pick_positions / field_voxel_spacing
-            pick_voxel_indices = np.floor(pick_voxel_coords).astype(int)
-
-        else:  # reference_mesh is not None
-            ref_mesh = reference_mesh.mesh
-            if ref_mesh is None:
-                logger.error("Could not load reference mesh data")
-                return None
-
-            if isinstance(ref_mesh, tm.Scene):
-                if len(ref_mesh.geometry) == 0:
-                    logger.error("Reference mesh is empty")
+        # Handle segmentation or mesh reference (uses distance field)
+        else:
+            # Create distance field from reference
+            if reference_segmentation is not None:
+                ref_seg_array = reference_segmentation.numpy()
+                if ref_seg_array is None or ref_seg_array.size == 0:
+                    logger.error("Could not load reference segmentation data")
                     return None
-                ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
 
-            # Define coordinate space based on mesh bounds and pick positions
-            all_coords = np.vstack([ref_mesh.vertices, pick_positions])
-            coord_bounds = np.array([all_coords.min(axis=0), all_coords.max(axis=0)])
+                # Use reference segmentation's coordinate space
+                field_voxel_spacing = reference_segmentation.voxel_size
+                distance_field = _create_distance_field_from_segmentation(ref_seg_array, field_voxel_spacing)
 
-            # Add padding for max_distance
-            padding = max_distance * 1.1
-            coord_bounds[0] -= padding
-            coord_bounds[1] += padding
+                # Convert pick coordinates to voxel indices in reference segmentation space
+                pick_voxel_coords = pick_positions / field_voxel_spacing
+                pick_voxel_indices = np.floor(pick_voxel_coords).astype(int)
 
-            field_voxel_spacing = mesh_voxel_spacing if mesh_voxel_spacing is not None else 10.0
-            field_size = coord_bounds[1] - coord_bounds[0]
-            field_shape = np.ceil(field_size / field_voxel_spacing).astype(int)
+            else:  # reference_mesh is not None
+                ref_mesh = reference_mesh.mesh
+                if ref_mesh is None:
+                    logger.error("Could not load reference mesh data")
+                    return None
 
-            # Create distance field from mesh in this coordinate space
-            distance_field = _create_distance_field_from_mesh(
-                ref_mesh,
-                field_shape,
-                field_voxel_spacing,
-                mesh_voxel_spacing,
+                if isinstance(ref_mesh, tm.Scene):
+                    if len(ref_mesh.geometry) == 0:
+                        logger.error("Reference mesh is empty")
+                        return None
+                    ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
+
+                # Define coordinate space based on mesh bounds and pick positions
+                all_coords = np.vstack([ref_mesh.vertices, pick_positions])
+                coord_bounds = np.array([all_coords.min(axis=0), all_coords.max(axis=0)])
+
+                # Add padding for max_distance
+                padding = max_distance * 1.1
+                coord_bounds[0] -= padding
+                coord_bounds[1] += padding
+
+                field_voxel_spacing = mesh_voxel_spacing if mesh_voxel_spacing is not None else 10.0
+                field_size = coord_bounds[1] - coord_bounds[0]
+                field_shape = np.ceil(field_size / field_voxel_spacing).astype(int)
+
+                # Create distance field from mesh in this coordinate space
+                distance_field = _create_distance_field_from_mesh(
+                    ref_mesh,
+                    field_shape,
+                    field_voxel_spacing,
+                    mesh_voxel_spacing,
+                )
+
+                # Convert pick coordinates to voxel indices in this field space
+                pick_voxel_coords = (pick_positions - coord_bounds[0]) / field_voxel_spacing
+                pick_voxel_indices = np.floor(pick_voxel_coords).astype(int)
+
+            # Check which picks are within field bounds
+            valid_picks = (pick_voxel_indices >= 0).all(axis=1) & (pick_voxel_indices < distance_field.shape).all(
+                axis=1,
             )
 
-            # Convert pick coordinates to voxel indices in this field space
-            pick_voxel_coords = (pick_positions - coord_bounds[0]) / field_voxel_spacing
-            pick_voxel_indices = np.floor(pick_voxel_coords).astype(int)
+            if not np.any(valid_picks):
+                logger.warning("No picks within distance field bounds")
+                return None
 
-        # Check which picks are within field bounds
-        valid_picks = (pick_voxel_indices >= 0).all(axis=1) & (pick_voxel_indices < distance_field.shape).all(axis=1)
+            # Get distances for valid picks
+            valid_indices = pick_voxel_indices[valid_picks]
+            pick_distances = distance_field[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
 
-        if not np.any(valid_picks):
-            logger.warning("No picks within distance field bounds")
-            return None
+            # Apply invert logic: default keeps within distance, invert keeps beyond
+            distance_valid = pick_distances > max_distance if invert else pick_distances <= max_distance
 
-        # Get distances for valid picks
-        valid_indices = pick_voxel_indices[valid_picks]
-        pick_distances = distance_field[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+            # Combine bounds validity and distance validity
+            final_valid = np.zeros(len(points), dtype=bool)
+            final_valid[valid_picks] = distance_valid
 
-        # Find picks within distance threshold
-        distance_valid = pick_distances <= max_distance
-
-        # Combine bounds validity and distance validity
-        final_valid = np.zeros(len(points), dtype=bool)
-        final_valid[valid_picks] = distance_valid
-
-        if not np.any(final_valid):
-            logger.warning(f"No picks within {max_distance} units of reference surface")
-            return None
+            if not np.any(final_valid):
+                within_or_beyond = "beyond" if invert else "within"
+                logger.warning(f"No picks {within_or_beyond} {max_distance} units of reference surface")
+                return None
 
         # Filter picks
         valid_points = points[final_valid]
         valid_transforms = transforms[final_valid] if transforms is not None else None
 
         # Create output picks
-        output_picks = run.new_picks(pick_object_name, pick_session_id, pick_user_id, exist_ok=True)
+        output_picks = run.new_picks(output_object_name, output_session_id, output_user_id, exist_ok=True)
         output_picks.from_numpy(positions=valid_points, transforms=valid_transforms)
         output_picks.store()
 
         stats = {"points_created": len(valid_points)}
-        logger.info(f"Limited picks to {stats['points_created']} points within {max_distance} units")
+        within_or_beyond = "beyond" if invert else "within"
+        logger.info(f"Limited picks to {stats['points_created']} points {within_or_beyond} {max_distance} units")
         return output_picks, stats
 
     except Exception as e:
