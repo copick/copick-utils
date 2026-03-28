@@ -18,7 +18,7 @@ import click
     "--output",
     required=True,
     default=".",
-    type=str,
+    type=click.Path(file_okay=False, dir_okay=True),
     help="Output directory to save the downloaded files.",
 )
 def project(dataset: str, output: str):
