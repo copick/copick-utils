@@ -105,7 +105,6 @@ def _seg_stats_worker(
     segmentation_session_id: str,
     voxel_spacing: float,
     connectivity: str,
-    root: "CopickRoot",
 ) -> Dict[str, Any]:
     """Worker function for batch segmentation stats."""
     try:

@@ -120,7 +120,6 @@ def _expand_labels_worker(
     output_user_id: str,
     output_session_id: str,
     is_multilabel: bool,
-    root: "CopickRoot",
 ) -> Dict[str, Any]:
     """Worker function for batch label expansion."""
     try:
