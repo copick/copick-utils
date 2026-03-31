@@ -488,6 +488,13 @@ def lazy_conversion_worker(
                 # Call converter function with task parameters
                 task_params = dict(task)
                 task_params["run"] = run
+
+                # Remove metadata keys that are not converter parameters
+                task_params.pop("individual_outputs", None)
+                task_params.pop("input_type", None)
+                task_params.pop("output_type", None)
+                task_params.pop("segmentation_name", None)
+
                 task_params.update(converter_kwargs)
 
                 result = converter_func(**task_params)
