@@ -107,6 +107,7 @@ def picks2seg(
         run_names=run_names_list,
         workers=workers,
         radius=radius,
+        voxel_spacing=voxel_spacing,
         tomo_type=tomo_type,
     )
 

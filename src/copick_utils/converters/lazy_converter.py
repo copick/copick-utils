@@ -490,10 +490,15 @@ def lazy_conversion_worker(
                 task_params["run"] = run
 
                 # Remove metadata keys that are not converter parameters
-                task_params.pop("individual_outputs", None)
-                task_params.pop("input_type", None)
-                task_params.pop("output_type", None)
-                task_params.pop("segmentation_name", None)
+                for key in (
+                    "individual_outputs",
+                    "input_type",
+                    "output_type",
+                    "segmentation_name",
+                    "voxel_spacing",
+                    "session_id_template",
+                ):
+                    task_params.pop(key, None)
 
                 task_params.update(converter_kwargs)
 
