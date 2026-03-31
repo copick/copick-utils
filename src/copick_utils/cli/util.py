@@ -4,6 +4,7 @@ from typing import Callable
 
 import click
 from click_option_group import optgroup
+from copick.cli.types import CopickURI
 
 
 def add_clustering_options(func: click.Command) -> click.Command:
@@ -322,6 +323,7 @@ def add_input_option(object_type: str, func: click.Command = None) -> Callable:
             "--input",
             "-i",
             "input_uri",
+            type=CopickURI(object_type, "input"),
             required=True,
             help=help_text,
         )
@@ -377,6 +379,7 @@ def add_output_option(object_type: str, func: click.Command = None, default_tool
             "--output",
             "-o",
             "output_uri",
+            type=CopickURI(object_type, "output"),
             required=True,
             help=help_text,
         )
@@ -419,6 +422,7 @@ def add_dual_input_options(object_type: str, func: click.Command = None) -> Call
                 "--input1",
                 "-i1",
                 "input1_uri",
+                type=CopickURI(object_type, "input"),
                 required=True,
                 help=f"First input {object_type} URI (format: {format_str}). Supports glob patterns.",
             ),
@@ -426,6 +430,7 @@ def add_dual_input_options(object_type: str, func: click.Command = None) -> Call
                 "--input2",
                 "-i2",
                 "input2_uri",
+                type=CopickURI(object_type, "input"),
                 required=True,
                 help=f"Second input {object_type} URI (format: {format_str}). Supports glob patterns.",
             ),
@@ -478,6 +483,7 @@ def add_multi_input_options(object_type: str, func: click.Command = None) -> Cal
             "--input",
             "-i",
             "input_uris",
+            type=CopickURI(object_type, "input"),
             multiple=True,
             required=True,
             help=help_text,
@@ -508,6 +514,7 @@ def add_reference_mesh_option(func: click.Command = None, required: bool = False
             "--ref-mesh",
             "-rm",
             "ref_mesh_uri",
+            type=CopickURI("mesh", "reference"),
             required=required,
             help="Reference mesh URI (format: object_name:user_id/session_id). Supports glob patterns.",
         )
@@ -537,6 +544,7 @@ def add_reference_seg_option(func: click.Command = None, required: bool = False)
             "--ref-seg",
             "-rs",
             "ref_seg_uri",
+            type=CopickURI("segmentation", "reference"),
             required=required,
             help="Reference segmentation URI (format: name:user_id/session_id@voxel_spacing). Supports glob patterns.",
         )
@@ -569,6 +577,7 @@ def add_tomogram_option(func: click.Command = None, required: bool = True) -> Ca
             "--tomogram",
             "-t",
             "tomogram_uri",
+            type=CopickURI("tomogram", "input"),
             required=required,
             help="Tomogram URI (format: tomo_type@voxel_spacing). Example: 'wbp@10.0'",
         )
@@ -604,6 +613,7 @@ def add_reference_tomogram_option(func: click.Command = None, required: bool = F
             "--ref-tomogram",
             "-rt",
             "ref_tomo_uri",
+            type=CopickURI("tomogram", "reference"),
             required=required,
             help="Reference tomogram boundary URI (format: tomo_type@voxel_spacing). "
             "Uses tomogram volume boundaries as reference surface. Example: 'wbp@10.0'",
