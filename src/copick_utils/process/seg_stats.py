@@ -52,12 +52,14 @@ def _analyze_components_single(
 
         for component_id in range(1, num_components + 1):
             component_voxels = int(np.sum(labeled_array == component_id))
-            components.append({
-                "label": int(label_value),
-                "component_id": component_id,
-                "volume_voxels": component_voxels,
-                "volume_angstroms3": component_voxels * voxel_volume,
-            })
+            components.append(
+                {
+                    "label": int(label_value),
+                    "component_id": component_id,
+                    "volume_voxels": component_voxels,
+                    "volume_angstroms3": component_voxels * voxel_volume,
+                },
+            )
 
     return components
 
@@ -244,17 +246,19 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     # Group by label
-    labels = sorted(set(c["label"] for c in all_components))
+    labels = sorted({c["label"] for c in all_components})
 
     fig = go.Figure()
 
     for label_value in labels:
         volumes = [c["volume_angstroms3"] for c in all_components if c["label"] == label_value]
-        fig.add_trace(go.Histogram(
-            x=volumes,
-            name=f"Label {label_value}",
-            opacity=0.7,
-        ))
+        fig.add_trace(
+            go.Histogram(
+                x=volumes,
+                name=f"Label {label_value}",
+                opacity=0.7,
+            ),
+        )
 
     fig.update_layout(
         title="Connected Component Volume Distribution",
