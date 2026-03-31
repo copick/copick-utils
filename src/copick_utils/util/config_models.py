@@ -35,13 +35,19 @@ class SelectorConfig(BaseModel):
     @field_validator("voxel_spacing")
     @classmethod
     def validate_voxel_spacing(cls, v, info):
-        """Ensure voxel_spacing is provided when working with segmentations."""
+        """Ensure voxel_spacing is provided when output type is segmentation (writing requires it)."""
         values = info.data
-        input_type = values.get("input_type")
         output_type = values.get("output_type")
 
-        if (input_type == "segmentation" or output_type == "segmentation") and v is None:
-            raise ValueError("voxel_spacing is required when working with segmentations")
+        # Only require voxel_spacing when writing segmentations (output).
+        # Reading/querying segmentations (input only) can use None to match all.
+        if output_type == "segmentation" and v is None:
+            input_type = values.get("input_type")
+            # If input is also segmentation, voxel_spacing can be inherited at runtime
+            if input_type != "segmentation":
+                raise ValueError(
+                    "voxel_spacing is required when output_type is 'segmentation' and input is not a segmentation",
+                )
         return v
 
     @field_validator("output_session_id")
@@ -144,9 +150,9 @@ class SelectorConfig(BaseModel):
 
             config_dict["segmentation_name"] = seg_name
 
-            # Convert voxel_spacing to float if it's a string
-            if isinstance(voxel_spacing, str) and voxel_spacing != "*":
-                voxel_spacing = float(voxel_spacing)
+            # Convert voxel_spacing: "*" means match all (None), otherwise parse as float
+            if isinstance(voxel_spacing, str):
+                voxel_spacing = None if voxel_spacing == "*" else float(voxel_spacing)
             config_dict["voxel_spacing"] = voxel_spacing
 
         return cls(**config_dict)
@@ -479,8 +485,8 @@ def create_dual_selector_config(
         seg_name = input2_params.get("name")
         voxel_spacing = input2_params.get("voxel_spacing")
 
-        if isinstance(voxel_spacing, str) and voxel_spacing != "*":
-            voxel_spacing = float(voxel_spacing)
+        if isinstance(voxel_spacing, str):
+            voxel_spacing = None if voxel_spacing == "*" else float(voxel_spacing)
 
         selector2_dict["segmentation_name"] = seg_name
         selector2_dict["voxel_spacing"] = voxel_spacing
@@ -571,8 +577,8 @@ def create_multi_selector_config(
         # Add segmentation-specific fields
         if input_type == "segmentation":
             voxel_spacing = params.get("voxel_spacing")
-            if isinstance(voxel_spacing, str) and voxel_spacing != "*":
-                voxel_spacing = float(voxel_spacing)
+            if isinstance(voxel_spacing, str):
+                voxel_spacing = None if voxel_spacing == "*" else float(voxel_spacing)
 
             selector_dict["segmentation_name"] = object_name
             selector_dict["voxel_spacing"] = voxel_spacing

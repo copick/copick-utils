@@ -8,6 +8,7 @@ from copick.util.log import get_logger
 from copick.util.uri import parse_copick_uri
 
 from copick_utils.cli.util import add_input_option, add_output_option, add_workers_option
+from copick_utils.util.config_models import create_simple_config
 
 
 @click.command(
@@ -67,58 +68,38 @@ def expand_labels(
         # Expand with custom output URI
         copick process expand-labels -i "membrane:user1/manual@10.0" -o "membrane:expand-labels/0@10.0" --distance 30.0
     """
+    from copick_utils.process.expand_labels import expand_labels_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Parse input URI
+    # Create config from URIs with smart defaults
     try:
-        input_params = parse_copick_uri(input_uri, "segmentation")
+        task_config = create_simple_config(
+            input_uri=input_uri,
+            input_type="segmentation",
+            output_uri=output_uri,
+            output_type="segmentation",
+            command_name="expand-labels",
+        )
     except ValueError as e:
-        raise click.BadParameter(f"Invalid input URI: {e}") from e
+        raise click.BadParameter(str(e)) from e
 
-    segmentation_name = input_params["name"]
-    segmentation_user_id = input_params["user_id"]
-    segmentation_session_id = input_params["session_id"]
-    voxel_spacing = input_params.get("voxel_spacing")
+    # Log parameters
+    input_params = parse_copick_uri(input_uri, "segmentation")
+    logger.info(f"Expanding labels for segmentation '{input_params['name']}'")
+    logger.info(f"Source segmentation pattern: {input_params['user_id']}/{input_params['session_id']}")
+    logger.info(f"Expansion distance: {distance} Å")
 
-    if voxel_spacing is None:
-        raise click.BadParameter("Input URI must include voxel spacing (e.g., @10.0)")
-
-    # Parse output URI - if no voxel spacing specified, inherit from input
-    if "@" not in output_uri:
-        output_uri = f"{output_uri}@{voxel_spacing}"
-
-    try:
-        output_params = parse_copick_uri(output_uri, "segmentation")
-    except ValueError as e:
-        raise click.BadParameter(f"Invalid output URI: {e}") from e
-
-    output_user_id = output_params["user_id"]
-    output_session_id = output_params["session_id"]
-
-    logger.info(f"Expanding labels for segmentation '{segmentation_name}'")
-    logger.info(f"Input segmentation: {segmentation_user_id}/{segmentation_session_id} @ {voxel_spacing}Å")
-    logger.info(f"Output segmentation: {output_params['name']} ({output_user_id}/{output_session_id})")
-    logger.info(f"Expansion distance: {distance} Å ({distance / voxel_spacing:.1f} voxels)")
-
-    # Import batch function
-    from copick_utils.process.expand_labels import expand_labels_batch
-
-    # Process runs
-    results = expand_labels_batch(
+    # Parallel discovery and processing
+    results = expand_labels_lazy_batch(
         root=root,
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        segmentation_session_id=segmentation_session_id,
-        voxel_spacing=voxel_spacing,
-        distance=distance,
-        output_user_id=output_user_id,
-        output_session_id=output_session_id,
+        config=task_config,
         run_names=run_names_list,
         workers=workers,
+        distance=distance,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)

@@ -1,13 +1,15 @@
 """Expand labels in segmentations to fill holes and gaps."""
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import numpy as np
 from copick.util.log import get_logger
 from skimage.segmentation import expand_labels as skimage_expand_labels
 
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+
 if TYPE_CHECKING:
-    from copick.models import CopickRoot, CopickRun, CopickSegmentation
+    from copick.models import CopickRun, CopickSegmentation
 
 logger = get_logger(__name__)
 
@@ -38,8 +40,6 @@ def expand_labels_segmentation(
     object_name: str,
     session_id: str,
     user_id: str,
-    voxel_spacing: float,
-    is_multilabel: bool = False,
     distance: float = 10.0,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
@@ -52,10 +52,8 @@ def expand_labels_segmentation(
         object_name: Name for the output segmentation.
         session_id: Session ID for the output segmentation.
         user_id: User ID for the output segmentation.
-        voxel_spacing: Voxel spacing in angstroms.
-        is_multilabel: Whether the segmentation is multilabel.
         distance: Distance in angstroms by which to expand labels.
-        **kwargs: Additional keyword arguments.
+        **kwargs: Additional keyword arguments (voxel_spacing, etc. from lazy converter).
 
     Returns:
         Tuple of (CopickSegmentation object, stats dict) or None if operation failed.
@@ -72,8 +70,11 @@ def expand_labels_segmentation(
             logger.error("Empty segmentation data")
             return None
 
+        # Use the actual voxel_size from the segmentation (authoritative source)
+        actual_voxel_spacing = segmentation.voxel_size
+
         # Convert distance from angstroms to voxels
-        distance_voxels = distance / voxel_spacing
+        distance_voxels = distance / actual_voxel_spacing
 
         voxels_before = int(np.count_nonzero(seg_array))
 
@@ -87,8 +88,8 @@ def expand_labels_segmentation(
             name=object_name,
             user_id=user_id,
             session_id=session_id,
-            is_multilabel=is_multilabel,
-            voxel_size=voxel_spacing,
+            is_multilabel=segmentation.is_multilabel,
+            voxel_size=actual_voxel_spacing,
             exist_ok=True,
         )
 
@@ -110,109 +111,8 @@ def expand_labels_segmentation(
         return None
 
 
-def _expand_labels_worker(
-    run: "CopickRun",
-    segmentation_name: str,
-    segmentation_user_id: str,
-    segmentation_session_id: str,
-    voxel_spacing: float,
-    distance: float,
-    output_user_id: str,
-    output_session_id: str,
-    is_multilabel: bool,
-) -> Dict[str, Any]:
-    """Worker function for batch label expansion."""
-    try:
-        segmentations = run.get_segmentations(
-            name=segmentation_name,
-            user_id=segmentation_user_id,
-            session_id=segmentation_session_id,
-            voxel_size=voxel_spacing,
-        )
-
-        if not segmentations:
-            return {"processed": 0, "errors": [f"No segmentation found for {run.name}"]}
-
-        segmentation = segmentations[0]
-
-        result = expand_labels_segmentation(
-            segmentation=segmentation,
-            run=run,
-            object_name=segmentation_name,
-            session_id=output_session_id,
-            user_id=output_user_id,
-            voxel_spacing=voxel_spacing,
-            is_multilabel=is_multilabel,
-            distance=distance,
-        )
-
-        if result is None:
-            return {"processed": 0, "errors": [f"Failed to expand labels for {run.name}"]}
-
-        output_seg, stats = result
-
-        return {
-            "processed": 1,
-            "errors": [],
-            "voxels_before": stats["voxels_before"],
-            "voxels_after": stats["voxels_after"],
-            "voxels_added": stats["voxels_added"],
-        }
-
-    except Exception as e:
-        return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"]}
-
-
-def expand_labels_batch(
-    root: "CopickRoot",
-    segmentation_name: str,
-    segmentation_user_id: str,
-    segmentation_session_id: str,
-    voxel_spacing: float,
-    distance: float = 10.0,
-    output_user_id: str = "expand-labels",
-    output_session_id: str = "0",
-    is_multilabel: bool = False,
-    run_names: Optional[List[str]] = None,
-    workers: int = 8,
-) -> Dict[str, Any]:
-    """
-    Batch expand labels across multiple runs.
-
-    Args:
-        root: The copick root containing runs to process.
-        segmentation_name: Name of the segmentation to process.
-        segmentation_user_id: User ID of the segmentation to process.
-        segmentation_session_id: Session ID of the segmentation to process.
-        voxel_spacing: Voxel spacing in angstroms.
-        distance: Distance in angstroms by which to expand labels.
-        output_user_id: User ID for output segmentations.
-        output_session_id: Session ID for output segmentations.
-        is_multilabel: Whether the segmentation is multilabel.
-        run_names: List of run names to process. If None, processes all runs.
-        workers: Number of worker processes.
-
-    Returns:
-        Dictionary with processing results and statistics.
-    """
-    from copick.ops.run import map_runs
-
-    runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-
-    results = map_runs(
-        callback=_expand_labels_worker,
-        root=root,
-        runs=runs_to_process,
-        workers=workers,
-        task_desc="Expanding labels",
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        segmentation_session_id=segmentation_session_id,
-        voxel_spacing=voxel_spacing,
-        distance=distance,
-        output_user_id=output_user_id,
-        output_session_id=output_session_id,
-        is_multilabel=is_multilabel,
-    )
-
-    return results
+# Lazy batch converter for parallel discovery and processing
+expand_labels_lazy_batch = create_lazy_batch_converter(
+    converter_func=expand_labels_segmentation,
+    task_description="Expanding labels",
+)

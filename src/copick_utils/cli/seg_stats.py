@@ -5,7 +5,6 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
-from copick.util.uri import parse_copick_uri
 
 from copick_utils.cli.util import add_input_option, add_workers_option
 
@@ -69,11 +68,15 @@ def seg_stats(
     \b
     URI Format:
         Segmentations: name:user_id/session_id@voxel_spacing
+        Voxel spacing is optional — omit to match all voxel spacings.
 
     \b
     Examples:
         # Export component stats as CSV
         copick process seg-stats -i "membrane:user1/auto-001@10.0" -f csv -op ./membrane_stats.csv
+
+        # Analyze without specifying voxel spacing (matches all)
+        copick process seg-stats -i "proofread:napari/manual" -f csv -op ./stats.csv
 
         # Create a histogram plot as HTML (interactive)
         copick process seg-stats -i "membrane:user1/auto-001@10.0" -f plot -op ./membrane_hist.html
@@ -84,41 +87,21 @@ def seg_stats(
         # Analyze specific runs and export as PNG
         copick process seg-stats -i "membrane:user1/auto-001@10.0" -f plot -op ./stats.png -r run1 -r run2
     """
+    from copick_utils.process.seg_stats import export_stats_csv, export_stats_plot, seg_stats_batch
 
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Parse input URI
-    try:
-        input_params = parse_copick_uri(input_uri, "segmentation")
-    except ValueError as e:
-        raise click.BadParameter(f"Invalid input URI: {e}") from e
-
-    segmentation_name = input_params["name"]
-    segmentation_user_id = input_params["user_id"]
-    segmentation_session_id = input_params["session_id"]
-    voxel_spacing = input_params.get("voxel_spacing")
-
-    if voxel_spacing is None:
-        raise click.BadParameter("Input URI must include voxel spacing (e.g., @10.0)")
-
-    logger.info(f"Analyzing components for segmentation '{segmentation_name}'")
-    logger.info(f"Input segmentation: {segmentation_user_id}/{segmentation_session_id} @ {voxel_spacing}Å")
+    logger.info(f"Analyzing components for segmentation URI '{input_uri}'")
     logger.info(f"Connectivity: {connectivity}")
     logger.info(f"Output format: {output_format} -> {output_path}")
 
-    # Import batch function
-    from copick_utils.process.seg_stats import export_stats_csv, export_stats_plot, seg_stats_batch
-
-    # Process runs
+    # Process runs — URI resolution handled by resolve_copick_objects inside the worker
     results = seg_stats_batch(
         root=root,
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        segmentation_session_id=segmentation_session_id,
-        voxel_spacing=voxel_spacing,
+        input_uri=input_uri,
         connectivity=connectivity,
         run_names=run_names_list,
         workers=workers,

@@ -100,42 +100,38 @@ def analyze_segmentation_components(
 
 def _seg_stats_worker(
     run: "CopickRun",
-    segmentation_name: str,
-    segmentation_user_id: str,
-    segmentation_session_id: str,
-    voxel_spacing: float,
+    input_uri: str,
     connectivity: str,
 ) -> Dict[str, Any]:
-    """Worker function for batch segmentation stats."""
+    """Worker function for batch segmentation stats.
+
+    Uses resolve_copick_objects for proper URI resolution with pattern support.
+    """
+    from copick.util.uri import resolve_copick_objects
+
     try:
-        segmentations = run.get_segmentations(
-            name=segmentation_name,
-            user_id=segmentation_user_id,
-            session_id=segmentation_session_id,
-            voxel_size=voxel_spacing,
-        )
+        segmentations = resolve_copick_objects(input_uri, run.root, "segmentation", run_name=run.name)
 
         if not segmentations:
             return {"processed": 0, "components": [], "errors": [f"No segmentation found for {run.name}"]}
 
-        segmentation = segmentations[0]
+        all_components = []
+        for segmentation in segmentations:
+            # Use the actual voxel_size from the segmentation for volume calculations
+            components = analyze_segmentation_components(
+                segmentation=segmentation,
+                voxel_spacing=segmentation.voxel_size,
+                connectivity=connectivity,
+            )
 
-        components = analyze_segmentation_components(
-            segmentation=segmentation,
-            voxel_spacing=voxel_spacing,
-            connectivity=connectivity,
-        )
-
-        if components is None:
-            return {"processed": 0, "components": [], "errors": [f"Failed to analyze {run.name}"]}
-
-        # Tag each component with the run name
-        for comp in components:
-            comp["run"] = run.name
+            if components:
+                for comp in components:
+                    comp["run"] = run.name
+                all_components.extend(components)
 
         return {
             "processed": 1,
-            "components": components,
+            "components": all_components,
             "errors": [],
         }
 
@@ -145,10 +141,7 @@ def _seg_stats_worker(
 
 def seg_stats_batch(
     root: "CopickRoot",
-    segmentation_name: str,
-    segmentation_user_id: str,
-    segmentation_session_id: str,
-    voxel_spacing: float,
+    input_uri: str,
     connectivity: str = "all",
     run_names: Optional[List[str]] = None,
     workers: int = 8,
@@ -158,10 +151,7 @@ def seg_stats_batch(
 
     Args:
         root: The copick root containing runs to process.
-        segmentation_name: Name of the segmentation to analyze.
-        segmentation_user_id: User ID of the segmentation to analyze.
-        segmentation_session_id: Session ID of the segmentation to analyze.
-        voxel_spacing: Voxel spacing in angstroms.
+        input_uri: Copick URI for the segmentation(s) to analyze. Supports patterns.
         connectivity: Connectivity for connected components.
         run_names: List of run names to process. If None, processes all runs.
         workers: Number of worker processes.
@@ -179,10 +169,7 @@ def seg_stats_batch(
         runs=runs_to_process,
         workers=workers,
         task_desc="Analyzing segmentation components",
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        segmentation_session_id=segmentation_session_id,
-        voxel_spacing=voxel_spacing,
+        input_uri=input_uri,
         connectivity=connectivity,
     )
 

@@ -168,9 +168,9 @@ def discover_tasks_for_run(run: "CopickRun", selector_config: SelectorConfig) ->
 
         task = {
             input_param_name: input_object,  # Use type-specific parameter name
-            "output_object_name": selector_config.output_object_name,
-            "output_user_id": selector_config.output_user_id,
-            "output_session_id": resolved_session_id,
+            "object_name": selector_config.output_object_name,
+            "user_id": selector_config.output_user_id,
+            "session_id": resolved_session_id,
             "individual_outputs": selector_config.individual_outputs,
             "input_type": selector_config.input_type,
             "output_type": selector_config.output_type,
@@ -310,9 +310,9 @@ def pair_tasks_within_run(
             paired_task = {
                 param1: task1[input_key],
                 param2: task2[input_key],
-                "object_name": task1["output_object_name"],
-                "user_id": task1["output_user_id"],
-                "session_id": task1["output_session_id"],
+                "object_name": task1["object_name"],
+                "user_id": task1["user_id"],
+                "session_id": task1["session_id"],
                 # Copy other parameters from task1
                 "voxel_spacing": task1.get("voxel_spacing"),
                 "is_multilabel": False,  # Boolean ops work on binary
@@ -362,9 +362,9 @@ def pair_multi_tasks_within_run(
         first_task = tasks_list[0][i]
         paired_task = {
             param_name: input_objects,  # List of N input objects
-            "object_name": first_task["output_object_name"],
-            "user_id": first_task["output_user_id"],
-            "session_id": first_task["output_session_id"],
+            "object_name": first_task["object_name"],
+            "user_id": first_task["user_id"],
+            "session_id": first_task["session_id"],
             "voxel_spacing": first_task.get("voxel_spacing"),
             "is_multilabel": False,
         }
@@ -464,9 +464,9 @@ def lazy_conversion_worker(
             tasks = [
                 {
                     param_name: input_objects,
-                    "object_name": first_task["output_object_name"],
-                    "user_id": first_task["output_user_id"],
-                    "session_id": first_task["output_session_id"],
+                    "object_name": first_task["object_name"],
+                    "user_id": first_task["user_id"],
+                    "session_id": first_task["session_id"],
                     "voxel_spacing": first_task.get("voxel_spacing"),
                     "is_multilabel": False,
                 },
