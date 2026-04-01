@@ -33,6 +33,27 @@ from copick_utils.util.config_models import create_simple_config
     required=True,
     help="Distance in angstroms (Å) by which to expand labels.",
 )
+@optgroup.option(
+    "--max-hole-size",
+    type=float,
+    default=None,
+    help="Maximum hole volume to fill. Only background regions smaller than this will be filled "
+    "by expansion. When omitted, all background can be filled (original behavior). "
+    "Unit set by --size-unit.",
+)
+@optgroup.option(
+    "--size-unit",
+    type=click.Choice(["angstrom", "voxel"]),
+    default="angstrom",
+    help="Unit for --max-hole-size: 'angstrom' for Å³, 'voxel' for cubic voxels.",
+)
+@optgroup.option(
+    "--connectivity",
+    "-cn",
+    type=click.Choice(["face", "face-edge", "all"]),
+    default="all",
+    help="Connectivity for background hole analysis (face=6-connected, face-edge=18-connected, all=26-connected).",
+)
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
 @add_output_option("segmentation", default_tool="expand-labels")
@@ -42,6 +63,9 @@ def expand_labels(
     run_names,
     input_uri,
     distance,
+    max_hole_size,
+    size_unit,
+    connectivity,
     workers,
     output_uri,
     debug,
@@ -53,6 +77,12 @@ def expand_labels(
     distance without overlapping into neighboring regions. Useful for filling small
     holes in segmentations or closing gaps between label boundaries.
 
+    When --max-hole-size is specified, expansion is restricted to only fill background
+    holes smaller than the given volume. This prevents labels from expanding beyond
+    their natural borders (e.g., filling internal holes in a cell without expanding
+    outward into the surrounding background). Use "seg-stats --include-background"
+    to determine appropriate hole size values.
+
     \b
     URI Format:
         Segmentations: name:user_id/session_id@voxel_spacing
@@ -61,6 +91,12 @@ def expand_labels(
     Examples:
         # Expand labels by 20 angstroms
         copick process expand-labels -i "membrane:user1/auto-001@10.0" -o "membrane_filled" --distance 20.0
+
+        # Fill only holes smaller than 500000 cubic angstroms
+        copick process expand-labels -i "membrane:user1/auto-001@10.0" -o "filled" --distance 20.0 --max-hole-size 500000
+
+        # Fill holes using voxel units
+        copick process expand-labels -i "membrane:user1/auto-001@10.0" -o "filled" --distance 20.0 --max-hole-size 500 --size-unit voxel
 
         # Expand labels across specific runs
         copick process expand-labels -i "organelle:user1/pred@10.0" -o "organelle_expanded" --distance 15.0 -r run1 -r run2
@@ -74,6 +110,15 @@ def expand_labels(
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
+
+    # Convert voxel sizes to angstrom³ if needed
+    if size_unit == "voxel" and max_hole_size is not None:
+        input_params = parse_copick_uri(input_uri, "segmentation")
+        vs_raw = input_params.get("voxel_spacing")
+        if vs_raw is None or vs_raw == "*":
+            raise click.BadParameter("--size-unit voxel requires voxel spacing in the input URI (e.g., @10.0)")
+        voxel_volume = float(vs_raw) ** 3
+        max_hole_size = max_hole_size * voxel_volume
 
     # Create config from URIs with smart defaults
     try:
@@ -92,6 +137,9 @@ def expand_labels(
     logger.info(f"Expanding labels for segmentation '{input_params['name']}'")
     logger.info(f"Source segmentation pattern: {input_params['user_id']}/{input_params['session_id']}")
     logger.info(f"Expansion distance: {distance} Å")
+    if max_hole_size is not None:
+        logger.info(f"Max hole size: {max_hole_size} Å³")
+        logger.info(f"Hole connectivity: {connectivity}")
 
     # Parallel discovery and processing
     results = expand_labels_lazy_batch(
@@ -100,6 +148,8 @@ def expand_labels(
         run_names=run_names_list,
         workers=workers,
         distance=distance,
+        max_hole_size=max_hole_size,
+        connectivity=connectivity,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)

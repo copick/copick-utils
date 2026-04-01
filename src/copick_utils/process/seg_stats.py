@@ -18,6 +18,7 @@ def _analyze_components_single(
     seg: np.ndarray,
     voxel_spacing: float,
     connectivity: str = "all",
+    include_background: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Analyze connected components per label in a segmentation.
@@ -27,6 +28,7 @@ def _analyze_components_single(
         voxel_spacing: Voxel spacing in angstroms.
         connectivity: Connectivity for connected components.
                      "face" = 6-connected, "face-edge" = 18-connected, "all" = 26-connected.
+        include_background: If True, also analyze connected components of the background (label 0).
 
     Returns:
         List of dicts, one per component:
@@ -41,12 +43,12 @@ def _analyze_components_single(
     struct = generate_binary_structure(seg.ndim, connectivity_value)
     voxel_volume = voxel_spacing**3
 
-    unique_labels = np.unique(seg)
-    unique_labels = unique_labels[unique_labels != 0]  # Skip background
+    all_unique_labels = np.unique(seg)
+    foreground_labels = all_unique_labels[all_unique_labels != 0]
 
     components = []
 
-    for label_value in unique_labels:
+    for label_value in foreground_labels:
         binary_mask = seg == label_value
         labeled_array, num_components = label(binary_mask, structure=struct)
 
@@ -64,6 +66,24 @@ def _analyze_components_single(
                 },
             )
 
+    # Analyze background connected components (label 0)
+    if include_background and 0 in all_unique_labels:
+        background_mask = seg == 0
+        labeled_bg, num_bg_components = label(background_mask, structure=struct)
+
+        if num_bg_components > 0:
+            bg_counts = np.bincount(labeled_bg.ravel())
+            for component_id in range(1, num_bg_components + 1):
+                component_voxels = int(bg_counts[component_id])
+                components.append(
+                    {
+                        "label": 0,
+                        "component_id": component_id,
+                        "volume_voxels": component_voxels,
+                        "volume_angstroms3": component_voxels * voxel_volume,
+                    },
+                )
+
     return components
 
 
@@ -71,6 +91,7 @@ def analyze_segmentation_components(
     segmentation: "CopickSegmentation",
     voxel_spacing: float,
     connectivity: str = "all",
+    include_background: bool = True,
 ) -> Optional[List[Dict[str, Any]]]:
     """
     Analyze connected components in a CopickSegmentation.
@@ -79,6 +100,7 @@ def analyze_segmentation_components(
         segmentation: Input CopickSegmentation object.
         voxel_spacing: Voxel spacing in angstroms.
         connectivity: Connectivity for connected components.
+        include_background: If True, also analyze background (label 0) components.
 
     Returns:
         List of component dicts, or None if loading failed.
@@ -94,7 +116,12 @@ def analyze_segmentation_components(
             logger.error("Empty segmentation data")
             return None
 
-        return _analyze_components_single(seg_array, voxel_spacing=voxel_spacing, connectivity=connectivity)
+        return _analyze_components_single(
+            seg_array,
+            voxel_spacing=voxel_spacing,
+            connectivity=connectivity,
+            include_background=include_background,
+        )
 
     except Exception as e:
         logger.error(f"Error analyzing segmentation components: {e}")
@@ -105,6 +132,7 @@ def _seg_stats_worker(
     run: "CopickRun",
     input_uri: str,
     connectivity: str,
+    include_background: bool = True,
 ) -> Dict[str, Any]:
     """Worker function for batch segmentation stats.
 
@@ -125,6 +153,7 @@ def _seg_stats_worker(
                 segmentation=segmentation,
                 voxel_spacing=segmentation.voxel_size,
                 connectivity=connectivity,
+                include_background=include_background,
             )
 
             if components:
@@ -147,6 +176,7 @@ def seg_stats_batch(
     root: "CopickRoot",
     input_uri: str,
     connectivity: str = "all",
+    include_background: bool = True,
     run_names: Optional[List[str]] = None,
     workers: int = 8,
 ) -> Dict[str, Any]:
@@ -157,6 +187,7 @@ def seg_stats_batch(
         root: The copick root containing runs to process.
         input_uri: Copick URI for the segmentation(s) to analyze. Supports patterns.
         connectivity: Connectivity for connected components.
+        include_background: If True, also analyze background (label 0) components.
         run_names: List of run names to process. If None, processes all runs.
         workers: Number of worker processes.
 
@@ -175,6 +206,7 @@ def seg_stats_batch(
         task_desc="Analyzing segmentation components",
         input_uri=input_uri,
         connectivity=connectivity,
+        include_background=include_background,
     )
 
     return results
@@ -255,11 +287,17 @@ def export_stats_plot(results: Dict[str, Any], output_path: str, root: "CopickRo
         logger.warning("No components to plot")
         return
 
+    # Exclude background (label 0) from plots — its distribution is very different
+    foreground_components = [c for c in all_components if c["label"] != 0]
+    if not foreground_components:
+        logger.warning("No foreground components to plot (only background found)")
+        return
+
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    labels = sorted({c["label"] for c in all_components})
-    bins = _compute_log_bins(all_components)
+    labels = sorted({c["label"] for c in foreground_components})
+    bins = _compute_log_bins(foreground_components)
 
     # Build label → name and label → color mappings from copick objects
     label_names = {}
@@ -281,10 +319,12 @@ def export_stats_plot(results: Dict[str, Any], output_path: str, root: "CopickRo
     # Group volumes by label
     volumes_by_label = {}
     for label_value in labels:
-        volumes_by_label[label_value] = [c["volume_angstroms3"] for c in all_components if c["label"] == label_value]
+        volumes_by_label[label_value] = [
+            c["volume_angstroms3"] for c in foreground_components if c["label"] == label_value
+        ]
 
     # Get voxel volume for secondary axis (cubic voxels)
-    voxel_spacing = all_components[0].get("voxel_spacing")
+    voxel_spacing = foreground_components[0].get("voxel_spacing")
     voxel_volume = voxel_spacing**3 if voxel_spacing and voxel_spacing > 0 else None
 
     def _add_voxel_axis(ax):

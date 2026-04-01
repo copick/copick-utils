@@ -31,6 +31,12 @@ from copick_utils.cli.util import add_input_option, add_workers_option
     default="all",
     help="Connectivity for connected components (face=6-connected, face-edge=18-connected, all=26-connected).",
 )
+@optgroup.option(
+    "--include-background/--no-include-background",
+    default=True,
+    help="Include background (label=0) connected component analysis in CSV output. "
+    "Background components are never included in plots.",
+)
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to the output.")
 @optgroup.option(
@@ -53,6 +59,7 @@ def seg_stats(
     run_names,
     input_uri,
     connectivity,
+    include_background,
     workers,
     output_format,
     output_path,
@@ -103,6 +110,7 @@ def seg_stats(
         root=root,
         input_uri=input_uri,
         connectivity=connectivity,
+        include_background=include_background,
         run_names=run_names_list,
         workers=workers,
     )
@@ -110,6 +118,10 @@ def seg_stats(
     # Summarize
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
     total_components = sum(len(result.get("components", [])) for result in results.values() if result)
+    total_bg_components = sum(
+        len([c for c in result.get("components", []) if c.get("label") == 0]) for result in results.values() if result
+    )
+    total_fg_components = total_components - total_bg_components
 
     all_errors = []
     for result in results.values():
@@ -117,7 +129,9 @@ def seg_stats(
             all_errors.extend(result["errors"])
 
     logger.info(f"Analyzed: {successful}/{len(results)} runs processed successfully")
-    logger.info(f"Total components found: {total_components}")
+    logger.info(f"Total foreground components found: {total_fg_components}")
+    if include_background:
+        logger.info(f"Total background components found: {total_bg_components}")
 
     # Export results
     if output_format == "csv":
