@@ -210,27 +210,17 @@ def export_stats_csv(results: Dict[str, Any], output_path: str) -> None:
     logger.info(f"Exported {len(all_components)} components to {output_path}")
 
 
-def _compute_bin_size(all_components: List[Dict[str, Any]]) -> float:
-    """Compute histogram bin size as the volume of 10 cubic voxels.
+def _compute_bins(all_components: List[Dict[str, Any]], max_bins: int = 100):
+    """Compute consistent bin edges for all histograms.
 
-    Uses the voxel_spacing from the first component. Falls back to a reasonable default.
+    Uses numpy's auto-binning logic, capped at max_bins to keep rendering fast.
     """
-    voxel_spacing = all_components[0].get("voxel_spacing")
-    if voxel_spacing and voxel_spacing > 0:
-        return 10.0 * (voxel_spacing**3)
-    # Fallback: use 1% of the range
-    volumes = [c["volume_angstroms3"] for c in all_components]
-    vol_range = max(volumes) - min(volumes)
-    return max(vol_range / 100.0, 1.0)
-
-
-def _compute_bins(all_components: List[Dict[str, Any]], bin_size: float):
-    """Compute consistent bin edges for all histograms."""
     import numpy as np
 
-    all_volumes = [c["volume_angstroms3"] for c in all_components]
-    x_max = max(all_volumes) * 1.05
-    return np.arange(0, x_max + bin_size, bin_size)
+    all_volumes = np.array([c["volume_angstroms3"] for c in all_components])
+    # Use Sturges' rule as a starting point, cap at max_bins
+    n_bins = min(int(np.ceil(np.log2(len(all_volumes))) + 1), max_bins)
+    return np.linspace(0, all_volumes.max() * 1.05, n_bins + 1)
 
 
 def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
@@ -266,8 +256,7 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     labels = sorted({c["label"] for c in all_components})
-    bin_size = _compute_bin_size(all_components)
-    bins = _compute_bins(all_components, bin_size)
+    bins = _compute_bins(all_components)
 
     # Group volumes by label
     volumes_by_label = {}
