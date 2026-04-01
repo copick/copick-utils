@@ -210,17 +210,19 @@ def export_stats_csv(results: Dict[str, Any], output_path: str) -> None:
     logger.info(f"Exported {len(all_components)} components to {output_path}")
 
 
-def _compute_bins(all_components: List[Dict[str, Any]], max_bins: int = 100):
-    """Compute consistent bin edges for all histograms.
+def _compute_log_bins(all_components: List[Dict[str, Any]], n_bins: int = 50):
+    """Compute logarithmically spaced bin edges for histograms.
 
-    Uses numpy's auto-binning logic, capped at max_bins to keep rendering fast.
+    Log-spaced bins handle the typical distribution where there are many small
+    components and few very large ones.
     """
-    import numpy as np
-
     all_volumes = np.array([c["volume_angstroms3"] for c in all_components])
-    # Use Sturges' rule as a starting point, cap at max_bins
-    n_bins = min(int(np.ceil(np.log2(len(all_volumes))) + 1), max_bins)
-    return np.linspace(0, all_volumes.max() * 1.05, n_bins + 1)
+    positive = all_volumes[all_volumes > 0]
+    if len(positive) == 0:
+        return np.linspace(0, 1, n_bins + 1)
+    v_min = positive.min()
+    v_max = positive.max() * 1.05
+    return np.geomspace(v_min, v_max, n_bins + 1)
 
 
 def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
@@ -256,7 +258,7 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     labels = sorted({c["label"] for c in all_components})
-    bins = _compute_bins(all_components)
+    bins = _compute_log_bins(all_components)
 
     # Group volumes by label
     volumes_by_label = {}
@@ -274,6 +276,7 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
             fig, ax = plt.subplots(figsize=(10, 5))
             for label_value in labels:
                 ax.hist(volumes_by_label[label_value], bins=bins, alpha=0.7, label=f"Label {label_value}")
+            ax.set_xscale("log")
             ax.set_yscale("log")
             ax.set_xlabel("Volume (Å³)")
             ax.set_ylabel("Count")
@@ -287,6 +290,7 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
             for label_value in labels:
                 fig, ax = plt.subplots(figsize=(10, 5))
                 ax.hist(volumes_by_label[label_value], bins=bins, alpha=0.7)
+                ax.set_xscale("log")
                 ax.set_yscale("log")
                 ax.set_xlabel("Volume (Å³)")
                 ax.set_ylabel("Count")
@@ -304,6 +308,7 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
         # Combined plot
         for label_value in labels:
             axes[0].hist(volumes_by_label[label_value], bins=bins, alpha=0.7, label=f"Label {label_value}")
+        axes[0].set_xscale("log")
         axes[0].set_yscale("log")
         axes[0].set_xlabel("Volume (Å³)")
         axes[0].set_ylabel("Count")
@@ -313,6 +318,7 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
         # Individual per-label plots
         for i, label_value in enumerate(labels):
             axes[i + 1].hist(volumes_by_label[label_value], bins=bins, alpha=0.7)
+            axes[i + 1].set_xscale("log")
             axes[i + 1].set_yscale("log")
             axes[i + 1].set_xlabel("Volume (Å³)")
             axes[i + 1].set_ylabel("Count")
