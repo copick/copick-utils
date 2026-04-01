@@ -31,7 +31,7 @@ from copick_utils.util.config_models import create_simple_config
     "-d",
     type=float,
     required=True,
-    help="Distance in angstroms (Å) by which to expand labels.",
+    help="Distance by which to expand labels. Unit set by --size-unit (default: angstroms).",
 )
 @optgroup.option(
     "--max-hole-size",
@@ -45,7 +45,7 @@ from copick_utils.util.config_models import create_simple_config
     "--size-unit",
     type=click.Choice(["angstrom", "voxel"]),
     default="angstrom",
-    help="Unit for --max-hole-size: 'angstrom' for Å³, 'voxel' for cubic voxels.",
+    help="Unit for --distance (Å or voxels) and --max-hole-size (Å³ or cubic voxels).",
 )
 @optgroup.option(
     "--connectivity",
@@ -111,14 +111,16 @@ def expand_labels(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Convert voxel sizes to angstrom³ if needed
-    if size_unit == "voxel" and max_hole_size is not None:
+    # Convert voxel units to angstroms if needed
+    if size_unit == "voxel":
         input_params = parse_copick_uri(input_uri, "segmentation")
         vs_raw = input_params.get("voxel_spacing")
         if vs_raw is None or vs_raw == "*":
             raise click.BadParameter("--size-unit voxel requires voxel spacing in the input URI (e.g., @10.0)")
-        voxel_volume = float(vs_raw) ** 3
-        max_hole_size = max_hole_size * voxel_volume
+        voxel_spacing = float(vs_raw)
+        distance = distance * voxel_spacing
+        if max_hole_size is not None:
+            max_hole_size = max_hole_size * voxel_spacing**3
 
     # Create config from URIs with smart defaults
     try:
