@@ -283,6 +283,25 @@ def export_stats_plot(results: Dict[str, Any], output_path: str, root: "CopickRo
     for label_value in labels:
         volumes_by_label[label_value] = [c["volume_angstroms3"] for c in all_components if c["label"] == label_value]
 
+    # Get voxel volume for secondary axis (cubic voxels)
+    voxel_spacing = all_components[0].get("voxel_spacing")
+    voxel_volume = voxel_spacing**3 if voxel_spacing and voxel_spacing > 0 else None
+
+    def _add_voxel_axis(ax):
+        """Add a secondary x-axis showing volume in cubic voxels."""
+        if voxel_volume is None:
+            return
+        ax2 = ax.secondary_xaxis("top", functions=(lambda x: x / voxel_volume, lambda x: x * voxel_volume))
+        ax2.set_xlabel("Volume (voxels³)")
+
+    def _setup_ax(ax, title):
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel("Volume (Å³)")
+        ax.set_ylabel("Count")
+        ax.set_title(title)
+        _add_voxel_axis(ax)
+
     ext = output.suffix.lower()
 
     if ext == ".pdf":
@@ -293,11 +312,7 @@ def export_stats_plot(results: Dict[str, Any], output_path: str, root: "CopickRo
             fig, ax = plt.subplots(figsize=(10, 5))
             for lv in labels:
                 ax.hist(volumes_by_label[lv], bins=bins, alpha=0.7, label=_label_display(lv), color=_label_color(lv))
-            ax.set_xscale("log")
-            ax.set_yscale("log")
-            ax.set_xlabel("Volume (Å³)")
-            ax.set_ylabel("Count")
-            ax.set_title("All Labels (Combined)")
+            _setup_ax(ax, "All Labels (Combined)")
             ax.legend()
             fig.tight_layout()
             pdf.savefig(fig)
@@ -307,39 +322,27 @@ def export_stats_plot(results: Dict[str, Any], output_path: str, root: "CopickRo
             for lv in labels:
                 fig, ax = plt.subplots(figsize=(10, 5))
                 ax.hist(volumes_by_label[lv], bins=bins, alpha=0.7, color=_label_color(lv))
-                ax.set_xscale("log")
-                ax.set_yscale("log")
-                ax.set_xlabel("Volume (Å³)")
-                ax.set_ylabel("Count")
-                ax.set_title(_label_display(lv))
+                _setup_ax(ax, _label_display(lv))
                 fig.tight_layout()
                 pdf.savefig(fig)
                 plt.close(fig)
     else:
         # Image formats: subplots in one figure
         n_plots = 1 + len(labels)
-        fig, axes = plt.subplots(n_plots, 1, figsize=(10, 4 * n_plots))
+        fig, axes = plt.subplots(n_plots, 1, figsize=(10, 5 * n_plots))
         if n_plots == 1:
             axes = [axes]
 
         # Combined plot
         for lv in labels:
             axes[0].hist(volumes_by_label[lv], bins=bins, alpha=0.7, label=_label_display(lv), color=_label_color(lv))
-        axes[0].set_xscale("log")
-        axes[0].set_yscale("log")
-        axes[0].set_xlabel("Volume (Å³)")
-        axes[0].set_ylabel("Count")
-        axes[0].set_title("All Labels (Combined)")
+        _setup_ax(axes[0], "All Labels (Combined)")
         axes[0].legend()
 
         # Individual per-label plots
         for i, lv in enumerate(labels):
             axes[i + 1].hist(volumes_by_label[lv], bins=bins, alpha=0.7, color=_label_color(lv))
-            axes[i + 1].set_xscale("log")
-            axes[i + 1].set_yscale("log")
-            axes[i + 1].set_xlabel("Volume (Å³)")
-            axes[i + 1].set_ylabel("Count")
-            axes[i + 1].set_title(_label_display(lv))
+            _setup_ax(axes[i + 1], _label_display(lv))
 
         fig.tight_layout()
         fig.savefig(str(output), dpi=150)

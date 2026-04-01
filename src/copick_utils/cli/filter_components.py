@@ -36,13 +36,19 @@ from copick_utils.cli.util import add_input_option, add_output_option, add_worke
     "--min-size",
     type=float,
     default=None,
-    help="Minimum component volume in cubic angstroms (Å³) to keep (optional).",
+    help="Minimum component volume to keep (optional). Unit set by --size-unit.",
 )
 @optgroup.option(
     "--max-size",
     type=float,
     default=None,
-    help="Maximum component volume in cubic angstroms (Å³) to keep (optional).",
+    help="Maximum component volume to keep (optional). Unit set by --size-unit.",
+)
+@optgroup.option(
+    "--size-unit",
+    type=click.Choice(["angstrom", "voxel"]),
+    default="angstrom",
+    help="Unit for --min-size and --max-size: 'angstrom' for Å³, 'voxel' for cubic voxels.",
 )
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
@@ -55,6 +61,7 @@ def filter_components(
     connectivity,
     min_size,
     max_size,
+    size_unit,
     workers,
     output_uri,
     debug,
@@ -63,8 +70,8 @@ def filter_components(
     Filter connected components in segmentations by size.
 
     This command identifies connected components in a segmentation and removes those
-    that fall outside the specified size range (in cubic angstroms). Useful for
-    removing noise, small artifacts, or overly large components.
+    that fall outside the specified size range. Sizes can be specified in cubic
+    angstroms (default) or cubic voxels using --size-unit.
 
     \b
     URI Format:
@@ -75,11 +82,11 @@ def filter_components(
         # Remove small noise components (keep only larger than 50000 Å³)
         copick process filter-components -i "membrane:user1/auto-001@10.0" -o "membrane_clean" --min-size 50000
 
+        # Filter by cubic voxels instead of angstroms
+        copick process filter-components -i "membrane:user1/auto-001@10.0" -o "membrane_clean" --min-size 50 --size-unit voxel
+
         # Keep only medium-sized components (between 10000 and 1000000 Å³)
         copick process filter-components -i "particles:user1/.*@10.0" -o "particles_filtered" --min-size 10000 --max-size 1000000
-
-        # Remove large components (keep only smaller than 500000 Å³)
-        copick process filter-components -i "noise:user1/pred@10.0" -o "small_features" --max-size 500000
     """
 
     logger = get_logger(__name__, debug=debug)
@@ -100,6 +107,14 @@ def filter_components(
 
     if voxel_spacing is None:
         raise click.BadParameter("Input URI must include voxel spacing (e.g., @10.0)")
+
+    # Convert voxel sizes to angstrom³ (the internal unit used by filter_components_batch)
+    if size_unit == "voxel":
+        voxel_volume = float(voxel_spacing) ** 3
+        if min_size is not None:
+            min_size = min_size * voxel_volume
+        if max_size is not None:
+            max_size = max_size * voxel_volume
 
     # Parse output URI - if no voxel spacing specified, inherit from input
     if "@" not in output_uri:
