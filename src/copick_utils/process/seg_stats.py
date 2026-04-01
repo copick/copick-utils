@@ -287,17 +287,21 @@ def export_stats_plot(results: Dict[str, Any], output_path: str, root: "CopickRo
         logger.warning("No components to plot")
         return
 
-    # Exclude background (label 0) from plots — its distribution is very different
+    # Separate foreground and background components — background gets its own plot
+    # but is excluded from the combined overview plot
     foreground_components = [c for c in all_components if c["label"] != 0]
-    if not foreground_components:
-        logger.warning("No foreground components to plot (only background found)")
+    background_components = [c for c in all_components if c["label"] == 0]
+
+    if not foreground_components and not background_components:
+        logger.warning("No components to plot")
         return
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    labels = sorted({c["label"] for c in foreground_components})
-    bins = _compute_log_bins(foreground_components)
+    fg_labels = sorted({c["label"] for c in foreground_components}) if foreground_components else []
+    fg_bins = _compute_log_bins(foreground_components) if foreground_components else None
+    bg_bins = _compute_log_bins(background_components) if background_components else None
 
     # Build label → name and label → color mappings from copick objects
     label_names = {}
@@ -316,15 +320,18 @@ def export_stats_plot(results: Dict[str, Any], output_path: str, root: "CopickRo
     def _label_color(lv):
         return label_colors.get(lv, None)
 
-    # Group volumes by label
+    # Group foreground volumes by label
     volumes_by_label = {}
-    for label_value in labels:
+    for label_value in fg_labels:
         volumes_by_label[label_value] = [
             c["volume_angstroms3"] for c in foreground_components if c["label"] == label_value
         ]
 
+    bg_volumes = [c["volume_angstroms3"] for c in background_components] if background_components else []
+
     # Get voxel volume for secondary axis (cubic voxels)
-    voxel_spacing = foreground_components[0].get("voxel_spacing")
+    ref_components = foreground_components or background_components
+    voxel_spacing = ref_components[0].get("voxel_spacing")
     voxel_volume = voxel_spacing**3 if voxel_spacing and voxel_spacing > 0 else None
 
     def _add_voxel_axis(ax):
@@ -344,48 +351,82 @@ def export_stats_plot(results: Dict[str, Any], output_path: str, root: "CopickRo
 
     ext = output.suffix.lower()
 
+    n_panels = (1 + len(fg_labels) if fg_labels else 0) + (1 if bg_volumes else 0)
+
     if ext == ".pdf":
         from matplotlib.backends.backend_pdf import PdfPages
 
         with PdfPages(str(output)) as pdf:
-            # Combined plot
-            fig, ax = plt.subplots(figsize=(10, 5))
-            for lv in labels:
-                ax.hist(volumes_by_label[lv], bins=bins, alpha=0.7, label=_label_display(lv), color=_label_color(lv))
-            _setup_ax(ax, "All Labels (Combined)")
-            ax.legend()
-            fig.tight_layout()
-            pdf.savefig(fig)
-            plt.close(fig)
-
-            # Individual per-label plots
-            for lv in labels:
+            # Combined foreground plot
+            if fg_labels:
                 fig, ax = plt.subplots(figsize=(10, 5))
-                ax.hist(volumes_by_label[lv], bins=bins, alpha=0.7, color=_label_color(lv))
-                _setup_ax(ax, _label_display(lv))
+                for lv in fg_labels:
+                    ax.hist(
+                        volumes_by_label[lv],
+                        bins=fg_bins,
+                        alpha=0.7,
+                        label=_label_display(lv),
+                        color=_label_color(lv),
+                    )
+                _setup_ax(ax, "All Labels (Combined)")
+                ax.legend()
+                fig.tight_layout()
+                pdf.savefig(fig)
+                plt.close(fig)
+
+                # Individual per-label plots
+                for lv in fg_labels:
+                    fig, ax = plt.subplots(figsize=(10, 5))
+                    ax.hist(volumes_by_label[lv], bins=fg_bins, alpha=0.7, color=_label_color(lv))
+                    _setup_ax(ax, _label_display(lv))
+                    fig.tight_layout()
+                    pdf.savefig(fig)
+                    plt.close(fig)
+
+            # Background plot (separate page, own bins)
+            if bg_volumes:
+                fig, ax = plt.subplots(figsize=(10, 5))
+                ax.hist(bg_volumes, bins=bg_bins, alpha=0.7, color="gray")
+                _setup_ax(ax, "Background (Label 0)")
                 fig.tight_layout()
                 pdf.savefig(fig)
                 plt.close(fig)
     else:
         # Image formats: subplots in one figure
-        n_plots = 1 + len(labels)
-        fig, axes = plt.subplots(n_plots, 1, figsize=(10, 5 * n_plots))
-        if n_plots == 1:
+        n_plots = n_panels
+        fig, axes = plt.subplots(max(n_plots, 1), 1, figsize=(10, 5 * max(n_plots, 1)))
+        if n_plots <= 1:
             axes = [axes]
 
-        # Combined plot
-        for lv in labels:
-            axes[0].hist(volumes_by_label[lv], bins=bins, alpha=0.7, label=_label_display(lv), color=_label_color(lv))
-        _setup_ax(axes[0], "All Labels (Combined)")
-        axes[0].legend()
+        idx = 0
 
-        # Individual per-label plots
-        for i, lv in enumerate(labels):
-            axes[i + 1].hist(volumes_by_label[lv], bins=bins, alpha=0.7, color=_label_color(lv))
-            _setup_ax(axes[i + 1], _label_display(lv))
+        # Combined foreground plot
+        if fg_labels:
+            for lv in fg_labels:
+                axes[idx].hist(
+                    volumes_by_label[lv],
+                    bins=fg_bins,
+                    alpha=0.7,
+                    label=_label_display(lv),
+                    color=_label_color(lv),
+                )
+            _setup_ax(axes[idx], "All Labels (Combined)")
+            axes[idx].legend()
+            idx += 1
+
+            # Individual per-label plots
+            for lv in fg_labels:
+                axes[idx].hist(volumes_by_label[lv], bins=fg_bins, alpha=0.7, color=_label_color(lv))
+                _setup_ax(axes[idx], _label_display(lv))
+                idx += 1
+
+        # Background plot (separate, own bins)
+        if bg_volumes:
+            axes[idx].hist(bg_volumes, bins=bg_bins, alpha=0.7, color="gray")
+            _setup_ax(axes[idx], "Background (Label 0)")
 
         fig.tight_layout()
         fig.savefig(str(output), dpi=150)
         plt.close(fig)
 
-    logger.info(f"Exported plot ({1 + len(labels)} panels) to {output_path}")
+    logger.info(f"Exported plot ({n_panels} panels) to {output_path}")
