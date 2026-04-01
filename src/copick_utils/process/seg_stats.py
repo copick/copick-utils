@@ -224,42 +224,34 @@ def _compute_bin_size(all_components: List[Dict[str, Any]]) -> float:
     return max(vol_range / 100.0, 1.0)
 
 
-def _suppress_kaleido_logs():
-    """Suppress verbose kaleido/chromium logging."""
-    import logging
+def _compute_bins(all_components: List[Dict[str, Any]], bin_size: float):
+    """Compute consistent bin edges for all histograms."""
+    import numpy as np
 
-    for name in ("kaleido", "chromium", "kaleido._kaleido_tab", "kaleido.kaleido", "kaleido.browser_async"):
-        logging.getLogger(name).setLevel(logging.WARNING)
-
-
-def _write_figure(fig, output: Path) -> None:
-    """Write a plotly figure to file, format inferred from extension."""
-    _suppress_kaleido_logs()
-
-    ext = output.suffix.lower()
-    if ext == ".html":
-        fig.write_html(str(output))
-    elif ext in (".png", ".pdf", ".svg", ".jpeg", ".webp"):
-        fig.write_image(str(output))
-    else:
-        fig.write_html(str(output))
-        logger.warning(f"Unknown extension '{ext}', defaulting to HTML output")
+    all_volumes = [c["volume_angstroms3"] for c in all_components]
+    x_max = max(all_volumes) * 1.05
+    return np.arange(0, x_max + bin_size, bin_size)
 
 
 def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
     """
-    Export component statistics as histogram plots.
+    Export component statistics as histogram plots using matplotlib.
 
-    Creates a combined histogram of all labels plus individual per-label histograms.
-    For PDF output, all plots are arranged vertically in a single document.
+    Creates a combined histogram (all labels overlaid) plus individual per-label
+    histograms. For PDF, each plot is a separate page. For image formats (png, svg),
+    all plots are arranged as subplots in a single figure.
+
     Uses consistent bin sizes (10 cubic voxels) and logarithmic y-axis.
 
     Args:
         results: Results from seg_stats_batch.
-        output_path: Path to output plot file.
+        output_path: Path to output file (.pdf, .png, .svg, .jpg).
     """
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    import matplotlib.pyplot as plt
 
     all_components = []
     for run_result in results.values():
@@ -273,67 +265,72 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    # Group by label
     labels = sorted({c["label"] for c in all_components})
     bin_size = _compute_bin_size(all_components)
+    bins = _compute_bins(all_components, bin_size)
 
-    # Compute global x-axis range for consistent axes
-    all_volumes = [c["volume_angstroms3"] for c in all_components]
-    x_min = 0
-    x_max = max(all_volumes) * 1.05
-
-    # Create subplots: combined + one per label
-    n_plots = 1 + len(labels)
-    subplot_titles = ["All Labels (Combined)"] + [f"Label {lv}" for lv in labels]
-
-    fig = make_subplots(
-        rows=n_plots,
-        cols=1,
-        subplot_titles=subplot_titles,
-        vertical_spacing=0.3 / n_plots,
-    )
-
-    # Combined plot (row 1)
+    # Group volumes by label
+    volumes_by_label = {}
     for label_value in labels:
-        volumes = [c["volume_angstroms3"] for c in all_components if c["label"] == label_value]
-        fig.add_trace(
-            go.Histogram(
-                x=volumes,
-                name=f"Label {label_value}",
-                opacity=0.7,
-                xbins=dict(start=x_min, end=x_max, size=bin_size),
-            ),
-            row=1,
-            col=1,
-        )
+        volumes_by_label[label_value] = [c["volume_angstroms3"] for c in all_components if c["label"] == label_value]
 
-    # Individual per-label plots
-    for i, label_value in enumerate(labels):
-        volumes = [c["volume_angstroms3"] for c in all_components if c["label"] == label_value]
-        fig.add_trace(
-            go.Histogram(
-                x=volumes,
-                name=f"Label {label_value}",
-                opacity=0.7,
-                xbins=dict(start=x_min, end=x_max, size=bin_size),
-                showlegend=False,
-            ),
-            row=i + 2,
-            col=1,
-        )
+    ext = output.suffix.lower()
 
-    # Apply log y-axis and consistent x-axis range to all subplots
-    for i in range(1, n_plots + 1):
-        fig.update_xaxes(title_text="Volume (Å³)", range=[x_min, x_max], row=i, col=1)
-        fig.update_yaxes(title_text="Count", type="log", row=i, col=1)
+    if ext == ".pdf":
+        # PDF: one page per plot
+        from matplotlib.backends.backend_pdf import PdfPages
 
-    fig.update_layout(
-        barmode="overlay",
-        template="plotly_white",
-        legend_title="Label",
-        height=400 * n_plots,
-        width=1000,
-    )
+        with PdfPages(str(output)) as pdf:
+            # Combined plot
+            fig, ax = plt.subplots(figsize=(10, 5))
+            for label_value in labels:
+                ax.hist(volumes_by_label[label_value], bins=bins, alpha=0.7, label=f"Label {label_value}")
+            ax.set_yscale("log")
+            ax.set_xlabel("Volume (Å³)")
+            ax.set_ylabel("Count")
+            ax.set_title("All Labels (Combined)")
+            ax.legend()
+            fig.tight_layout()
+            pdf.savefig(fig)
+            plt.close(fig)
 
-    _write_figure(fig, output)
-    logger.info(f"Exported plot ({n_plots} panels) to {output_path}")
+            # Individual per-label plots
+            for label_value in labels:
+                fig, ax = plt.subplots(figsize=(10, 5))
+                ax.hist(volumes_by_label[label_value], bins=bins, alpha=0.7)
+                ax.set_yscale("log")
+                ax.set_xlabel("Volume (Å³)")
+                ax.set_ylabel("Count")
+                ax.set_title(f"Label {label_value}")
+                fig.tight_layout()
+                pdf.savefig(fig)
+                plt.close(fig)
+    else:
+        # Image formats: subplots in one figure
+        n_plots = 1 + len(labels)
+        fig, axes = plt.subplots(n_plots, 1, figsize=(10, 4 * n_plots))
+        if n_plots == 1:
+            axes = [axes]
+
+        # Combined plot
+        for label_value in labels:
+            axes[0].hist(volumes_by_label[label_value], bins=bins, alpha=0.7, label=f"Label {label_value}")
+        axes[0].set_yscale("log")
+        axes[0].set_xlabel("Volume (Å³)")
+        axes[0].set_ylabel("Count")
+        axes[0].set_title("All Labels (Combined)")
+        axes[0].legend()
+
+        # Individual per-label plots
+        for i, label_value in enumerate(labels):
+            axes[i + 1].hist(volumes_by_label[label_value], bins=bins, alpha=0.7)
+            axes[i + 1].set_yscale("log")
+            axes[i + 1].set_xlabel("Volume (Å³)")
+            axes[i + 1].set_ylabel("Count")
+            axes[i + 1].set_title(f"Label {label_value}")
+
+        fig.tight_layout()
+        fig.savefig(str(output), dpi=150)
+        plt.close(fig)
+
+    logger.info(f"Exported plot ({1 + len(labels)} panels) to {output_path}")

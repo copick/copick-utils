@@ -33,8 +33,7 @@ dependencies = [
     "scikit-learn",
     "shapely",
     "rtree",
-    "plotly",
-    "kaleido",
+    "matplotlib",
 ]
 authors = [
     { name = "Kyle Harrington", email = "czi@kyleharrington.com" },
