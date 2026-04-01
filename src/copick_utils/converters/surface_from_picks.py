@@ -9,8 +9,6 @@ from sklearn.decomposition import PCA
 
 from copick_utils.converters.converter_common import (
     cluster,
-    create_batch_converter,
-    create_batch_worker,
     store_mesh_with_stats,
     validate_points,
 )
@@ -317,18 +315,6 @@ def surface_from_picks(
         logger.critical(f"Error creating mesh: {e}")
         return None
 
-
-# Create worker function using common infrastructure
-_surface_from_picks_worker = create_batch_worker(surface_from_picks, "surface", min_points=3)
-
-
-# Create batch converter using common infrastructure
-surface_from_picks_batch = create_batch_converter(
-    surface_from_picks,
-    "Converting picks to surface meshes",
-    "surface",
-    min_points=3,
-)
 
 # Lazy batch converter for new architecture
 surface_from_picks_lazy_batch = create_lazy_batch_converter(

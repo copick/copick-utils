@@ -5,10 +5,6 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 import numpy as np
 from copick.util.log import get_logger
 
-from copick_utils.converters.converter_common import (
-    create_batch_converter,
-    create_batch_worker,
-)
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
@@ -312,64 +308,6 @@ def segmentation_multi_union(
         logger.error(f"Error performing N-way union: {e}")
         return None
 
-
-# Create batch workers for each operation
-_segmentation_union_worker = create_batch_worker(segmentation_union, "segmentation", "segmentation", min_points=0)
-_segmentation_difference_worker = create_batch_worker(
-    segmentation_difference,
-    "segmentation",
-    "segmentation",
-    min_points=0,
-)
-_segmentation_intersection_worker = create_batch_worker(
-    segmentation_intersection,
-    "segmentation",
-    "segmentation",
-    min_points=0,
-)
-_segmentation_exclusion_worker = create_batch_worker(
-    segmentation_exclusion,
-    "segmentation",
-    "segmentation",
-    min_points=0,
-)
-
-# Create batch converters
-segmentation_union_batch = create_batch_converter(
-    segmentation_union,
-    "Computing segmentation unions",
-    "segmentation",
-    "segmentation",
-    min_points=0,
-    dual_input=True,
-)
-
-segmentation_difference_batch = create_batch_converter(
-    segmentation_difference,
-    "Computing segmentation differences",
-    "segmentation",
-    "segmentation",
-    min_points=0,
-    dual_input=True,
-)
-
-segmentation_intersection_batch = create_batch_converter(
-    segmentation_intersection,
-    "Computing segmentation intersections",
-    "segmentation",
-    "segmentation",
-    min_points=0,
-    dual_input=True,
-)
-
-segmentation_exclusion_batch = create_batch_converter(
-    segmentation_exclusion,
-    "Computing segmentation exclusions",
-    "segmentation",
-    "segmentation",
-    min_points=0,
-    dual_input=True,
-)
 
 # Lazy batch converters for new architecture
 segmentation_union_lazy_batch = create_lazy_batch_converter(

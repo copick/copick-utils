@@ -7,7 +7,8 @@ from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
 from copick.util.uri import parse_copick_uri
 
-from copick_utils.cli.util import add_input_option, add_workers_option
+from copick_utils.cli.util import add_input_option, add_output_option, add_workers_option
+from copick_utils.util.config_models import create_simple_config
 
 
 @click.command(
@@ -24,22 +25,16 @@ from copick_utils.cli.util import add_input_option, add_workers_option
     help="Specific run names to process (default: all runs).",
 )
 @add_input_option("segmentation")
-@optgroup.group("\nTool Options", help="Options related to this tool.")
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
-@optgroup.option(
-    "--output-user-id",
-    type=str,
-    default="split",
-    help="User ID for output segmentations.",
-)
+@add_output_option("segmentation", default_tool="split")
 @add_debug_option
 def split(
     config,
     run_names,
     input_uri,
     workers,
-    output_user_id,
+    output_uri,
     debug,
 ):
     """
@@ -53,6 +48,7 @@ def split(
     \b
     URI Format:
         Segmentations: name:user_id/session_id@voxel_spacing
+        Voxel spacing is optional — omit to match any voxel spacing.
 
     \b
     Label-to-Object Mapping:
@@ -65,57 +61,41 @@ def split(
     \b
     Examples:
         # Split multilabel segmentation (outputs named by pickable objects)
-        copick process split -i "predictions:model/run-001@10.0"
+        copick process split -i "predictions:model/run-001@10.0" -o ":split/0"
 
-        # Split with custom output user ID
-        copick process split -i "classes:annotator/manual@10.0" --output-user-id "per-class"
+        # Split without specifying voxel spacing (matches any)
+        copick process split -i "proofread:napari/manual" -o ":split-proofread/0"
 
         # Process specific runs only
-        copick process split -i "labels:*/*@10.0" --run-names TS_001 --run-names TS_002
+        copick process split -i "labels:*/*@10.0" -o ":per-class/0" -r TS_001 -r TS_002
     """
+    from copick_utils.process.split_labels import split_labels_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Parse input URI
+    # Create config from URIs with smart defaults
     try:
-        input_params = parse_copick_uri(input_uri, "segmentation")
-    except ValueError as e:
-        raise click.BadParameter(f"Invalid input URI: {e}") from e
-
-    segmentation_name = input_params["name"]
-    segmentation_user_id = input_params["user_id"]
-    segmentation_session_id = input_params["session_id"]
-    voxel_spacing = input_params.get("voxel_spacing")
-
-    if voxel_spacing is None or voxel_spacing == "*":
-        raise click.BadParameter("Input URI must include a specific voxel spacing (e.g., @10.0)")
-
-    # Check for patterns in critical fields
-    if "*" in segmentation_name or "*" in segmentation_user_id or "*" in segmentation_session_id:
-        raise click.BadParameter(
-            "Input URI cannot contain wildcards for splitting. "
-            "Please specify exact segmentation name, user_id, and session_id.",
+        task_config = create_simple_config(
+            input_uri=input_uri,
+            input_type="segmentation",
+            output_uri=output_uri,
+            output_type="segmentation",
+            command_name="split",
         )
+    except ValueError as e:
+        raise click.BadParameter(str(e)) from e
 
-    logger.info(f"Splitting multilabel segmentation '{segmentation_name}'")
-    logger.debug(f"Input: {segmentation_user_id}/{segmentation_session_id} @ {voxel_spacing}Å")
-    logger.debug(f"Output user ID: {output_user_id}")
-    logger.debug(f"Workers: {workers}")
+    # Log parameters
+    input_params = parse_copick_uri(input_uri, "segmentation")
+    logger.info(f"Splitting multilabel segmentation '{input_params['name']}'")
 
-    # Import batch function
-    from copick_utils.process.split_labels import split_labels_batch
-
-    # Process runs
-    results = split_labels_batch(
+    # Parallel discovery and processing
+    results = split_labels_lazy_batch(
         root=root,
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        segmentation_session_id=segmentation_session_id,
-        voxel_spacing=float(voxel_spacing),
-        output_user_id=output_user_id,
+        config=task_config,
         run_names=run_names_list,
         workers=workers,
     )
@@ -124,13 +104,6 @@ def split(
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
     total_labels = sum(result.get("labels_split", 0) for result in results.values() if result)
 
-    # Collect all unique object names created
-    all_object_names = set()
-    for result in results.values():
-        if result and result.get("object_names"):
-            all_object_names.update(result["object_names"])
-
-    # Collect all errors
     all_errors = []
     for result in results.values():
         if result and result.get("errors"):
@@ -138,11 +111,10 @@ def split(
 
     logger.info(f"Completed: {successful}/{len(results)} runs processed successfully")
     logger.info(f"Total labels split: {total_labels}")
-    logger.info(f"Object names created: {', '.join(sorted(all_object_names))}")
 
     if all_errors:
         logger.warning(f"Encountered {len(all_errors)} errors during processing")
-        for error in all_errors[:5]:  # Show first 5 errors
+        for error in all_errors[:5]:
             logger.warning(f"  - {error}")
         if len(all_errors) > 5:
             logger.warning(f"  ... and {len(all_errors) - 5} more errors")

@@ -3,11 +3,14 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
+from copick.util.log import get_logger
 from scipy import ndimage
 from skimage import measure
 
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+
 if TYPE_CHECKING:
-    from copick.models import CopickRoot, CopickRun, CopickSegmentation
+    from copick.models import CopickRun, CopickSegmentation
 
 
 def separate_connected_components_3d(
@@ -250,110 +253,59 @@ def separate_segmentation_components(
     return output_segmentations
 
 
-def _separate_components_worker(
+def separate_components_converter(
+    segmentation: "CopickSegmentation",
     run: "CopickRun",
-    segmentation_name: str,
-    segmentation_user_id: str,
-    segmentation_session_id: str,
-    connectivity: Union[int, str],
-    min_size: Optional[float],
-    session_id_template: str,
-    output_user_id: str,
-    multilabel: bool,
-) -> Dict[str, Any]:
-    """Worker function for batch connected components separation."""
+    object_name: str,
+    session_id: str,
+    user_id: str,
+    connectivity: Union[int, str] = "all",
+    min_size: Optional[float] = None,
+    multilabel: bool = True,
+    **kwargs,
+) -> Optional[Tuple[None, Dict[str, int]]]:
+    """
+    Lazy converter wrapper for separate_segmentation_components.
+
+    The session_id from the output URI is used as a template with {instance_id}.
+
+    Args:
+        segmentation: Input CopickSegmentation object.
+        run: CopickRun object.
+        object_name: Unused (components keep the input segmentation name).
+        session_id: Session ID template (should contain {instance_id}).
+        user_id: User ID for output segmentations.
+        connectivity: Connectivity for connected components.
+        min_size: Minimum component volume in cubic angstroms (Å³) to keep.
+        multilabel: Whether to treat input as multilabel segmentation.
+        **kwargs: Additional keyword arguments from lazy converter.
+
+    Returns:
+        Tuple of (None, stats dict) or None if operation failed.
+    """
     try:
-        # Get segmentation
-        segmentations = run.get_segmentations(
-            name=segmentation_name,
-            user_id=segmentation_user_id,
-            session_id=segmentation_session_id,
-        )
-
-        if not segmentations:
-            return {"processed": 0, "errors": [f"No segmentation found for {run.name}"]}
-
-        segmentation = segmentations[0]
-
-        # Separate components
         output_segmentations = separate_segmentation_components(
             segmentation=segmentation,
             connectivity=connectivity,
             min_size=min_size,
-            session_id_template=session_id_template,
-            output_user_id=output_user_id,
+            session_id_template=session_id,
+            output_user_id=user_id,
             multilabel=multilabel,
         )
 
-        return {
-            "processed": 1,
-            "errors": [],
+        stats = {
             "components_created": len(output_segmentations),
-            "segmentations": output_segmentations,
         }
 
+        return None, stats
+
     except Exception as e:
-        return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"]}
+        get_logger(__name__).error(f"Error separating components in {run.name}: {e}")
+        return None
 
 
-def separate_components_batch(
-    root: "CopickRoot",
-    segmentation_name: str,
-    segmentation_user_id: str,
-    segmentation_session_id: str,
-    connectivity: Union[int, str] = "all",
-    min_size: Optional[float] = None,
-    session_id_template: str = "inst-{instance_id}",
-    output_user_id: str = "components",
-    multilabel: bool = True,
-    run_names: Optional[List[str]] = None,
-    workers: int = 8,
-    session_id_prefix: str = None,  # Deprecated, kept for backward compatibility
-) -> Dict[str, Any]:
-    """
-    Batch separate connected components across multiple runs.
-
-    Args:
-        root: The copick root containing runs to process
-        segmentation_name: Name of the segmentation to process
-        segmentation_user_id: User ID of the segmentation to process
-        segmentation_session_id: Session ID of the segmentation to process
-        connectivity: Connectivity for connected components (default: "all")
-            String format: "face" (6-connected), "face-edge" (18-connected), "all" (26-connected)
-            Legacy int format: 6, 18, or 26 (for backward compatibility)
-        min_size: Minimum component volume in cubic angstroms (Å³) to keep (None = keep all)
-        session_id_template: Template for output session IDs with {instance_id} placeholder. Default is "inst-{instance_id}".
-        output_user_id: User ID for output segmentations. Default is "components".
-        multilabel: Whether to treat input as multilabel segmentation. Default is True.
-        run_names: List of run names to process. If None, processes all runs.
-        workers: Number of worker processes. Default is 8.
-        session_id_prefix: Deprecated. Use session_id_template instead.
-
-    Returns:
-        Dictionary with processing results and statistics
-    """
-    from copick.ops.run import map_runs
-
-    # Handle deprecated session_id_prefix parameter
-    if session_id_prefix is not None:
-        session_id_template = f"{session_id_prefix}{{instance_id}}"
-
-    runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-
-    results = map_runs(
-        callback=_separate_components_worker,
-        root=root,
-        runs=runs_to_process,
-        workers=workers,
-        task_desc="Separating connected components",
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        segmentation_session_id=segmentation_session_id,
-        connectivity=connectivity,
-        min_size=min_size,
-        session_id_template=session_id_template,
-        output_user_id=output_user_id,
-        multilabel=multilabel,
-    )
-
-    return results
+# Lazy batch converter for parallel discovery and processing
+separate_components_lazy_batch = create_lazy_batch_converter(
+    converter_func=separate_components_converter,
+    task_description="Separating connected components",
+)
