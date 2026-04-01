@@ -1,5 +1,6 @@
 """CLI commands for segmentation processing operations."""
 
+from copick_utils.cli.combine_labels import combine
 from copick_utils.cli.expand_labels import expand_labels
 from copick_utils.cli.filter_components import filter_components
 from copick_utils.cli.fit_spline import fit_spline
@@ -19,6 +20,7 @@ __all__ = [
     "filter_components",
     "fit_spline",
     "split",
+    "combine",
     "expand_labels",
     "seg_stats",
 ]

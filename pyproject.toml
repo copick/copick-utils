@@ -80,6 +80,7 @@ hull = "copick_utils.cli.processing_commands:hull"
 split = "copick_utils.cli.processing_commands:split"
 expand_labels = "copick_utils.cli.processing_commands:expand_labels"
 seg_stats = "copick_utils.cli.processing_commands:seg_stats"
+combine = "copick_utils.cli.processing_commands:combine"
 
 [project.entry-points."copick.logical.commands"]
 meshop = "copick_utils.cli.logical_commands:meshop"
