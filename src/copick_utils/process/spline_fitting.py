@@ -513,7 +513,6 @@ def _fit_spline_worker(
     output_session_id_template: Optional[str],
     output_user_id: str,
     voxel_spacing: float,
-    root: "CopickRoot",
 ) -> Dict[str, Any]:
     """Worker function for batch spline fitting."""
     try:

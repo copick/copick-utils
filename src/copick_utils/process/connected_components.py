@@ -260,7 +260,6 @@ def _separate_components_worker(
     session_id_template: str,
     output_user_id: str,
     multilabel: bool,
-    root: "CopickRoot",
 ) -> Dict[str, Any]:
     """Worker function for batch connected components separation."""
     try:
