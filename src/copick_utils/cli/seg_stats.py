@@ -123,7 +123,7 @@ def seg_stats(
     if output_format == "csv":
         export_stats_csv(results, output_path)
     elif output_format == "plot":
-        export_stats_plot(results, output_path)
+        export_stats_plot(results, output_path, root=root)
 
     if all_errors:
         logger.warning(f"Encountered {len(all_errors)} errors during processing")

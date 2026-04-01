@@ -225,7 +225,7 @@ def _compute_log_bins(all_components: List[Dict[str, Any]], n_bins: int = 50):
     return np.geomspace(v_min, v_max, n_bins + 1)
 
 
-def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
+def export_stats_plot(results: Dict[str, Any], output_path: str, root: "CopickRoot" = None) -> None:
     """
     Export component statistics as histogram plots using matplotlib.
 
@@ -233,11 +233,12 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
     histograms. For PDF, each plot is a separate page. For image formats (png, svg),
     all plots are arranged as subplots in a single figure.
 
-    Uses consistent bin sizes (10 cubic voxels) and logarithmic y-axis.
+    Labels are named and colored according to the copick project's pickable objects.
 
     Args:
         results: Results from seg_stats_batch.
         output_path: Path to output file (.pdf, .png, .svg, .jpg).
+        root: CopickRoot for looking up object names and colors by label.
     """
     import matplotlib
 
@@ -260,6 +261,23 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
     labels = sorted({c["label"] for c in all_components})
     bins = _compute_log_bins(all_components)
 
+    # Build label → name and label → color mappings from copick objects
+    label_names = {}
+    label_colors = {}
+    if root is not None:
+        for obj in root.pickable_objects:
+            if obj.label is not None:
+                label_names[obj.label] = obj.name
+                if obj.color is not None:
+                    # RGBA (0-255) → matplotlib RGBA (0-1)
+                    label_colors[obj.label] = tuple(c / 255.0 for c in obj.color)
+
+    def _label_display(lv):
+        return label_names.get(lv, f"Label {lv}")
+
+    def _label_color(lv):
+        return label_colors.get(lv, None)
+
     # Group volumes by label
     volumes_by_label = {}
     for label_value in labels:
@@ -268,14 +286,13 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
     ext = output.suffix.lower()
 
     if ext == ".pdf":
-        # PDF: one page per plot
         from matplotlib.backends.backend_pdf import PdfPages
 
         with PdfPages(str(output)) as pdf:
             # Combined plot
             fig, ax = plt.subplots(figsize=(10, 5))
-            for label_value in labels:
-                ax.hist(volumes_by_label[label_value], bins=bins, alpha=0.7, label=f"Label {label_value}")
+            for lv in labels:
+                ax.hist(volumes_by_label[lv], bins=bins, alpha=0.7, label=_label_display(lv), color=_label_color(lv))
             ax.set_xscale("log")
             ax.set_yscale("log")
             ax.set_xlabel("Volume (Å³)")
@@ -287,14 +304,14 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
             plt.close(fig)
 
             # Individual per-label plots
-            for label_value in labels:
+            for lv in labels:
                 fig, ax = plt.subplots(figsize=(10, 5))
-                ax.hist(volumes_by_label[label_value], bins=bins, alpha=0.7)
+                ax.hist(volumes_by_label[lv], bins=bins, alpha=0.7, color=_label_color(lv))
                 ax.set_xscale("log")
                 ax.set_yscale("log")
                 ax.set_xlabel("Volume (Å³)")
                 ax.set_ylabel("Count")
-                ax.set_title(f"Label {label_value}")
+                ax.set_title(_label_display(lv))
                 fig.tight_layout()
                 pdf.savefig(fig)
                 plt.close(fig)
@@ -306,8 +323,8 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
             axes = [axes]
 
         # Combined plot
-        for label_value in labels:
-            axes[0].hist(volumes_by_label[label_value], bins=bins, alpha=0.7, label=f"Label {label_value}")
+        for lv in labels:
+            axes[0].hist(volumes_by_label[lv], bins=bins, alpha=0.7, label=_label_display(lv), color=_label_color(lv))
         axes[0].set_xscale("log")
         axes[0].set_yscale("log")
         axes[0].set_xlabel("Volume (Å³)")
@@ -316,13 +333,13 @@ def export_stats_plot(results: Dict[str, Any], output_path: str) -> None:
         axes[0].legend()
 
         # Individual per-label plots
-        for i, label_value in enumerate(labels):
-            axes[i + 1].hist(volumes_by_label[label_value], bins=bins, alpha=0.7)
+        for i, lv in enumerate(labels):
+            axes[i + 1].hist(volumes_by_label[lv], bins=bins, alpha=0.7, color=_label_color(lv))
             axes[i + 1].set_xscale("log")
             axes[i + 1].set_yscale("log")
             axes[i + 1].set_xlabel("Volume (Å³)")
             axes[i + 1].set_ylabel("Count")
-            axes[i + 1].set_title(f"Label {label_value}")
+            axes[i + 1].set_title(_label_display(lv))
 
         fig.tight_layout()
         fig.savefig(str(output), dpi=150)
