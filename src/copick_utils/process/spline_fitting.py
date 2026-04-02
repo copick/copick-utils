@@ -1,14 +1,18 @@
 """3D spline fitting to skeleton volumes for pick generation with orientations."""
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import networkx as nx
 import numpy as np
-from copick.util.uri import get_copick_objects_by_type
+from copick.util.log import get_logger
 from scipy.spatial.distance import pdist, squareform
 
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+
 if TYPE_CHECKING:
-    from copick.models import CopickPicks, CopickRoot, CopickRun, CopickSegmentation
+    from copick.models import CopickPicks, CopickRun, CopickSegmentation
+
+logger = get_logger(__name__)
 
 
 class SkeletonSplineFitter:
@@ -413,6 +417,10 @@ def fit_spline_to_skeleton(
 
 def fit_spline_to_segmentation(
     segmentation: "CopickSegmentation",
+    run: "CopickRun",
+    object_name: str,
+    session_id: str,
+    user_id: str,
     spacing_distance: float,
     smoothing_factor: Optional[float] = None,
     degree: int = 3,
@@ -420,15 +428,20 @@ def fit_spline_to_segmentation(
     compute_transforms: bool = True,
     curvature_threshold: float = 0.2,
     max_iterations: int = 5,
-    output_session_id: Optional[str] = None,
-    output_user_id: str = "spline",
     voxel_spacing: float = 1.0,
-) -> Optional["CopickPicks"]:
+) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
     """
     Fit a spline to a segmentation (skeleton) volume and create picks with orientations.
 
+    Matches the lazy converter signature:
+        (segmentation, run, object_name, session_id, user_id, **tool_kwargs)
+
     Args:
         segmentation: Input segmentation containing skeleton to fit spline to
+        run: CopickRun object
+        object_name: Name for the output pick object
+        session_id: Session ID for output picks
+        user_id: User ID for output picks
         spacing_distance: Distance between consecutive sampled points along the spline
         smoothing_factor: Smoothing parameter for spline fitting (auto if None)
         degree: Degree of the spline (1-5)
@@ -436,27 +449,19 @@ def fit_spline_to_segmentation(
         compute_transforms: Whether to compute orientations for picks
         curvature_threshold: Maximum allowed curvature before outlier removal
         max_iterations: Maximum number of outlier removal iterations
-        output_session_id: Session ID for output picks (default: same as input)
-        output_user_id: User ID for output picks
         voxel_spacing: Voxel spacing for coordinate scaling
 
     Returns:
-        Created picks object or None if failed
+        Tuple of (CopickPicks object, stats dict) or None if failed.
+        Stats dict contains 'picks_created'.
     """
     # Get the segmentation volume
     volume = segmentation.numpy()
     if volume is None:
-        print(f"Error: Could not load segmentation data for {segmentation.run.name}")
+        logger.error(f"Could not load segmentation data for {run.name}")
         return None
 
-    run = segmentation.run
-    name = segmentation.name
-
-    # Use input session_id if no output session_id specified
-    if output_session_id is None:
-        output_session_id = segmentation.session_id
-
-    print(f"Fitting spline to segmentation {segmentation.session_id} in run {run.name}")
+    logger.info(f"Fitting spline to segmentation {segmentation.session_id} in run {run.name}")
 
     try:
         # Fit spline to skeleton
@@ -474,13 +479,13 @@ def fit_spline_to_segmentation(
         # Scale points to physical coordinates
         scaled_points = sampled_points * voxel_spacing
 
-        print(f"Spline properties: {properties}")
+        logger.info(f"Spline properties: {properties}")
 
         # Create output picks
         output_picks = run.new_picks(
-            object_name=name,
-            session_id=output_session_id,
-            user_id=output_user_id,
+            object_name=object_name,
+            session_id=session_id,
+            user_id=user_id,
             exist_ok=True,
         )
 
@@ -490,159 +495,17 @@ def fit_spline_to_segmentation(
         else:
             output_picks.from_numpy(scaled_points)
 
-        print(f"Created {len(scaled_points)} picks with session_id: {output_session_id}")
-        return output_picks
+        stats = {"picks_created": len(scaled_points)}
+        logger.info(f"Created {stats['picks_created']} picks with session_id: {session_id}")
+        return output_picks, stats
 
     except Exception as e:
-        print(f"Error fitting spline to segmentation: {e}")
+        logger.error(f"Error fitting spline to segmentation: {e}")
         return None
 
 
-def _fit_spline_worker(
-    run: "CopickRun",
-    segmentation_name: str,
-    segmentation_user_id: str,
-    session_id_pattern: str,
-    spacing_distance: float,
-    smoothing_factor: Optional[float],
-    degree: int,
-    connectivity_radius: float,
-    compute_transforms: bool,
-    curvature_threshold: float,
-    max_iterations: int,
-    output_session_id_template: Optional[str],
-    output_user_id: str,
-    voxel_spacing: float,
-    root: "CopickRoot",
-) -> Dict[str, Any]:
-    """Worker function for batch spline fitting."""
-    try:
-        # Find matching segmentations using copick's official URI resolution
-        matching_segmentations = get_copick_objects_by_type(
-            root=run.root,
-            object_type="segmentation",
-            run_name=run.name,
-            name=segmentation_name,
-            user_id=segmentation_user_id,
-            session_id=session_id_pattern,
-            pattern_type="glob",
-        )
-
-        if not matching_segmentations:
-            return {
-                "processed": 0,
-                "errors": [f"No segmentations found matching pattern '{session_id_pattern}' in {run.name}"],
-                "picks_created": 0,
-            }
-
-        picks_created = 0
-        errors = []
-
-        for segmentation in matching_segmentations:
-            # Determine output session ID
-            if output_session_id_template:
-                # Replace placeholders in template
-                output_session_id = output_session_id_template.replace("{input_session_id}", segmentation.session_id)
-            else:
-                output_session_id = segmentation.session_id
-
-            # Fit spline
-            picks = fit_spline_to_segmentation(
-                segmentation=segmentation,
-                spacing_distance=spacing_distance,
-                smoothing_factor=smoothing_factor,
-                degree=degree,
-                connectivity_radius=connectivity_radius,
-                compute_transforms=compute_transforms,
-                curvature_threshold=curvature_threshold,
-                max_iterations=max_iterations,
-                output_session_id=output_session_id,
-                output_user_id=output_user_id,
-                voxel_spacing=voxel_spacing,
-            )
-
-            if picks:
-                picks_created += 1
-            else:
-                errors.append(f"Failed to fit spline to {segmentation.session_id}")
-
-        return {
-            "processed": 1,
-            "errors": errors,
-            "picks_created": picks_created,
-            "segmentations_processed": len(matching_segmentations),
-        }
-
-    except Exception as e:
-        return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"], "picks_created": 0}
-
-
-def fit_spline_batch(
-    root: "CopickRoot",
-    segmentation_name: str,
-    segmentation_user_id: str,
-    session_id_pattern: str,
-    spacing_distance: float,
-    smoothing_factor: Optional[float] = None,
-    degree: int = 3,
-    connectivity_radius: float = 2.0,
-    compute_transforms: bool = True,
-    curvature_threshold: float = 0.2,
-    max_iterations: int = 5,
-    output_session_id_template: Optional[str] = None,
-    output_user_id: str = "spline",
-    voxel_spacing: float = 1.0,
-    run_names: Optional[List[str]] = None,
-    workers: int = 8,
-) -> Dict[str, Any]:
-    """
-    Batch fit splines to segmentations across multiple runs.
-
-    Args:
-        root: The copick root containing runs to process
-        segmentation_name: Name of the segmentations to process
-        segmentation_user_id: User ID of the segmentations to process
-        session_id_pattern: Regex pattern or exact session ID to match segmentations
-        spacing_distance: Distance between consecutive sampled points along the spline
-        smoothing_factor: Smoothing parameter for spline fitting (auto if None)
-        degree: Degree of the spline (1-5). Default is 3.
-        connectivity_radius: Maximum distance to consider skeleton points as connected. Default is 2.0.
-        compute_transforms: Whether to compute orientations for picks. Default is True.
-        curvature_threshold: Maximum allowed curvature before outlier removal. Default is 0.2.
-        max_iterations: Maximum number of outlier removal iterations. Default is 5.
-        output_session_id_template: Template for output session IDs. Use {input_session_id} as placeholder.
-            If None, uses the same session ID as input.
-        output_user_id: User ID for output picks. Default is "spline".
-        voxel_spacing: Voxel spacing for coordinate scaling. Default is 1.0.
-        run_names: List of run names to process. If None, processes all runs.
-        workers: Number of worker processes. Default is 8.
-
-    Returns:
-        Dictionary with processing results and statistics
-    """
-    from copick.ops.run import map_runs
-
-    runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-
-    results = map_runs(
-        callback=_fit_spline_worker,
-        root=root,
-        runs=runs_to_process,
-        workers=workers,
-        task_desc="Fitting splines to segmentations",
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        session_id_pattern=session_id_pattern,
-        spacing_distance=spacing_distance,
-        smoothing_factor=smoothing_factor,
-        degree=degree,
-        connectivity_radius=connectivity_radius,
-        compute_transforms=compute_transforms,
-        curvature_threshold=curvature_threshold,
-        max_iterations=max_iterations,
-        output_session_id_template=output_session_id_template,
-        output_user_id=output_user_id,
-        voxel_spacing=voxel_spacing,
-    )
-
-    return results
+# Lazy batch converter for the lazy task discovery architecture
+fit_spline_lazy_batch = create_lazy_batch_converter(
+    converter_func=fit_spline_to_segmentation,
+    task_description="Fitting splines to segmentations",
+)

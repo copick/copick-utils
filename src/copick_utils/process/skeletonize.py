@@ -1,15 +1,19 @@
 """3D skeletonization processing for segmentation volumes."""
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
-from copick.util.uri import get_copick_objects_by_type
+from copick.util.log import get_logger
 from scipy import ndimage
 from skimage import morphology
 from skimage.morphology import remove_small_objects, skeletonize
 
+from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+
 if TYPE_CHECKING:
-    from copick.models import CopickRoot, CopickRun, CopickSegmentation
+    from copick.models import CopickRun, CopickSegmentation
+
+logger = get_logger(__name__)
 
 
 class TubeSkeletonizer3D:
@@ -192,135 +196,60 @@ def skeletonize_segmentation(
         return None
 
 
-def _skeletonize_worker(
+def skeletonize_converter(
+    segmentation: "CopickSegmentation",
     run: "CopickRun",
-    segmentation_name: str,
-    segmentation_user_id: str,
-    session_id_pattern: str,
-    method: str,
-    remove_noise: bool,
-    min_object_size: int,
-    remove_short_branches: bool,
-    min_branch_length: int,
-    output_session_id_template: Optional[str],
-    output_user_id: str,
-) -> Dict[str, Any]:
-    """Worker function for batch skeletonization."""
-    try:
-        # Find matching segmentations using copick's official URI resolution
-        matching_segmentations = get_copick_objects_by_type(
-            root=run.root,
-            object_type="segmentation",
-            run_name=run.name,
-            name=segmentation_name,
-            user_id=segmentation_user_id,
-            session_id=session_id_pattern,
-            pattern_type="glob",
-        )
-
-        if not matching_segmentations:
-            return {
-                "processed": 0,
-                "errors": [f"No segmentations found matching pattern '{session_id_pattern}' in {run.name}"],
-                "skeletons_created": 0,
-            }
-
-        skeletons_created = 0
-        errors = []
-
-        for segmentation in matching_segmentations:
-            # Determine output session ID
-            if output_session_id_template:
-                # Replace placeholders in template
-                output_session_id = output_session_id_template.replace("{input_session_id}", segmentation.session_id)
-            else:
-                output_session_id = segmentation.session_id
-
-            # Skeletonize
-            skeleton_seg = skeletonize_segmentation(
-                segmentation=segmentation,
-                method=method,
-                remove_noise=remove_noise,
-                min_object_size=min_object_size,
-                remove_short_branches=remove_short_branches,
-                min_branch_length=min_branch_length,
-                output_session_id=output_session_id,
-                output_user_id=output_user_id,
-            )
-
-            if skeleton_seg:
-                skeletons_created += 1
-            else:
-                errors.append(f"Failed to skeletonize {segmentation.session_id}")
-
-        return {
-            "processed": 1,
-            "errors": errors,
-            "skeletons_created": skeletons_created,
-            "segmentations_processed": len(matching_segmentations),
-        }
-
-    except Exception as e:
-        return {"processed": 0, "errors": [f"Error processing {run.name}: {e}"], "skeletons_created": 0}
-
-
-def skeletonize_batch(
-    root: "CopickRoot",
-    segmentation_name: str,
-    segmentation_user_id: str,
-    session_id_pattern: str,
+    object_name: str,
+    session_id: str,
+    user_id: str,
     method: str = "skimage",
     remove_noise: bool = True,
     min_object_size: int = 50,
     remove_short_branches: bool = True,
     min_branch_length: int = 5,
-    output_session_id_template: Optional[str] = None,
-    output_user_id: str = "skel",
-    run_names: Optional[List[str]] = None,
-    workers: int = 8,
-) -> Dict[str, Any]:
+    **kwargs,
+) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
     """
-    Batch skeletonize segmentations across multiple runs.
+    Lazy converter wrapper for skeletonize_segmentation.
+
+    Matches the lazy converter signature:
+        (segmentation, run, object_name, session_id, user_id, **tool_kwargs)
 
     Args:
-        root: The copick root containing runs to process
-        segmentation_name: Name of the segmentations to process
-        segmentation_user_id: User ID of the segmentations to process
-        session_id_pattern: Regex pattern or exact session ID to match segmentations
-        method: Skeletonization method ('skimage', 'distance_transform'). Default is 'skimage'.
-        remove_noise: Whether to remove small objects before skeletonization. Default is True.
-        min_object_size: Minimum size of objects to keep during preprocessing. Default is 50.
-        remove_short_branches: Whether to remove short branches from skeleton. Default is True.
-        min_branch_length: Minimum length of branches to keep. Default is 5.
-        output_session_id_template: Template for output session IDs. Use {input_session_id} as placeholder.
-            If None, uses the same session ID as input.
-        output_user_id: User ID for output segmentations. Default is "skel".
-        run_names: List of run names to process. If None, processes all runs.
-        workers: Number of worker processes. Default is 8.
+        segmentation: Input CopickSegmentation object.
+        run: CopickRun object.
+        object_name: Name for the output segmentation.
+        session_id: Session ID for the output segmentation.
+        user_id: User ID for the output segmentation.
+        method: Skeletonization method ('skimage', 'distance_transform').
+        remove_noise: Whether to remove small objects before skeletonization.
+        min_object_size: Minimum size of objects to keep during preprocessing.
+        remove_short_branches: Whether to remove short branches from skeleton.
+        min_branch_length: Minimum length of branches to keep.
+        **kwargs: Additional keyword arguments from lazy converter (ignored).
 
     Returns:
-        Dictionary with processing results and statistics
+        Tuple of (CopickSegmentation object, stats dict) or None if operation failed.
     """
-    from copick.ops.run import map_runs
-
-    runs_to_process = [run.name for run in root.runs] if run_names is None else run_names
-
-    results = map_runs(
-        callback=_skeletonize_worker,
-        root=root,
-        runs=runs_to_process,
-        workers=workers,
-        task_desc="Skeletonizing segmentations",
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        session_id_pattern=session_id_pattern,
+    output_seg = skeletonize_segmentation(
+        segmentation=segmentation,
         method=method,
         remove_noise=remove_noise,
         min_object_size=min_object_size,
         remove_short_branches=remove_short_branches,
         min_branch_length=min_branch_length,
-        output_session_id_template=output_session_id_template,
-        output_user_id=output_user_id,
+        output_session_id=session_id,
+        output_user_id=user_id,
     )
 
-    return results
+    if output_seg is None:
+        return None
+
+    return output_seg, {"skeletons_created": 1}
+
+
+# Lazy batch converter for parallel discovery and processing
+skeletonize_lazy_batch = create_lazy_batch_converter(
+    converter_func=skeletonize_converter,
+    task_description="Skeletonizing segmentations",
+)

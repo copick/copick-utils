@@ -8,10 +8,6 @@ import trimesh as tm
 from copick.util.log import get_logger
 from trimesh.ray.ray_triangle import RayMeshIntersector
 
-from copick_utils.converters.converter_common import (
-    create_batch_converter,
-    create_batch_worker,
-)
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
@@ -270,19 +266,6 @@ def segmentation_from_mesh(
         logger.error(f"Error creating segmentation: {e}")
         return None
 
-
-# Create worker function using common infrastructure
-_segmentation_from_mesh_worker = create_batch_worker(segmentation_from_mesh, "segmentation", "mesh", min_points=0)
-
-
-# Create batch converter using common infrastructure
-segmentation_from_mesh_batch = create_batch_converter(
-    segmentation_from_mesh,
-    "Converting meshes to segmentations",
-    "segmentation",
-    "mesh",
-    min_points=0,
-)
 
 # Lazy batch converter for new architecture
 segmentation_from_mesh_lazy_batch = create_lazy_batch_converter(

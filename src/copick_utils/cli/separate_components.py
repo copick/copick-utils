@@ -3,9 +3,10 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
-from copick.util.uri import expand_output_uri, parse_copick_uri
+from copick.util.uri import parse_copick_uri
 
-from copick_utils.cli.util import add_input_option, add_output_option
+from copick_utils.cli.util import add_input_option, add_output_option, add_workers_option
+from copick_utils.util.config_models import create_simple_config
 
 
 @click.command(
@@ -41,12 +42,7 @@ from copick_utils.cli.util import add_input_option, add_output_option
     default=True,
     help="Process as multilabel segmentation (analyze each label separately).",
 )
-@optgroup.option(
-    "--workers",
-    type=int,
-    default=8,
-    help="Number of worker processes.",
-)
+@add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
 @add_output_option("segmentation", default_tool="components")
 @add_debug_option
@@ -83,73 +79,59 @@ def separate_components(
         # Full URI specification
         copick process separate_components -i "membrane:user1/manual-001@10.0" -o "membrane:components/comp-{instance_id}@10.0"
     """
-    from copick_utils.process.connected_components import separate_components_batch
+    from copick_utils.process.connected_components import separate_components_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Expand output URI with smart defaults (individual_outputs=True for {instance_id})
+    # Create config from URIs with smart defaults (individual_outputs for {instance_id})
     try:
-        output_uri = expand_output_uri(
-            output_uri=output_uri,
+        task_config = create_simple_config(
             input_uri=input_uri,
             input_type="segmentation",
+            output_uri=output_uri,
             output_type="segmentation",
-            command_name="components",
             individual_outputs=True,
+            command_name="components",
         )
     except ValueError as e:
-        raise click.BadParameter(f"Error expanding output URI: {e}") from e
+        raise click.BadParameter(str(e)) from e
 
-    # Parse input URI
-    try:
-        input_params = parse_copick_uri(input_uri, "segmentation")
-    except ValueError as e:
-        raise click.BadParameter(f"Invalid input URI: {e}") from e
-
-    segmentation_name = input_params["name"]
-    segmentation_user_id = input_params["user_id"]
-    segmentation_session_id = input_params["session_id"]
-
-    # Parse output URI (now fully expanded)
-    try:
-        output_params = parse_copick_uri(output_uri, "segmentation")
-    except ValueError as e:
-        raise click.BadParameter(f"Invalid output URI: {e}") from e
-
-    output_user_id = output_params["user_id"]
-    output_session_id_template = output_params["session_id"]
-
-    # Validate that output_session_id_template contains {instance_id}
-    if "{instance_id}" not in output_session_id_template:
-        raise click.BadParameter("Output URI must contain {instance_id} placeholder for separate_components command")
-
-    logger.info(f"Separating connected components for segmentation '{segmentation_name}'")
-    logger.info(f"Source segmentation: {segmentation_user_id}/{segmentation_session_id}")
-    logger.info(f"Output template: {output_params['name']} ({output_user_id}/{output_session_id_template})")
+    # Log parameters
+    input_params = parse_copick_uri(input_uri, "segmentation")
+    logger.info(f"Separating connected components for segmentation '{input_params['name']}'")
     logger.info(f"Connectivity: {connectivity}")
     if min_size is not None:
         logger.info(f"Minimum size: {min_size} Å³")
     logger.info(f"Processing as {'multilabel' if multilabel else 'binary'} segmentation")
 
-    results = separate_components_batch(
+    # Parallel discovery and processing
+    results = separate_components_lazy_batch(
         root=root,
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        segmentation_session_id=segmentation_session_id,
-        connectivity=connectivity,
-        min_size=min_size,
-        session_id_template=output_session_id_template,
-        output_user_id=output_user_id,
-        multilabel=multilabel,
+        config=task_config,
         run_names=run_names_list,
         workers=workers,
+        connectivity=connectivity,
+        min_size=min_size,
+        multilabel=multilabel,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
     total_components = sum(result.get("components_created", 0) for result in results.values() if result)
 
+    all_errors = []
+    for result in results.values():
+        if result and result.get("errors"):
+            all_errors.extend(result["errors"])
+
     logger.info(f"Completed: {successful}/{len(results)} runs processed successfully")
     logger.info(f"Total components created: {total_components}")
+
+    if all_errors:
+        logger.warning(f"Encountered {len(all_errors)} errors during processing")
+        for error in all_errors[:5]:
+            logger.warning(f"  - {error}")
+        if len(all_errors) > 5:
+            logger.warning(f"  ... and {len(all_errors) - 5} more errors")

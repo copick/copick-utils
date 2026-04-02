@@ -18,7 +18,7 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "copick>=1.22.0",
+    "copick>=1.23.1",
     "click",
     "click-option-group",
     "numpy",
@@ -32,7 +32,8 @@ dependencies = [
     "tqdm",
     "scikit-learn",
     "shapely",
-    "rtree"
+    "rtree",
+    "matplotlib",
 ]
 authors = [
     { name = "Kyle Harrington", email = "czi@kyleharrington.com" },
@@ -77,6 +78,9 @@ fit_spline = "copick_utils.cli.processing_commands:fit_spline"
 validbox = "copick_utils.cli.processing_commands:validbox"
 hull = "copick_utils.cli.processing_commands:hull"
 split = "copick_utils.cli.processing_commands:split"
+expand_labels = "copick_utils.cli.processing_commands:expand_labels"
+seg_stats = "copick_utils.cli.processing_commands:seg_stats"
+combine = "copick_utils.cli.processing_commands:combine"
 
 [project.entry-points."copick.logical.commands"]
 meshop = "copick_utils.cli.logical_commands:meshop"

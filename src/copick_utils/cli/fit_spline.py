@@ -3,9 +3,10 @@ import copick
 from click_option_group import optgroup
 from copick.cli.util import add_config_option, add_debug_option
 from copick.util.log import get_logger
-from copick.util.uri import expand_output_uri, parse_copick_uri
+from copick.util.uri import parse_copick_uri
 
 from copick_utils.cli.util import add_input_option, add_output_option
+from copick_utils.util.config_models import create_simple_config
 
 
 @click.command(
@@ -115,59 +116,44 @@ def fit_spline(
         # Process specific skeleton
         copick process fit_spline -i "skeleton:skel/skel-0@10.0" -o "skeleton:spline/spline-0" --spacing-distance 2.0 --voxel-spacing 10.0
     """
-    from copick_utils.process.spline_fitting import fit_spline_batch
+    from copick_utils.process.spline_fitting import fit_spline_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Expand output URI with smart defaults
+    # Create config directly from URIs with smart defaults
     try:
-        output_uri = expand_output_uri(
-            output_uri=output_uri,
+        task_config = create_simple_config(
             input_uri=input_uri,
             input_type="segmentation",
+            output_uri=output_uri,
             output_type="picks",
-            command_name="fit_spline",
-            individual_outputs=False,
+            command_name="spline",
         )
     except ValueError as e:
-        raise click.BadParameter(f"Error expanding output URI: {e}") from e
+        raise click.BadParameter(str(e)) from e
 
-    # Parse input URI
-    try:
-        input_params = parse_copick_uri(input_uri, "segmentation")
-    except ValueError as e:
-        raise click.BadParameter(f"Invalid input URI: {e}") from e
-
-    segmentation_name = input_params["name"]
-    segmentation_user_id = input_params["user_id"]
-    session_id_pattern = input_params["session_id"]
-
-    # Parse output URI (now fully expanded)
-    try:
-        output_params = parse_copick_uri(output_uri, "picks")
-    except ValueError as e:
-        raise click.BadParameter(f"Invalid output URI: {e}") from e
-
-    output_user_id = output_params["user_id"]
-    output_session_id_template = output_params["session_id"]
-
-    logger.info(f"Fitting splines to segmentations '{segmentation_name}'")
-    logger.info(f"Source segmentations: {segmentation_user_id} matching pattern '{session_id_pattern}'")
+    # Extract parameters for logging only
+    input_params = parse_copick_uri(input_uri, "segmentation")
+    logger.info(f"Fitting splines to segmentations '{input_params['name']}'")
+    logger.info(
+        f"Source segmentation pattern: {input_params['name']} ({input_params['user_id']}/{input_params['session_id']})",
+    )
     logger.info(f"Spacing distance: {spacing_distance}, degree: {degree}")
     logger.info(f"Smoothing factor: {smoothing_factor}, connectivity radius: {connectivity_radius}")
-    logger.info(f"Compute transforms: {compute_transforms}, output user ID: {output_user_id}")
+    logger.info(f"Compute transforms: {compute_transforms}")
     logger.info(f"Curvature threshold: {curvature_threshold}, max iterations: {max_iterations}")
     logger.info(f"Voxel spacing: {voxel_spacing}")
-    logger.info(f"Output session ID template: '{output_session_id_template}'")
 
-    results = fit_spline_batch(
+    # Parallel discovery and processing - no sequential bottleneck!
+    results = fit_spline_lazy_batch(
         root=root,
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        session_id_pattern=session_id_pattern,
+        config=task_config,
+        run_names=run_names_list,
+        workers=workers,
+        # Tool-specific kwargs passed to converter via converter_kwargs
         spacing_distance=spacing_distance,
         smoothing_factor=smoothing_factor,
         degree=degree,
@@ -175,17 +161,26 @@ def fit_spline(
         compute_transforms=compute_transforms,
         curvature_threshold=curvature_threshold,
         max_iterations=max_iterations,
-        output_session_id_template=output_session_id_template,
-        output_user_id=output_user_id,
         voxel_spacing=voxel_spacing,
-        run_names=run_names_list,
-        workers=workers,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
     total_picks = sum(result.get("picks_created", 0) for result in results.values() if result)
-    total_processed = sum(result.get("segmentations_processed", 0) for result in results.values() if result)
+    total_processed = sum(result.get("processed", 0) for result in results.values() if result)
+
+    # Collect all errors
+    all_errors = []
+    for result in results.values():
+        if result and result.get("errors"):
+            all_errors.extend(result["errors"])
 
     logger.info(f"Completed: {successful}/{len(results)} runs processed successfully")
-    logger.info(f"Total segmentations processed: {total_processed}")
+    logger.info(f"Total conversion tasks completed: {total_processed}")
     logger.info(f"Total picks created: {total_picks}")
+
+    if all_errors:
+        logger.warning(f"Encountered {len(all_errors)} errors during processing")
+        for error in all_errors[:5]:  # Show first 5 errors
+            logger.warning(f"  - {error}")
+        if len(all_errors) > 5:
+            logger.warning(f"  ... and {len(all_errors) - 5} more errors")

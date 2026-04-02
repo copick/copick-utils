@@ -8,6 +8,7 @@ from copick.util.log import get_logger
 from copick.util.uri import parse_copick_uri
 
 from copick_utils.cli.util import add_input_option, add_output_option, add_workers_option
+from copick_utils.util.config_models import create_simple_config
 
 
 @click.command(
@@ -36,13 +37,19 @@ from copick_utils.cli.util import add_input_option, add_output_option, add_worke
     "--min-size",
     type=float,
     default=None,
-    help="Minimum component volume in cubic angstroms (Å³) to keep (optional).",
+    help="Minimum component volume to keep (optional). Unit set by --size-unit.",
 )
 @optgroup.option(
     "--max-size",
     type=float,
     default=None,
-    help="Maximum component volume in cubic angstroms (Å³) to keep (optional).",
+    help="Maximum component volume to keep (optional). Unit set by --size-unit.",
+)
+@optgroup.option(
+    "--size-unit",
+    type=click.Choice(["angstrom", "voxel"]),
+    default="angstrom",
+    help="Unit for --min-size and --max-size: 'angstrom' for Å³, 'voxel' for cubic voxels.",
 )
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
@@ -55,6 +62,7 @@ def filter_components(
     connectivity,
     min_size,
     max_size,
+    size_unit,
     workers,
     output_uri,
     debug,
@@ -63,8 +71,8 @@ def filter_components(
     Filter connected components in segmentations by size.
 
     This command identifies connected components in a segmentation and removes those
-    that fall outside the specified size range (in cubic angstroms). Useful for
-    removing noise, small artifacts, or overly large components.
+    that fall outside the specified size range. Sizes can be specified in cubic
+    angstroms (default) or cubic voxels using --size-unit.
 
     \b
     URI Format:
@@ -75,71 +83,63 @@ def filter_components(
         # Remove small noise components (keep only larger than 50000 Å³)
         copick process filter-components -i "membrane:user1/auto-001@10.0" -o "membrane_clean" --min-size 50000
 
+        # Filter by cubic voxels instead of angstroms
+        copick process filter-components -i "membrane:user1/auto-001@10.0" -o "membrane_clean" --min-size 50 --size-unit voxel
+
         # Keep only medium-sized components (between 10000 and 1000000 Å³)
         copick process filter-components -i "particles:user1/.*@10.0" -o "particles_filtered" --min-size 10000 --max-size 1000000
-
-        # Remove large components (keep only smaller than 500000 Å³)
-        copick process filter-components -i "noise:user1/pred@10.0" -o "small_features" --max-size 500000
     """
+    from copick_utils.process.filter_components import filter_components_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Parse input URI
-    try:
+    # Convert voxel sizes to angstrom³ if needed
+    if size_unit == "voxel":
+        # Parse voxel spacing from URI for conversion
         input_params = parse_copick_uri(input_uri, "segmentation")
-    except ValueError as e:
-        raise click.BadParameter(f"Invalid input URI: {e}") from e
+        vs_raw = input_params.get("voxel_spacing")
+        if vs_raw is None or vs_raw == "*":
+            raise click.BadParameter("--size-unit voxel requires voxel spacing in the input URI (e.g., @10.0)")
+        voxel_volume = float(vs_raw) ** 3
+        if min_size is not None:
+            min_size = min_size * voxel_volume
+        if max_size is not None:
+            max_size = max_size * voxel_volume
 
-    segmentation_name = input_params["name"]
-    segmentation_user_id = input_params["user_id"]
-    segmentation_session_id = input_params["session_id"]
-    voxel_spacing = input_params.get("voxel_spacing")
-
-    if voxel_spacing is None:
-        raise click.BadParameter("Input URI must include voxel spacing (e.g., @10.0)")
-
-    # Parse output URI - if no voxel spacing specified, inherit from input
-    if "@" not in output_uri:
-        output_uri = f"{output_uri}@{voxel_spacing}"
-
+    # Create config from URIs with smart defaults
     try:
-        output_params = parse_copick_uri(output_uri, "segmentation")
+        task_config = create_simple_config(
+            input_uri=input_uri,
+            input_type="segmentation",
+            output_uri=output_uri,
+            output_type="segmentation",
+            command_name="filter-components",
+        )
     except ValueError as e:
-        raise click.BadParameter(f"Invalid output URI: {e}") from e
+        raise click.BadParameter(str(e)) from e
 
-    output_name = output_params["name"]
-    output_user_id = output_params["user_id"]
-    output_session_id = output_params["session_id"]
-
-    logger.info(f"Filtering components for segmentation '{segmentation_name}'")
-    logger.info(f"Input segmentation: {segmentation_user_id}/{segmentation_session_id} @ {voxel_spacing}Å")
-    logger.info(f"Output segmentation: {output_name} ({output_user_id}/{output_session_id})")
+    # Log parameters
+    input_params = parse_copick_uri(input_uri, "segmentation")
+    logger.info(f"Filtering components for segmentation '{input_params['name']}'")
+    logger.info(f"Source segmentation pattern: {input_params['user_id']}/{input_params['session_id']}")
     logger.info(f"Connectivity: {connectivity}")
     if min_size is not None:
         logger.info(f"Minimum size: {min_size} Å³")
     if max_size is not None:
         logger.info(f"Maximum size: {max_size} Å³")
 
-    # Import batch function
-    from copick_utils.process.filter_components import filter_components_batch
-
-    # Process runs
-    results = filter_components_batch(
+    # Parallel discovery and processing
+    results = filter_components_lazy_batch(
         root=root,
-        segmentation_name=segmentation_name,
-        segmentation_user_id=segmentation_user_id,
-        segmentation_session_id=segmentation_session_id,
-        voxel_spacing=voxel_spacing,
+        config=task_config,
+        run_names=run_names_list,
+        workers=workers,
         connectivity=connectivity,
         min_size=min_size,
         max_size=max_size,
-        output_user_id=output_user_id,
-        output_session_id=output_session_id,
-        run_names=run_names_list,
-        workers=workers,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
@@ -147,7 +147,6 @@ def filter_components(
     total_removed = sum(result.get("components_removed", 0) for result in results.values() if result)
     total_voxels = sum(result.get("voxels_kept", 0) for result in results.values() if result)
 
-    # Collect all errors
     all_errors = []
     for result in results.values():
         if result and result.get("errors"):
@@ -160,7 +159,7 @@ def filter_components(
 
     if all_errors:
         logger.warning(f"Encountered {len(all_errors)} errors during processing")
-        for error in all_errors[:5]:  # Show first 5 errors
+        for error in all_errors[:5]:
             logger.warning(f"  - {error}")
         if len(all_errors) > 5:
             logger.warning(f"  ... and {len(all_errors) - 5} more errors")

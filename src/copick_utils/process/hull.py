@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple
 import trimesh as tm
 from copick.util.log import get_logger
 
-from copick_utils.converters.converter_common import create_batch_converter, store_mesh_with_stats
+from copick_utils.converters.converter_common import store_mesh_with_stats
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 
 if TYPE_CHECKING:
@@ -89,15 +89,6 @@ def compute_hull(
         logger.error(f"Error computing {hull_type} hull: {e}")
         return None
 
-
-# Create batch converter
-hull_from_mesh_batch = create_batch_converter(
-    compute_hull,
-    "Computing hull from meshes",
-    "mesh",
-    "mesh",
-    min_points=0,
-)
 
 # Lazy batch converter for new architecture
 hull_lazy_batch = create_lazy_batch_converter(
