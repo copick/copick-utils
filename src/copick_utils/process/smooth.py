@@ -45,26 +45,43 @@ def _smooth_via_mesh(
     Returns:
         Smoothed binary segmentation array with same shape as input.
     """
+    import time
+
     seg = binary_seg.astype(np.float32)
+    logger.debug(
+        f"Input shape: {binary_seg.shape}, voxel_size: {voxel_size}, foreground voxels: {np.count_nonzero(binary_seg)}",
+    )
 
     # 1. Extract surface mesh
+    t0 = time.perf_counter()
     verts, faces, *_ = marching_cubes(seg, level=0.5, spacing=voxel_size)
+    # marching_cubes returns vertices in (z, y, x) order; mesh_to_volume expects (x, y, z)
+    verts = verts[:, ::-1]
     mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+    logger.debug(f"Marching cubes: {time.perf_counter() - t0:.2f}s — {len(verts)} vertices, {len(faces)} faces")
 
     # 2. Taubin smoothing
+    t0 = time.perf_counter()
     trimesh.smoothing.filter_taubin(
         mesh,
         lamb=taubin_lambda,
         nu=taubin_nu,
         iterations=iterations,
     )
+    logger.debug(f"Taubin smoothing ({iterations} iters): {time.perf_counter() - t0:.2f}s")
 
     # 3. Re-rasterize using dual-direction ray-casting (much faster than mesh.contains)
+    t0 = time.perf_counter()
     shape = binary_seg.shape  # (z, y, x)
     voxel_dims = (shape[2], shape[1], shape[0])  # mesh_to_volume expects (x, y, z)
     voxel_spacing = voxel_size[0]  # isotropic
 
-    return mesh_to_volume(mesh, voxel_dims, voxel_spacing)
+    result = mesh_to_volume(mesh, voxel_dims, voxel_spacing)
+    logger.debug(
+        f"Re-rasterize (ray-cast): {time.perf_counter() - t0:.2f}s — output foreground voxels: {np.count_nonzero(result)}",
+    )
+
+    return result
 
 
 def _smooth_membrane_via_mesh(
@@ -92,8 +109,16 @@ def _smooth_membrane_via_mesh(
     Returns:
         Smoothed membrane segmentation array with same shape as input.
     """
+    import time
+
+    logger.debug(f"Membrane input shape: {membrane_seg.shape}, dilation_voxels: {dilation_voxels}")
+
+    t0 = time.perf_counter()
     struct = generate_binary_structure(3, 1)
     dilated = binary_dilation(membrane_seg, structure=struct, iterations=dilation_voxels)
+    logger.debug(
+        f"Dilation ({dilation_voxels} iters): {time.perf_counter() - t0:.2f}s — dilated foreground: {np.count_nonzero(dilated)}",
+    )
 
     smoothed_volume = _smooth_via_mesh(
         dilated,
@@ -104,8 +129,14 @@ def _smooth_membrane_via_mesh(
     )
 
     # Keep only the surface shell at the original thickness
+    t0 = time.perf_counter()
     eroded = binary_erosion(smoothed_volume, structure=struct, iterations=dilation_voxels)
-    return smoothed_volume & ~eroded
+    result = smoothed_volume & ~eroded
+    logger.debug(
+        f"Erosion + shell extraction: {time.perf_counter() - t0:.2f}s — shell foreground: {np.count_nonzero(result)}",
+    )
+
+    return result
 
 
 # ── Copick wrappers ───────────────────────────────────────────────────────────
