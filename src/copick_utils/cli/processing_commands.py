@@ -8,6 +8,7 @@ from copick_utils.cli.hull import hull
 from copick_utils.cli.seg_stats import seg_stats
 from copick_utils.cli.separate_components import separate_components
 from copick_utils.cli.skeletonize import skeletonize
+from copick_utils.cli.smooth import smooth
 from copick_utils.cli.split_labels import split
 from copick_utils.cli.validbox import validbox
 
@@ -23,4 +24,5 @@ __all__ = [
     "combine",
     "expand_labels",
     "seg_stats",
+    "smooth",
 ]

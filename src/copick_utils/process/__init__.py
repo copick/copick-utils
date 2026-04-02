@@ -14,6 +14,12 @@ from .skeletonize import (
     skeletonize_lazy_batch,
     skeletonize_segmentation,
 )
+from .smooth import (
+    smooth_membrane_lazy_batch,
+    smooth_membrane_segmentation,
+    smooth_mesh_lazy_batch,
+    smooth_mesh_segmentation,
+)
 from .spline_fitting import (
     SkeletonSplineFitter,
     fit_spline_lazy_batch,
@@ -47,6 +53,10 @@ __all__ = [
     "fit_spline_to_skeleton",
     "fit_spline_to_segmentation",
     "fit_spline_lazy_batch",
+    "smooth_mesh_segmentation",
+    "smooth_mesh_lazy_batch",
+    "smooth_membrane_segmentation",
+    "smooth_membrane_lazy_batch",
     "create_validbox_mesh",
     "generate_validbox",
     "validbox_batch",
