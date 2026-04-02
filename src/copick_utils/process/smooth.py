@@ -10,6 +10,7 @@ from scipy.ndimage import binary_dilation, binary_erosion, generate_binary_struc
 from skimage.measure import marching_cubes
 
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.converters.segmentation_from_mesh import mesh_to_volume
 
 if TYPE_CHECKING:
     from copick.models import CopickRun, CopickSegmentation
@@ -32,11 +33,11 @@ def _smooth_via_mesh(
 
     1. Marching cubes to extract surface mesh in physical coordinates.
     2. Taubin smoothing (lambda/nu algorithm — tangential, volume-preserving).
-    3. Re-rasterize onto the original voxel grid.
+    3. Re-rasterize onto the original voxel grid using efficient ray-casting.
 
     Args:
         binary_seg: Binary segmentation array (z, y, x).
-        voxel_size: Physical voxel size (z, y, x) in any consistent unit.
+        voxel_size: Physical voxel size (z, y, x) in any consistent unit (must be isotropic).
         taubin_lambda: Positive shrink factor (0 < lambda < 1).
         taubin_nu: Negative inflate factor (nu < -lambda, typically ~ -lambda - 0.03).
         iterations: Number of Taubin lambda/nu steps.
@@ -58,20 +59,12 @@ def _smooth_via_mesh(
         iterations=iterations,
     )
 
-    # 3. Re-rasterize onto original grid
-    shape = binary_seg.shape
-    vz, vy, vx = voxel_size
+    # 3. Re-rasterize using dual-direction ray-casting (much faster than mesh.contains)
+    shape = binary_seg.shape  # (z, y, x)
+    voxel_dims = (shape[2], shape[1], shape[0])  # mesh_to_volume expects (x, y, z)
+    voxel_spacing = voxel_size[0]  # isotropic
 
-    # Voxel-centre coordinates in physical units
-    zc = (np.arange(shape[0]) + 0.5) * vz
-    yc = (np.arange(shape[1]) + 0.5) * vy
-    xc = (np.arange(shape[2]) + 0.5) * vx
-    ZZ, YY, XX = np.meshgrid(zc, yc, xc, indexing="ij")
-    pts = np.column_stack([ZZ.ravel(), YY.ravel(), XX.ravel()])
-
-    # Ray-casting: points inside closed mesh
-    inside = mesh.contains(pts)
-    return inside.reshape(shape)
+    return mesh_to_volume(mesh, voxel_dims, voxel_spacing)
 
 
 def _smooth_membrane_via_mesh(
