@@ -10,7 +10,6 @@ from scipy.ndimage import binary_dilation, binary_erosion, generate_binary_struc
 from skimage.measure import marching_cubes
 
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
-from copick_utils.converters.segmentation_from_mesh import mesh_to_volume
 
 if TYPE_CHECKING:
     from copick.models import CopickRun, CopickSegmentation
@@ -70,15 +69,49 @@ def _smooth_via_mesh(
     )
     logger.debug(f"Taubin smoothing ({iterations} iters): {time.perf_counter() - t0:.2f}s")
 
-    # 3. Re-rasterize using dual-direction ray-casting (much faster than mesh.contains)
+    # 3. Re-rasterize using trimesh voxelization + morphological fill
     t0 = time.perf_counter()
     shape = binary_seg.shape  # (z, y, x)
-    voxel_dims = (shape[2], shape[1], shape[0])  # mesh_to_volume expects (x, y, z)
     voxel_spacing = voxel_size[0]  # isotropic
 
-    result = mesh_to_volume(mesh, voxel_dims, voxel_spacing)
+    vg = mesh.voxelized(pitch=voxel_spacing).fill()
+
+    # Map VoxelGrid back into full-size output array
+    result = np.zeros(shape, dtype=bool)
+
+    # vg.transform[:3, 3] = origin in physical (x, y, z) coords
+    origin = vg.transform[:3, 3]
+    offset_x = int(round(origin[0] / voxel_spacing))
+    offset_y = int(round(origin[1] / voxel_spacing))
+    offset_z = int(round(origin[2] / voxel_spacing))
+
+    # vg.matrix is indexed as (i, j, k) corresponding to (x, y, z)
+    # Transpose to (z, y, x) to match output array
+    mat_zyx = vg.matrix.transpose(2, 1, 0)
+    sz, sy, sx = mat_zyx.shape
+
+    # Compute overlapping region with bounds clipping
+    src_z0 = max(-offset_z, 0)
+    dst_z0 = max(offset_z, 0)
+    src_y0 = max(-offset_y, 0)
+    dst_y0 = max(offset_y, 0)
+    src_x0 = max(-offset_x, 0)
+    dst_x0 = max(offset_x, 0)
+    cz = min(sz - src_z0, shape[0] - dst_z0)
+    cy = min(sy - src_y0, shape[1] - dst_y0)
+    cx = min(sx - src_x0, shape[2] - dst_x0)
+
+    if cz > 0 and cy > 0 and cx > 0:
+        result[dst_z0 : dst_z0 + cz, dst_y0 : dst_y0 + cy, dst_x0 : dst_x0 + cx] = mat_zyx[
+            src_z0 : src_z0 + cz,
+            src_y0 : src_y0 + cy,
+            src_x0 : src_x0 + cx,
+        ]
+
     logger.debug(
-        f"Re-rasterize (ray-cast): {time.perf_counter() - t0:.2f}s — output foreground voxels: {np.count_nonzero(result)}",
+        f"Re-rasterize (voxelize+fill): {time.perf_counter() - t0:.2f}s — "
+        f"voxel grid shape: {vg.matrix.shape}, offset: ({offset_x}, {offset_y}, {offset_z}), "
+        f"output foreground voxels: {np.count_nonzero(result)}",
     )
 
     return result
