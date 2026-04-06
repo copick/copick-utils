@@ -8,6 +8,10 @@ from .connected_components import (
     separate_connected_components_3d,
     separate_segmentation_components,
 )
+from .rescale import (
+    rescale_lazy_batch,
+    rescale_segmentation,
+)
 from .skeletonize import (
     TubeSkeletonizer3D,
     skeletonize_converter,
@@ -41,6 +45,8 @@ __all__ = [
     "skeletonize_segmentation",
     "skeletonize_converter",
     "skeletonize_lazy_batch",
+    "rescale_segmentation",
+    "rescale_lazy_batch",
     "split_multilabel_segmentation",
     "split_labels_batch",
     "SkeletonSplineFitter",
