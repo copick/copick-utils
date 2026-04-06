@@ -495,7 +495,6 @@ def lazy_conversion_worker(
                     "input_type",
                     "output_type",
                     "segmentation_name",
-                    "voxel_spacing",
                     "session_id_template",
                 ):
                     task_params.pop(key, None)
