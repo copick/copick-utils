@@ -10,6 +10,7 @@ from copick_utils.cli.seg_stats import seg_stats
 from copick_utils.cli.separate_components import separate_components
 from copick_utils.cli.skeletonize import skeletonize
 from copick_utils.cli.split_labels import split
+from copick_utils.cli.thickness_filter import thickness_filter
 from copick_utils.cli.validbox import validbox
 
 # All commands are now available for import by the main CLI
@@ -25,4 +26,5 @@ __all__ = [
     "expand_labels",
     "rescale",
     "seg_stats",
+    "thickness_filter",
 ]

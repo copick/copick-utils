@@ -28,6 +28,10 @@ from .split_labels import (
     split_labels_batch,
     split_multilabel_segmentation,
 )
+from .thickness_filter import (
+    thickness_filter_lazy_batch,
+    thickness_filter_segmentation,
+)
 from .validbox import (
     create_validbox_mesh,
     generate_validbox,
@@ -56,4 +60,6 @@ __all__ = [
     "create_validbox_mesh",
     "generate_validbox",
     "validbox_batch",
+    "thickness_filter_segmentation",
+    "thickness_filter_lazy_batch",
 ]

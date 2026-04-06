@@ -82,6 +82,7 @@ expand_labels = "copick_utils.cli.processing_commands:expand_labels"
 rescale = "copick_utils.cli.processing_commands:rescale"
 seg_stats = "copick_utils.cli.processing_commands:seg_stats"
 combine = "copick_utils.cli.processing_commands:combine"
+thickness_filter = "copick_utils.cli.processing_commands:thickness_filter"
 
 [project.entry-points."copick.logical.commands"]
 meshop = "copick_utils.cli.logical_commands:meshop"
