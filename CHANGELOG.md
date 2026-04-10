@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.4.0...copick-utils-v1.5.0) (2026-04-06)
+
+
+### ✨ Features
+
+* Add connected component statistics and expand labels. ([#55](https://github.com/copick/copick-utils/issues/55)) ([cdca933](https://github.com/copick/copick-utils/commit/cdca93395cbbdefc66d6c7846e47acf80f69cb36))
+* Command to rescale segmentations ([#58](https://github.com/copick/copick-utils/issues/58)) ([904256e](https://github.com/copick/copick-utils/commit/904256eede37d861dd7db2fcf94425b380b545ff))
+* EDT-based thickness filter ([#60](https://github.com/copick/copick-utils/issues/60)) ([0d15466](https://github.com/copick/copick-utils/commit/0d15466d1884528826ad084f4f5dff52af827301))
+* Normalize CLI types ([#53](https://github.com/copick/copick-utils/issues/53)) ([a055efb](https://github.com/copick/copick-utils/commit/a055efb134add53dfca59c87eac50f434cff104e))
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.13.0 to 6.15.0 ([#52](https://github.com/copick/copick-utils/issues/52)) ([74a9348](https://github.com/copick/copick-utils/commit/74a93487e58e476fae16f85c6f2e357bb9e72c94))
+* bump chanzuckerberg/github-actions from 6.15.0 to 6.15.1 ([#57](https://github.com/copick/copick-utils/issues/57)) ([a821114](https://github.com/copick/copick-utils/commit/a821114b6ff81c45887fc9b6e6adcbf01dc1373a))
+* Fix voxel spacing bug. ([#59](https://github.com/copick/copick-utils/issues/59)) ([19a08fb](https://github.com/copick/copick-utils/commit/19a08fb21cfa43320bca281f901fba8da33e6869))
+
 ## [1.4.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.3.0...copick-utils-v1.4.0) (2026-02-27)
 
 
