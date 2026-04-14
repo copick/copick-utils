@@ -416,9 +416,9 @@ def create_single_selector_config(
 def create_dual_selector_config(
     input1_uri: str,
     input2_uri: str,
-    input_type: Literal["mesh", "segmentation"],
+    input_type: Literal["picks", "mesh", "segmentation"],
     output_uri: str,
-    output_type: Literal["mesh", "segmentation"],
+    output_type: Literal["picks", "mesh", "segmentation"],
     pairing_method: str = "index_order",
     individual_outputs: bool = False,
     command_name: Optional[str] = None,
