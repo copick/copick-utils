@@ -411,6 +411,7 @@ def add_dual_input_options(object_type: str, func: click.Command = None) -> Call
         """Add --input1 and --input2 options to command."""
         # Determine help text based on object type
         format_examples = {
+            "picks": "object_name:user_id/session_id",
             "mesh": "object_name:user_id/session_id",
             "segmentation": "name:user_id/session_id@voxel_spacing",
         }
@@ -469,6 +470,7 @@ def add_multi_input_options(object_type: str, func: click.Command = None) -> Cal
     def add_multi_input_options_decorator(_func: click.Command) -> click.Command:
         """Add --input option to command."""
         format_examples = {
+            "picks": "object_name:user_id/session_id",
             "mesh": "object_name:user_id/session_id",
             "segmentation": "name:user_id/session_id@voxel_spacing",
         }
