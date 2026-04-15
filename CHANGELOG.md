@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.5.0...copick-utils-v1.6.0) (2026-04-15)
+
+
+### ✨ Features
+
+* Boundary detection tools.  ([#62](https://github.com/copick/copick-utils/issues/62)) ([7923dd1](https://github.com/copick/copick-utils/commit/7923dd1144dcf7f60b5c567ea3d9f4913ca9adc8))
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.15.1 to 6.20.0 ([#61](https://github.com/copick/copick-utils/issues/61)) ([47f1328](https://github.com/copick/copick-utils/commit/47f1328a1e56021578b586305f6450fa231f8bb2))
+
 ## [1.5.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.4.0...copick-utils-v1.5.0) (2026-04-06)
 
 
