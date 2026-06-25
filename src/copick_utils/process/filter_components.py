@@ -20,6 +20,7 @@ def _filter_components_by_size(
     connectivity: str = "all",
     min_size: Optional[float] = None,
     max_size: Optional[float] = None,
+    keep_largest: Optional[int] = None,
 ) -> Tuple[np.ndarray, int, int, list]:
     """
     Filter connected components in a segmentation by size.
@@ -33,6 +34,9 @@ def _filter_components_by_size(
                      "all" = face+edge+corner connectivity (26-connected in 3D)
         min_size: Minimum component volume in cubic angstroms (Å³) to keep (None = no minimum)
         max_size: Maximum component volume in cubic angstroms (Å³) to keep (None = no maximum)
+        keep_largest: If set, keep only the N largest components by voxel count (None = no limit).
+            Applied in addition to (intersected with) any min/max size filter, so a component is
+            kept only if it both passes the size range and ranks within the N largest.
 
     Returns:
         Tuple of (seg_filtered, num_kept, num_removed, component_info)
@@ -55,6 +59,14 @@ def _filter_components_by_size(
     # Use bincount for O(n) counting of all components in one pass
     counts = np.bincount(labeled_seg.ravel())
 
+    # When keeping only the N largest, determine which component ids qualify by rank.
+    # np.argsort is ascending; take the last N (largest), excluding background id 0.
+    largest_ids = None
+    if keep_largest is not None and num_components > 0:
+        component_ids = np.arange(1, num_components + 1)
+        order = component_ids[np.argsort(counts[1 : num_components + 1], kind="stable")]
+        largest_ids = {int(cid) for cid in order[-keep_largest:]}
+
     seg_filtered = np.zeros_like(seg, dtype=bool)
     component_info = []
     num_kept = 0
@@ -68,6 +80,8 @@ def _filter_components_by_size(
         if min_size is not None and component_volume < min_size:
             passes_filter = False
         if max_size is not None and component_volume > max_size:
+            passes_filter = False
+        if largest_ids is not None and component_id not in largest_ids:
             passes_filter = False
 
         info = {
@@ -96,6 +110,7 @@ def filter_segmentation_components(
     connectivity: str = "all",
     min_size: Optional[float] = None,
     max_size: Optional[float] = None,
+    keep_largest: Optional[int] = None,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
     """
@@ -110,6 +125,7 @@ def filter_segmentation_components(
         connectivity: Connectivity for connected components.
         min_size: Minimum component volume in cubic angstroms (Å³) to keep.
         max_size: Maximum component volume in cubic angstroms (Å³) to keep.
+        keep_largest: If set, keep only the N largest components by voxel count.
         **kwargs: Additional keyword arguments from lazy converter.
 
     Returns:
@@ -137,6 +153,7 @@ def filter_segmentation_components(
             connectivity=connectivity,
             min_size=min_size,
             max_size=max_size,
+            keep_largest=keep_largest,
         )
 
         output_seg = run.new_segmentation(
