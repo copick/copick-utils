@@ -18,7 +18,6 @@ picksin/picksout) cannot silently come back.
 import inspect
 
 import pytest
-
 from copick_utils.converters.caps_from_mesh import caps_from_mesh_lazy_batch
 from copick_utils.converters.ellipsoid_from_picks import ellipsoid_from_picks_lazy_batch
 from copick_utils.converters.mesh_from_picks import mesh_from_picks_lazy_batch

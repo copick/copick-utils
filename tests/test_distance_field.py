@@ -6,7 +6,6 @@ caller uses to index pick positions, otherwise distances are meaningless.
 
 import numpy as np
 import trimesh as tm
-
 from copick_utils.logical.distance_operations import _create_distance_field_from_mesh
 
 
