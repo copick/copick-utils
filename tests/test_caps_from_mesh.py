@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 import trimesh as tm
+
 from copick_utils.converters.caps_from_mesh import extract_slab_caps
 
 COS45 = np.cos(np.deg2rad(45.0))
