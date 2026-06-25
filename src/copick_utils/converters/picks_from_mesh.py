@@ -317,9 +317,9 @@ def picks_from_mesh(
 def picks_from_mesh_standard(
     mesh: "CopickMesh",
     run: "CopickRun",
-    output_object_name: str,
-    output_session_id: str,
-    output_user_id: str,
+    object_name: str,
+    session_id: str,
+    user_id: str,
     sampling_type: str,
     n_points: int,
     voxel_spacing: float,
@@ -337,9 +337,9 @@ def picks_from_mesh_standard(
     Args:
         mesh: CopickMesh object to sample from
         run: Copick run object
-        output_object_name: Name for the output picks
-        output_session_id: Session ID for the output picks
-        output_user_id: User ID for the output picks
+        object_name: Name for the output picks
+        session_id: Session ID for the output picks
+        user_id: User ID for the output picks
         sampling_type: Type of sampling ('inside', 'surface', 'outside', 'vertices')
         n_points: Number of points to sample (ignored for 'vertices')
         voxel_spacing: Voxel spacing for coordinate scaling
@@ -374,9 +374,9 @@ def picks_from_mesh_standard(
             sampling_type=sampling_type,
             n_points=n_points,
             run=run,
-            object_name=output_object_name,
-            session_id=output_session_id,
-            user_id=output_user_id,
+            object_name=object_name,
+            session_id=session_id,
+            user_id=user_id,
             voxel_spacing=voxel_spacing,
             tomo_type=tomo_type,
             min_dist=min_dist,

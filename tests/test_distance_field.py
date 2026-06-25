@@ -47,3 +47,22 @@ def test_distance_field_default_origin_is_mesh_bounds():
     # Surface voxels exist -> some zero-distance entries.
     assert df.min() <= spacing
     assert df.shape == shape
+
+
+def test_origin_choice_changes_lookup():
+    # Guards the clipmesh/clipseg fix: a mesh offset far from the origin (like a real valid-sample
+    # slab at z~959). When the target is indexed against origin (0,0,0) (as clipseg indexes its seg),
+    # the field MUST be built with origin=0 to read true distances. Building it at the mesh's own
+    # bounds (the old bug) and reading the origin-0 index gives a large, wrong distance.
+    sheet = _flat_sheet(400.0)
+    sheet.apply_translation([0.0, 0.0, 600.0])  # surface plane now at z=600
+    spacing = 20.0
+    shape = (40, 40, 50)  # covers x[0,800] y[0,800] z[0,1000] at origin 0
+    p = np.array([200.0, 200.0, 600.0])  # a point ON the surface -> true distance 0
+    idx = tuple(np.floor(p / spacing).astype(int))  # origin-0 index
+
+    df_correct = _create_distance_field_from_mesh(sheet, shape, spacing, origin=np.zeros(3))
+    df_buggy = _create_distance_field_from_mesh(sheet, shape, spacing)  # origin defaults to bounds[0]=(0,0,600)
+
+    assert df_correct[idx] <= spacing  # aligned -> ~0
+    assert df_buggy[idx] > 200.0  # misaligned -> large, wrong

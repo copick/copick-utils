@@ -305,12 +305,14 @@ def limit_mesh_by_distance(
                         return None
                     ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
 
-                # Create distance field from mesh
+                # Create distance field from mesh, aligned to the same origin the target vertices
+                # are indexed against below (mesh_bounds[0]).
                 distance_field = _create_distance_field_from_mesh(
                     ref_mesh,
                     field_shape,
                     field_voxel_spacing,
                     mesh_voxel_spacing,
+                    origin=mesh_bounds[0],
                 )
 
             else:  # reference_segmentation is not None
@@ -482,13 +484,31 @@ def limit_segmentation_by_distance(
                     return None
                 ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
 
-            # Create distance field from mesh
-            distance_field = _create_distance_field_from_mesh(
-                ref_mesh,
-                seg_array.shape,
-                segmentation.voxel_size,
-                mesh_voxel_spacing,
+            # Rasterize the reference-mesh surface onto the TARGET seg grid: (z,y,x) order, origin
+            # (0,0,0), at the seg's voxel size -- so the distance field is voxel-aligned with
+            # seg_array. (Passing seg_array.shape into _create_distance_field_from_mesh would be both
+            # origin-shifted AND axis-transposed, since that helper builds an (x,y,z) field.)
+            vs = segmentation.voxel_size
+            try:
+                occ = np.asarray(ref_mesh.voxelized(pitch=vs).points, dtype=float)  # (x,y,z) world coords
+            except Exception as e:  # pragma: no cover - voxelization rarely fails
+                logger.warning(f"Trimesh voxelization failed: {e}. Falling back to surface sampling.")
+                occ = np.asarray(ref_mesh.sample(200000), dtype=float)
+            idx = np.floor(occ / vs).astype(int)  # (x,y,z) voxel indices
+            nz, ny, nx = seg_array.shape
+            in_bounds = (
+                (idx[:, 0] >= 0)
+                & (idx[:, 0] < nx)
+                & (idx[:, 1] >= 0)
+                & (idx[:, 1] < ny)
+                & (idx[:, 2] >= 0)
+                & (idx[:, 2] < nz)
             )
+            idx = idx[in_bounds]
+            ref_vol = np.zeros(seg_array.shape, dtype=bool)  # (z,y,x)
+            if len(idx):
+                ref_vol[idx[:, 2], idx[:, 1], idx[:, 0]] = True
+            distance_field = _create_distance_field_from_segmentation(ref_vol.astype(np.uint8), vs)
 
         else:  # reference_segmentation is not None
             ref_seg_array = reference_segmentation.numpy()

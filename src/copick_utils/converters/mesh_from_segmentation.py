@@ -54,6 +54,8 @@ def mesh_from_segmentation(
     user_id: str,
     level: float = 0.5,
     step_size: int = 1,
+    voxel_spacing: Optional[float] = None,
+    **kwargs,
 ) -> Optional[Tuple["CopickMesh", Dict[str, int]]]:
     """
     Convert a CopickSegmentation to a mesh.

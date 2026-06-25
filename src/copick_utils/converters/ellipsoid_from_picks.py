@@ -315,7 +315,16 @@ def ellipsoid_from_picks(
 
 # Lazy batch converter for new architecture
 
+def ellipsoid_from_picks_standard(picks, run, object_name, session_id, user_id, voxel_spacing=None, **kwargs):
+    """Adapt ellipsoid_from_picks to the lazy-batch contract: take a CopickPicks and extract its points."""
+    pos, _ = picks.numpy()
+    if pos is None or len(pos) == 0:
+        logger.warning("Could not load pick data")
+        return None
+    return ellipsoid_from_picks(pos, run, object_name, session_id, user_id, **kwargs)
+
+
 ellipsoid_from_picks_lazy_batch = create_lazy_batch_converter(
-    converter_func=ellipsoid_from_picks,
+    converter_func=ellipsoid_from_picks_standard,
     task_description="Converting picks to ellipsoid meshes",
 )
