@@ -19,10 +19,10 @@ pip install copick-utils
 
 ## Citation
 
-If you use `copick-utils` in your research, please cite:
+If you use `copick-utils` in your research, then please cite:
 
 ```bibtex
-@article{harrington2024open,
+@article{harrington2024open, 
   title={Open-source Tools for CryoET Particle Picking Machine Learning Competitions},
   author={Harrington, Kyle I. and Zhao, Zhuowen and Schwartz, Jonathan and Kandel, Saugat and Ermel, Utz and Paraan, Mohammadreza and Potter, Clinton and Carragher, Bridget},
   journal={bioRxiv},
