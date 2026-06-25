@@ -202,51 +202,6 @@ def add_mesh_voxelization_options(func: click.Command) -> click.Command:
     return func
 
 
-def add_cap_extraction_options(func: click.Command) -> click.Command:
-    """
-    Add slab cap-extraction options for mesh-to-caps conversion commands.
-
-    Args:
-        func (click.Command): The Click command to which the options will be added.
-
-    Returns:
-        click.Command: The Click command with the cap-extraction options added.
-    """
-    opts = [
-        optgroup.option(
-            "--axis",
-            type=click.Choice(["x", "y", "z"]),
-            default="z",
-            help="Slab-normal axis in physical mesh coordinates (z = beam direction).",
-        ),
-        optgroup.option(
-            "--angle-threshold",
-            type=float,
-            default=45.0,
-            help="Max angle (degrees) between a face normal and the axis for a face to count as a "
-            "cap (rather than a side wall).",
-        ),
-        optgroup.option(
-            "--surface",
-            type=click.Choice(["both", "top", "bottom"]),
-            default="both",
-            help="Which cap surfaces to extract.",
-        ),
-        optgroup.option(
-            "--auto-axis/--no-auto-axis",
-            is_flag=True,
-            default=False,
-            help="Infer the slab normal from the mesh's thinnest bounding-box extent instead of "
-            "--axis (useful for strongly tilted slabs).",
-        ),
-    ]
-
-    for opt in reversed(opts):
-        func = opt(func)
-
-    return func
-
-
 def add_picks_painting_options(func: click.Command) -> click.Command:
     """
     Add picks painting options for picks-to-segmentation conversion commands.

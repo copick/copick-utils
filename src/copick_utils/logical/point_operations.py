@@ -90,12 +90,11 @@ def _check_points_in_segmentation(
 def picks_inclusion_by_mesh(
     picks: "CopickPicks",
     run: "CopickRun",
-    object_name: str,
-    session_id: str,
-    user_id: str,
+    pick_object_name: str,
+    pick_session_id: str,
+    pick_user_id: str,
     reference_mesh: Optional["CopickMesh"] = None,
     reference_segmentation: Optional["CopickSegmentation"] = None,
-    **kwargs,
 ) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
     """
     Filter picks to include only those inside a reference mesh or segmentation.
@@ -105,10 +104,10 @@ def picks_inclusion_by_mesh(
         reference_mesh: Reference CopickMesh (either this or reference_segmentation must be provided)
         reference_segmentation: Reference CopickSegmentation
         run: CopickRun object
-        object_name: Name for the output picks
-        session_id: Session ID for the output picks
-        user_id: User ID for the output picks
-        **kwargs: Additional keyword arguments (e.g. voxel_spacing, reference_tomogram_info; ignored)
+        pick_object_name: Name for the output picks
+        pick_session_id: Session ID for the output picks
+        pick_user_id: User ID for the output picks
+        **kwargs: Additional keyword arguments
 
     Returns:
         Tuple of (CopickPicks object, stats dict) or None if operation failed.
@@ -162,7 +161,7 @@ def picks_inclusion_by_mesh(
         included_transforms = transforms[inside_mask] if transforms is not None else None
 
         # Create output picks
-        output_picks = run.new_picks(object_name, session_id, user_id, exist_ok=True)
+        output_picks = run.new_picks(pick_object_name, pick_session_id, pick_user_id, exist_ok=True)
         output_picks.from_numpy(positions=included_points, transforms=included_transforms)
         output_picks.store()
 
@@ -178,12 +177,11 @@ def picks_inclusion_by_mesh(
 def picks_exclusion_by_mesh(
     picks: "CopickPicks",
     run: "CopickRun",
-    object_name: str,
-    session_id: str,
-    user_id: str,
+    pick_object_name: str,
+    pick_session_id: str,
+    pick_user_id: str,
     reference_mesh: Optional["CopickMesh"] = None,
     reference_segmentation: Optional["CopickSegmentation"] = None,
-    **kwargs,
 ) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
     """
     Filter picks to exclude those inside a reference mesh or segmentation.
@@ -193,10 +191,10 @@ def picks_exclusion_by_mesh(
         reference_mesh: Reference CopickMesh (either this or reference_segmentation must be provided)
         reference_segmentation: Reference CopickSegmentation
         run: CopickRun object
-        object_name: Name for the output picks
-        session_id: Session ID for the output picks
-        user_id: User ID for the output picks
-        **kwargs: Additional keyword arguments (e.g. voxel_spacing, reference_tomogram_info; ignored)
+        pick_object_name: Name for the output picks
+        pick_session_id: Session ID for the output picks
+        pick_user_id: User ID for the output picks
+        **kwargs: Additional keyword arguments
 
     Returns:
         Tuple of (CopickPicks object, stats dict) or None if operation failed.
@@ -253,7 +251,7 @@ def picks_exclusion_by_mesh(
         excluded_transforms = transforms[outside_mask] if transforms is not None else None
 
         # Create output picks
-        output_picks = run.new_picks(object_name, session_id, user_id, exist_ok=True)
+        output_picks = run.new_picks(pick_object_name, pick_session_id, pick_user_id, exist_ok=True)
         output_picks.from_numpy(positions=excluded_points, transforms=excluded_transforms)
         output_picks.store()
 

@@ -15,7 +15,6 @@ def split_multilabel_segmentation(
     segmentation: "CopickSegmentation",
     run: "CopickRun",
     output_user_id: str = "split",
-    labels: Optional[Dict[str, int]] = None,
 ) -> List["CopickSegmentation"]:
     """
     Split a multilabel segmentation into individual single-class binary segmentations.
@@ -27,11 +26,6 @@ def split_multilabel_segmentation(
         segmentation: Input multilabel segmentation to split
         run: CopickRun object containing the segmentation
         output_user_id: User ID for output segmentations (default: "split")
-        labels: Optional explicit ``{name: label_value}`` mapping. When provided, the
-            outputs are named by this mapping (instead of looking the label value up in
-            the pickable-objects config), and only the listed label values are split.
-            Useful when the segmentation's label values do not match the config object
-            labels (e.g. argmax predictions with values 1/2 vs config labels 102/25).
 
     Returns:
         List of created CopickSegmentation objects, one per label found in the input
@@ -49,34 +43,25 @@ def split_multilabel_segmentation(
     voxel_size = segmentation.voxel_size
     input_session_id = segmentation.session_id
 
-    if labels:
-        # Use the explicit name -> value mapping; only split the listed values.
-        label_items = [(int(value), name) for name, value in labels.items()]
-        logger.debug(f"Using explicit label map: {labels}")
-    else:
-        # Find all unique non-zero labels and resolve names from the config.
-        unique_labels = np.unique(volume)
-        unique_labels = unique_labels[unique_labels > 0]  # Skip background (0)
-        label_items = [(int(label_value), None) for label_value in unique_labels]
-        logger.debug(f"Found {len(unique_labels)} unique labels: {unique_labels.tolist()}")
+    # Find all unique non-zero labels
+    unique_labels = np.unique(volume)
+    unique_labels = unique_labels[unique_labels > 0]  # Skip background (0)
+
+    logger.debug(f"Found {len(unique_labels)} unique labels: {unique_labels.tolist()}")
 
     output_segmentations = []
 
     # Process each label
-    for label_value, mapped_name in label_items:
-        if mapped_name is not None:
-            object_name = mapped_name
-            logger.debug(f"Label {label_value} → object '{object_name}' (explicit map)")
-        else:
-            # Look up the PickableObject with this label
-            pickable_obj = next((obj for obj in root.config.pickable_objects if obj.label == label_value), None)
+    for label_value in unique_labels:
+        # Look up the PickableObject with this label
+        pickable_obj = next((obj for obj in root.config.pickable_objects if obj.label == label_value), None)
 
-            if pickable_obj is None:
-                logger.warning(f"No pickable object found for label {label_value}, using label value as name")
-                object_name = str(label_value)
-            else:
-                object_name = pickable_obj.name
-                logger.debug(f"Label {label_value} → object '{object_name}'")
+        if pickable_obj is None:
+            logger.warning(f"No pickable object found for label {label_value}, using label value as name")
+            object_name = str(label_value)
+        else:
+            object_name = pickable_obj.name
+            logger.debug(f"Label {label_value} → object '{object_name}'")
 
         # Create binary mask for this label
         binary_mask = (volume == label_value).astype(np.uint8)
@@ -124,7 +109,6 @@ def _split_labels_worker(
     segmentation_session_id: str,
     voxel_spacing: float,
     output_user_id: str,
-    labels: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Any]:
     """
     Worker function for batch splitting of multilabel segmentations.
@@ -167,7 +151,6 @@ def _split_labels_worker(
             segmentation=segmentation,
             run=run,
             output_user_id=output_user_id,
-            labels=labels,
         )
 
         # Collect object names created
@@ -194,7 +177,6 @@ def split_labels_batch(
     output_user_id: str = "split",
     run_names: Optional[List[str]] = None,
     workers: int = 8,
-    labels: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Any]:
     """
     Batch split multilabel segmentations across multiple runs.
@@ -208,8 +190,6 @@ def split_labels_batch(
         output_user_id: User ID for output segmentations (default: "split")
         run_names: List of run names to process. If None, processes all runs.
         workers: Number of worker processes (default: 8)
-        labels: Optional explicit ``{name: label_value}`` mapping for naming outputs
-            (see ``split_multilabel_segmentation``). None = resolve names from config.
 
     Returns:
         Dictionary with processing results and statistics per run
@@ -229,7 +209,6 @@ def split_labels_batch(
         segmentation_session_id=segmentation_session_id,
         voxel_spacing=voxel_spacing,
         output_user_id=output_user_id,
-        labels=labels,
     )
 
     return results

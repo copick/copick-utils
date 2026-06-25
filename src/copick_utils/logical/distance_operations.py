@@ -48,53 +48,71 @@ def _create_distance_field_from_mesh(
     target_shape: tuple,
     target_voxel_spacing: float,
     mesh_voxel_spacing: float = None,
-    origin: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     Create Euclidean distance field from reference mesh using voxelization and distance transform.
 
-    The mesh surface is rasterized onto a grid whose voxel (0,0,0) sits at ``origin`` (physical
-    x,y,z), so the field is aligned with the SAME coordinate origin the caller uses to convert pick
-    positions to voxel indices. Without this alignment the returned distances are meaningless (the
-    mesh voxelization has its own origin at ``mesh.bounds[0]``, which is not the pick-index origin).
-
     Args:
-        mesh: Reference trimesh object (open or closed; its surface is rasterized).
-        target_shape: Shape (nx, ny, nz) of the target distance field.
-        target_voxel_spacing: Voxel spacing of the target field (Angstrom).
-        mesh_voxel_spacing: Deprecated/unused alias kept for backward compatibility.
-        origin: Physical (x,y,z) coordinate of voxel (0,0,0). Defaults to ``mesh.bounds[0]``.
+        mesh: Reference trimesh object
+        target_shape: Shape of target array
+        target_voxel_spacing: Voxel spacing of target
+        mesh_voxel_spacing: Voxel spacing for mesh voxelization (defaults to target_voxel_spacing)
 
     Returns:
-        Distance field array (axis order x,y,z) with Euclidean distances to the mesh surface in
-        physical units.
+        Distance field array with exact Euclidean distances in physical units
     """
-    spacing = float(target_voxel_spacing)
-    target_shape = tuple(int(s) for s in target_shape)
-    origin = np.asarray(mesh.bounds[0] if origin is None else origin, dtype=float)
+    if mesh_voxel_spacing is None:
+        mesh_voxel_spacing = target_voxel_spacing
 
-    # World coordinates of the occupied (surface) voxels, independent of any grid origin.
-    occupied = None
+    # Calculate voxelization grid size based on target shape and spacing
+    physical_size = np.array(target_shape) * target_voxel_spacing
+    voxel_grid_shape = np.ceil(physical_size / mesh_voxel_spacing).astype(int)
+
+    # Voxelize the mesh
     try:
-        occupied = np.asarray(mesh.voxelized(pitch=spacing).points, dtype=float)
+        # Use trimesh's voxelization
+        voxel_grid = mesh.voxelized(pitch=mesh_voxel_spacing)
+        voxelized_array = voxel_grid.matrix
     except Exception as e:
-        logger.warning(f"Trimesh voxelization failed: {e}. Falling back to surface sampling.")
-    if occupied is None or len(occupied) == 0:
-        try:
-            occupied = np.asarray(mesh.sample(200000), dtype=float)
-        except Exception:
-            occupied = np.asarray(mesh.vertices, dtype=float)
+        logger.warning(f"Trimesh voxelization failed: {e}. Using fallback method.")
+        # Fallback: create a simple voxelization by checking mesh bounds
+        bounds = mesh.bounds
+        origin = bounds[0]
 
-    # Rasterize onto the origin-aligned grid (axis order x,y,z to match pick indexing).
-    voxelized_array = np.zeros(target_shape, dtype=bool)
-    idx = np.floor((occupied - origin) / spacing).astype(int)
-    in_bounds = np.all((idx >= 0) & (idx < np.array(target_shape)), axis=1)
-    idx = idx[in_bounds]
-    if len(idx):
-        voxelized_array[idx[:, 0], idx[:, 1], idx[:, 2]] = True
+        # Create coordinate grids
+        x_coords = np.arange(voxel_grid_shape[0]) * mesh_voxel_spacing + origin[0]
+        y_coords = np.arange(voxel_grid_shape[1]) * mesh_voxel_spacing + origin[1]
+        z_coords = np.arange(voxel_grid_shape[2]) * mesh_voxel_spacing + origin[2]
+
+        xx, yy, zz = np.meshgrid(x_coords, y_coords, z_coords, indexing="ij")
+        points = np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()])
+
+        # Check which points are inside the mesh
+        inside = mesh.contains(points)
+        voxelized_array = inside.reshape(voxel_grid_shape)
+
+    # Resample to target resolution if needed
+    if mesh_voxel_spacing != target_voxel_spacing:
+        from scipy.ndimage import zoom
+
+        zoom_factor = mesh_voxel_spacing / target_voxel_spacing
+        voxelized_array = zoom(voxelized_array.astype(float), zoom_factor, order=0) > 0.5
+
+    # Ensure shape matches target
+    if voxelized_array.shape != target_shape:
+        # Crop or pad to match target shape
+        result = np.zeros(target_shape, dtype=bool)
+
+        # Calculate valid regions for copying
+        copy_shape = np.minimum(voxelized_array.shape, target_shape)
+        slices_src = tuple(slice(0, s) for s in copy_shape)
+        slices_dst = tuple(slice(0, s) for s in copy_shape)
+
+        result[slices_dst] = voxelized_array[slices_src]
+        voxelized_array = result
 
     # Create distance field using distance transform
-    return _create_distance_field_from_segmentation(voxelized_array.astype(np.uint8), spacing)
+    return _create_distance_field_from_segmentation(voxelized_array.astype(np.uint8), target_voxel_spacing)
 
 
 def _get_tomogram_bounds(
@@ -654,14 +672,12 @@ def limit_picks_by_distance(
                 field_size = coord_bounds[1] - coord_bounds[0]
                 field_shape = np.ceil(field_size / field_voxel_spacing).astype(int)
 
-                # Create distance field from mesh in this coordinate space.
-                # Pass origin=coord_bounds[0] so the field aligns with the pick-index origin below.
+                # Create distance field from mesh in this coordinate space
                 distance_field = _create_distance_field_from_mesh(
                     ref_mesh,
                     field_shape,
                     field_voxel_spacing,
                     mesh_voxel_spacing,
-                    origin=coord_bounds[0],
                 )
 
                 # Convert pick coordinates to voxel indices in this field space

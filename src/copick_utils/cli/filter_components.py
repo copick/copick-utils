@@ -51,13 +51,6 @@ from copick_utils.util.config_models import create_simple_config
     default="angstrom",
     help="Unit for --min-size and --max-size: 'angstrom' for Å³, 'voxel' for cubic voxels.",
 )
-@optgroup.option(
-    "--keep-largest",
-    type=int,
-    default=None,
-    help="Keep only the N largest connected components by voxel count (e.g. 1 = keep only the "
-    "single largest). Applied in addition to any --min-size/--max-size filter.",
-)
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
 @add_output_option("segmentation", default_tool="filter-components")
@@ -70,7 +63,6 @@ def filter_components(
     min_size,
     max_size,
     size_unit,
-    keep_largest,
     workers,
     output_uri,
     debug,
@@ -138,10 +130,6 @@ def filter_components(
         logger.info(f"Minimum size: {min_size} Å³")
     if max_size is not None:
         logger.info(f"Maximum size: {max_size} Å³")
-    if keep_largest is not None:
-        if keep_largest < 1:
-            raise click.BadParameter("--keep-largest must be >= 1")
-        logger.info(f"Keeping only the {keep_largest} largest component(s)")
 
     # Parallel discovery and processing
     results = filter_components_lazy_batch(
@@ -152,7 +140,6 @@ def filter_components(
         connectivity=connectivity,
         min_size=min_size,
         max_size=max_size,
-        keep_largest=keep_largest,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
