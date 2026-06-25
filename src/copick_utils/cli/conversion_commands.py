@@ -3,6 +3,7 @@
 This module imports all conversion commands from specialized files for better organization.
 """
 
+from copick_utils.cli.mesh2caps import mesh2caps
 from copick_utils.cli.mesh2picks import mesh2picks
 from copick_utils.cli.mesh2seg import mesh2seg
 from copick_utils.cli.picks2ellipsoid import picks2ellipsoid
@@ -24,6 +25,8 @@ __all__ = [
     "picks2surface",
     # Mesh to picks commands
     "mesh2picks",
+    # Mesh surface extraction commands
+    "mesh2caps",
     # Segmentation conversion commands
     "picks2seg",
     "seg2picks",

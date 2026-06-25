@@ -1,5 +1,6 @@
 """Converters for different copick data types."""
 
+from copick_utils.converters.caps_from_mesh import caps_from_mesh
 from copick_utils.converters.ellipsoid_from_picks import ellipsoid_from_picks
 from copick_utils.converters.mesh_from_picks import mesh_from_picks
 from copick_utils.converters.mesh_from_segmentation import mesh_from_segmentation
@@ -12,6 +13,7 @@ from copick_utils.converters.sphere_from_picks import sphere_from_picks
 from copick_utils.converters.surface_from_picks import surface_from_picks
 
 __all__ = [
+    "caps_from_mesh",
     "mesh_from_segmentation",
     "picks_from_segmentation",
     "picks_from_mesh",

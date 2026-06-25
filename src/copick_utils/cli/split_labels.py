@@ -25,6 +25,15 @@ from copick_utils.cli.util import add_input_option, add_workers_option
 )
 @add_input_option("segmentation")
 @optgroup.group("\nTool Options", help="Options related to this tool.")
+@optgroup.option(
+    "--labels",
+    type=str,
+    default=None,
+    help="Explicit label map 'name:value,...' (e.g. 'sample:1,vacuum:2'). When set, outputs "
+    "are named by this map and only the listed label values are split. Use when the "
+    "segmentation's label values do not match the config object labels. Default: resolve "
+    "names from the pickable-objects config.",
+)
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
 @optgroup.option(
@@ -38,6 +47,7 @@ def split(
     config,
     run_names,
     input_uri,
+    labels,
     workers,
     output_user_id,
     debug,
@@ -100,9 +110,29 @@ def split(
             "Please specify exact segmentation name, user_id, and session_id.",
         )
 
+    # Parse optional explicit label map "name:value,..."
+    labels_map = None
+    if labels:
+        labels_map = {}
+        for pair in labels.split(","):
+            pair = pair.strip()
+            if not pair:
+                continue
+            if ":" not in pair:
+                raise click.BadParameter(f"--labels entries must be 'name:value', got '{pair}'")
+            name, _, value = pair.partition(":")
+            name = name.strip()
+            try:
+                labels_map[name] = int(value.strip())
+            except ValueError as e:
+                raise click.BadParameter(f"--labels value for '{name}' must be an integer: {value}") from e
+        if not labels_map:
+            raise click.BadParameter("--labels was provided but parsed to an empty map")
+
     logger.info(f"Splitting multilabel segmentation '{segmentation_name}'")
     logger.debug(f"Input: {segmentation_user_id}/{segmentation_session_id} @ {voxel_spacing}Å")
     logger.debug(f"Output user ID: {output_user_id}")
+    logger.debug(f"Label map: {labels_map}")
     logger.debug(f"Workers: {workers}")
 
     # Import batch function
@@ -118,6 +148,7 @@ def split(
         output_user_id=output_user_id,
         run_names=run_names_list,
         workers=workers,
+        labels=labels_map,
     )
 
     # Aggregate results
