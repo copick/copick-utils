@@ -86,6 +86,8 @@ def picks_from_segmentation(
     maxima_filter_size: int = 9,
     min_particle_size: int = 1000,
     max_particle_size: int = 50000,
+    voxel_spacing: Optional[float] = None,
+    **kwargs,
 ) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
     """
     Convert a CopickSegmentation to picks by extracting centroids.
