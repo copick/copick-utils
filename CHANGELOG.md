@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.7.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.6.0...copick-utils-v1.7.0) (2026-06-25)
+
+
+### ✨ Features
+
+* additional tools for boundary-based filtering ([#68](https://github.com/copick/copick-utils/issues/68)) ([3a1dbff](https://github.com/copick/copick-utils/commit/3a1dbff42304d419bfdbbaf53f47e710c8bd3951))
+
+
+### 🐞 Bug Fixes
+
+* bump actions/checkout from 6 to 7 ([#67](https://github.com/copick/copick-utils/issues/67)) ([515f4d9](https://github.com/copick/copick-utils/commit/515f4d904180320714357a746d7acec253cff5a5))
+* bump chanzuckerberg/github-actions from 6.20.0 to 6.22.1 ([#66](https://github.com/copick/copick-utils/issues/66)) ([5275f84](https://github.com/copick/copick-utils/commit/5275f843739a778ad4df9ca8d13b3d14f9581909))
+* bump googleapis/release-please-action from 4 to 5 ([#64](https://github.com/copick/copick-utils/issues/64)) ([cf212e6](https://github.com/copick/copick-utils/commit/cf212e6a20101035a113403729c0e034bd98f1a2))
+
 ## [1.6.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.5.0...copick-utils-v1.6.0) (2026-04-15)
 
 
