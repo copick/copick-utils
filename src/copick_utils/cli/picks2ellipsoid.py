@@ -79,21 +79,43 @@ def picks2ellipsoid(
     """
     Convert picks to ellipsoid meshes.
 
-    \b
+    Build an ellipsoid mesh for each pick (or for each cluster of picks), tessellating
+    the surface at the requested subdivision level. Picks can optionally be grouped first
+    with a clustering method (DBSCAN or k-means) so that one ellipsoid is fit per cluster,
+    and overlapping ellipsoids can be deduplicated by their center distance.
+
+    The result is written either as a single combined mesh per pick set or, with
+    `--individual-meshes`, as one mesh per instance (enabling the `{instance_id}`
+    placeholder in the output URI).
+
     URI Format:
+
+        \b
         Picks: object_name:user_id/session_id
         Meshes: object_name:user_id/session_id
 
-    \b
     Examples:
+
+        \b
         # Convert single pick set to single ellipsoid mesh
         copick convert picks2ellipsoid -i "ribosome:user1/manual-001" -o "ribosome:picks2ellipsoid/ellipsoid-001"
 
+        \b
         # Create individual ellipsoid meshes
-        copick convert picks2ellipsoid -i "ribosome:user1/manual-001" -o "ribosome:picks2ellipsoid/ellipsoid-{instance_id}" --individual-meshes
+        copick convert picks2ellipsoid -i "ribosome:user1/manual-001" \\
+            -o "ribosome:picks2ellipsoid/ellipsoid-{instance_id}" --individual-meshes
 
+        \b
         # Convert all manual picks using pattern matching
-        copick convert picks2ellipsoid -i "ribosome:user1/manual-.*" -o "ribosome:picks2ellipsoid/ellipsoid-{input_session_id}"
+        copick convert picks2ellipsoid -i "ribosome:user1/manual-.*" \\
+            -o "ribosome:picks2ellipsoid/ellipsoid-{input_session_id}"
+
+    See Also:
+
+        \b
+        copick convert picks2sphere: build sphere meshes from picks instead of ellipsoids
+        copick convert picks2mesh: build a general surface mesh from picks
+        copick convert mesh2caps: extract the top/bottom caps of a closed slab box mesh
     """
     from copick_utils.converters.ellipsoid_from_picks import ellipsoid_from_picks_lazy_batch
 

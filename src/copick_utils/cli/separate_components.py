@@ -57,27 +57,42 @@ def separate_components(
     output_uri,
     debug,
 ):
-    """Separate connected components in segmentations into individual segmentations.
+    """Separate connected components in segmentations.
 
-    \b
+    Connected-component analysis splits a segmentation into individual segmentations, one per
+    connected region. Connectivity can be `face` (6-connected), `face-edge` (18-connected), or
+    `all` (26-connected), and components smaller than `--min-size` (in cubic angstroms) are dropped.
+
+    For multilabel segmentations the analysis is performed on each label separately. Output
+    segmentations use the `{instance_id}` placeholder for auto-numbering (e.g. `inst-0`, `inst-1`).
+
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
 
-    \b
-    For multilabel segmentations, connected components analysis is performed on each
-    label separately. Output segmentations use {instance_id} placeholder for auto-numbering
-    (e.g., "inst-0", "inst-1", etc.).
-
-    \b
     Examples:
+
+        \b
         # Separate components with smart defaults (auto user_id and session template)
-        copick process separate_components -i "membrane:user1/manual-001@10.0" -o "{instance_id}"
+        copick process separate-components -i "membrane:user1/manual-001@10.0" -o "{instance_id}"
 
+        \b
         # Custom session prefix
-        copick process separate_components -i "membrane:user1/manual-001@10.0" -o "membrane:components/inst-{instance_id}"
+        copick process separate-components -i "membrane:user1/manual-001@10.0" \\
+            -o "membrane:components/inst-{instance_id}"
 
+        \b
         # Full URI specification
-        copick process separate_components -i "membrane:user1/manual-001@10.0" -o "membrane:components/comp-{instance_id}@10.0"
+        copick process separate-components -i "membrane:user1/manual-001@10.0" \\
+            -o "membrane:components/comp-{instance_id}@10.0"
+
+    See Also:
+
+        \b
+        copick process filter-components: drop or keep components by size instead of splitting them
+        copick process seg-stats: report connected-component size statistics before separating
+        copick process split: split a multilabel segmentation into single-class segmentations
     """
     from copick_utils.process.connected_components import separate_components_lazy_batch
 

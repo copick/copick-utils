@@ -79,21 +79,44 @@ def picks2sphere(
     """
     Convert picks to sphere meshes.
 
-    \b
+    Fits a sphere to the pick points using a least-squares fit and emits a triangulated icosphere
+    mesh at the fitted center and radius. The `--subdivisions` option controls the icosphere
+    tessellation, trading smoothness against face count.
+
+    When `--use-clustering` is set, the picks are grouped first; with `--all-clusters` one sphere is
+    fit per cluster, otherwise only the largest cluster is used. Overlapping spheres can be merged
+    with `--deduplicate-spheres` (centers closer than `--min-sphere-distance`, defaulting to half the
+    average radius, are treated as duplicates and volume-averaged). By default a single combined mesh
+    is written per run; `--individual-meshes` instead writes one mesh per sphere using the
+    `{instance_id}` placeholder in the output session id.
+
     URI Format:
+
+        \b
         Picks: object_name:user_id/session_id
         Meshes: object_name:user_id/session_id
 
-    \b
     Examples:
-        # Convert single pick set to single sphere mesh
+
+        \b
+        # Convert a single pick set to one sphere mesh
         copick convert picks2sphere -i "ribosome:user1/manual-001" -o "ribosome:picks2sphere/sphere-001"
 
-        # Create individual sphere meshes
-        copick convert picks2sphere -i "ribosome:user1/manual-001" -o "ribosome:picks2sphere/sphere-{instance_id}" --individual-meshes
+        \b
+        # Cluster the picks and write one sphere mesh per instance
+        copick convert picks2sphere --use-clustering --all-clusters --individual-meshes \\
+            -i "ribosome:user1/manual-001" -o "ribosome:picks2sphere/sphere-{instance_id}"
 
+        \b
         # Convert all manual picks using pattern matching
         copick convert picks2sphere -i "ribosome:user1/manual-.*" -o "ribosome:picks2sphere/sphere-{input_session_id}"
+
+    See Also:
+
+        \b
+        copick convert picks2ellipsoid: anisotropic alternative producing ellipsoid meshes
+        copick convert picks2mesh: build a mesh from picks via convex hull or alpha shapes
+        copick convert mesh2picks: inverse conversion, sampling picks back from a mesh
     """
     from copick_utils.converters.sphere_from_picks import sphere_from_picks_lazy_batch
 

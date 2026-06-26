@@ -20,7 +20,7 @@ from copick_utils.util.config_models import create_reference_config
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="Limit segmentations to voxels within distance of a reference surface.",
+    short_help="Limit segmentation voxels by distance to a reference.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -58,29 +58,47 @@ def clipseg(
     debug,
 ):
     """
-    Limit segmentations to voxels within a certain distance of a reference surface.
+    Limit segmentation voxels by distance to a reference.
 
-    \b
+    The reference surface can be a mesh, a segmentation, or a tomogram boundary. Each
+    input segmentation voxel is kept or dropped based on its distance to that surface.
+    By default, voxels within `--max-distance` (in angstroms) of the surface are kept;
+    pass `--invert` to instead keep only the voxels beyond that distance.
+
+    Provide exactly one reference via `--ref-mesh`, `--ref-seg`, or `--ref-tomogram`.
+
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
         Meshes: object_name:user_id/session_id
         Tomograms: tomo_type@voxel_spacing
 
-    \b
-    The reference surface can be a mesh, segmentation, or tomogram boundary.
-    By default, voxels within the specified distance will be kept.
-    Use --invert to keep voxels beyond the specified distance instead.
-
-    \b
     Examples:
-        # Keep voxels within 50Å of mesh reference
-        copick logical clipseg -i "membrane:user1/full-001@10.0" -rm "boundary:user1/boundary-001" -o "membrane:clipseg/near-001@10.0" --max-distance 50.0
 
-        # Remove voxels within 50Å of tomogram boundary (keep interior voxels)
-        copick logical clipseg -i "membrane:user1/full-001@10.0" -rt "wbp@10.0" -o "membrane:clipseg/interior-001@10.0" --max-distance 50.0 --invert
+        \b
+        # Keep voxels within 50Å of a mesh reference
+        copick logical clipseg -i "membrane:user1/full-001@10.0" \\
+            -rm "boundary:user1/boundary-001" \\
+            -o "membrane:clipseg/near-001@10.0" --max-distance 50.0
 
-        # Keep voxels beyond 100Å from segmentation reference
-        copick logical clipseg -i "membrane:user1/full-001@10.0" -rs "mask:user1/mask-001@10.0" -o "membrane:clipseg/far-001@10.0" --max-distance 100.0 --invert
+        \b
+        # Remove voxels within 50Å of the tomogram boundary (keep the interior)
+        copick logical clipseg -i "membrane:user1/full-001@10.0" \\
+            -rt "wbp@10.0" \\
+            -o "membrane:clipseg/interior-001@10.0" --max-distance 50.0 --invert
+
+        \b
+        # Keep voxels beyond 100Å from a segmentation reference
+        copick logical clipseg -i "membrane:user1/full-001@10.0" \\
+            -rs "mask:user1/mask-001@10.0" \\
+            -o "membrane:clipseg/far-001@10.0" --max-distance 100.0 --invert
+
+    See Also:
+
+        \b
+        copick logical clippicks: limit picks (not voxels) by distance to a reference
+        copick convert mesh2caps: extract a side-wall-free cap mesh to use as a reference
     """
     from copick_utils.logical.distance_operations import limit_segmentation_by_distance_lazy_batch
 

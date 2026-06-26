@@ -52,23 +52,36 @@ def validbox(
     """
     Generate valid area box meshes for tomographic reconstructions.
 
-    \b
+    Creates box meshes representing the valid imaging area of tomographic
+    reconstructions. The box dimensions are derived from the tomogram voxel
+    dimensions and can be optionally rotated around the Z-axis, which is useful
+    when the specimen was imaged at an in-plane tilt.
+
+    The resulting slab mesh can be passed downstream to `copick convert mesh2caps`
+    (to keep only the top/bottom caps) and to `copick logical clippicks` (to
+    select particles inside the valid imaging volume).
+
     URI Format:
+
+        \b
         Meshes: object_name:user_id/session_id
         Tomograms: tomo_type@voxel_spacing
 
-    \b
-    Creates box meshes representing the valid imaging area of tomographic
-    reconstructions. The box dimensions are based on the tomogram voxel dimensions
-    and can be optionally rotated around the Z-axis.
-
-    \b
     Examples:
+
+        \b
         # Generate validbox meshes for all runs
         copick process validbox --tomogram wbp@10.0 -o "validbox"
 
-        # Generate with rotation and specific tomogram type
+        \b
+        # Generate with rotation and a specific tomogram type
         copick process validbox -t imod@10.0 --angle 45.0 -o "validbox/rotated"
+
+    See Also:
+
+        \b
+        copick convert mesh2caps: extract the top/bottom caps of the validbox slab
+        copick logical clippicks: select picks inside the valid imaging volume
     """
     from copick_utils.process.validbox import validbox_batch
 

@@ -57,21 +57,31 @@ def mesh2caps(
     The resulting open mesh feeds ``copick logical clippicks`` to select particles within a distance
     of the top/bottom of the specimen WITHOUT the side walls contaminating the distance field.
 
-    \b
     URI Format:
+
+        \b
         Meshes: object_name:user_id/session_id
 
-    \b
     Examples:
+
+        \b
         # Extract both caps of the valid-sample slab
         copick convert mesh2caps -i "valid-sample:meshop/0" -o "valid-sample-caps:mesh2caps/0"
 
+        \b
         # Extract only the top cap, with a tighter cap angle
         copick convert mesh2caps --surface top --angle-threshold 30 \\
             -i "valid-sample:meshop/0" -o "valid-sample-caps:mesh2caps/top-0"
 
+        \b
         # Strongly tilted slab: infer the slab normal automatically
         copick convert mesh2caps --auto-axis -i "valid-sample:meshop/0" -o "valid-sample-caps:mesh2caps/0"
+
+    See Also:
+
+        \b
+        copick logical clippicks: select picks by distance to the extracted caps
+        copick logical meshop: build the slab box the caps are extracted from
     """
     from copick_utils.converters.caps_from_mesh import caps_from_mesh_lazy_batch
 

@@ -2,24 +2,16 @@ import numpy as np
 
 
 def tomogram(run, input_volume, voxel_size=10, algorithm="wbp"):
-    """
-    Writes a volumetric tomogram into an OME-Zarr format within a Copick directory.
+    """Write a volumetric tomogram into a copick run as OME-Zarr.
 
-    Parameters:
-    -----------
-    run : copick.Run
-        The current Copick run object.
-    input_volume : np.ndarray
-        The volumetric tomogram data to be written.
-    voxel_size : float, optional
-        The size of the voxels in physical units. Default is 10.
-    algorithm : str, optional
-        The tomographic reconstruction algorithm to use. Default is 'wbp'.
+    Reuses the voxel spacing and tomogram for `algorithm` if they exist, creating
+    them otherwise, then writes `input_volume` (building the multiscale pyramid).
 
-    Returns:
-    --------
-    copick.Tomogram
-        The created or modified tomogram object.
+    Args:
+        run: The copick run to write into.
+        input_volume: The tomogram volume to write, shape (Z, Y, X).
+        voxel_size: Voxel spacing in angstroms.
+        algorithm: Tomogram algorithm / type to write under (e.g. `wbp`).
     """
 
     # Retrieve or create voxel spacing
@@ -45,30 +37,20 @@ def segmentation(
     voxel_size=10,
     multilabel=True,
 ):
-    """
-    Writes a segmentation into an OME-Zarr format within a Copick directory.
+    """Write a segmentation into a copick run as OME-Zarr.
 
-    Parameters:
-    -----------
-    run : copick.Run
-        The current Copick run object.
-    seg_vol : np.ndarray
-        The segmentation data to be written.
-    user_id : str
-        The ID of the user creating the segmentation.
-    name : str, optional
-        The name of the segmentation dataset to be created or modified. Default is 'segmentation'.
-    session_id : str, optional
-        The session ID for this segmentation. Default is '0'.
-    voxel_size : float, optional
-        The size of the voxels in physical units. Default is 10.
-    multilabel : bool, optional
-        Whether the segmentation is a multilabel segmentation. Default is True.
+    Reuses an existing segmentation matching `name` / `user_id` / `session_id` at
+    the given voxel spacing if present, creating a new one otherwise, then writes
+    `seg_vol` as `uint8`.
 
-    Returns:
-    --------
-    copick.Segmentation
-        The created or modified segmentation object.
+    Args:
+        run: The copick run to write into.
+        seg_vol: The label volume to write, shape (Z, Y, X).
+        user_id: User id to attribute the segmentation to.
+        name: Segmentation name. Defaults to `segmentation`.
+        session_id: Session id for the segmentation. Defaults to `0`.
+        voxel_size: Voxel spacing in angstroms.
+        multilabel: Whether the segmentation holds multiple labels.
     """
 
     # Retrieve or create a segmentation

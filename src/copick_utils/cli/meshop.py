@@ -59,41 +59,39 @@ def meshop(
     """
     Perform boolean operations between meshes.
 
-    \b
+    Combine, subtract, or intersect mesh annotations across runs using boolean geometry.
+    Supported operations are `union` (combine matching meshes, accepts N>=1 inputs),
+    `difference` (first minus second, requires exactly 2 inputs), `intersection` (common
+    volume, requires exactly 2 inputs), `exclusion` (exclusive-or / XOR, requires exactly
+    2 inputs), and `concatenate` (simple concatenation without boolean ops, accepts N>=1
+    inputs).
+
+    Input meshes are selected by URI. Patterns use glob wildcards (`*` and `?`) by
+    default, or regular expressions when prefixed with `re:`. When a single -i flag is
+    given with a pattern, `union` and `concatenate` expand that pattern within each run
+    and merge all matching meshes, which is useful for combining multiple versions or
+    annotations per run.
+
     URI Format:
+
+        \b
         Meshes: object_name:user_id/session_id
 
-    \b
-    Pattern Support:
-        - Glob (default): Use * and ? wildcards (e.g., "membrane:user*/session-*")
-        - Regex: Prefix with 're:' (e.g., "re:membrane:user\\d+/session-\\d+")
-
-    \b
-    Operations:
-        - union: Combine meshes using boolean union - accepts N≥1 inputs
-        - difference: First minus second - requires exactly 2 inputs
-        - intersection: Common volume - requires exactly 2 inputs
-        - exclusion: Exclusive or (XOR) - requires exactly 2 inputs
-        - concatenate: Simple concatenation without boolean ops - accepts N≥1 inputs
-
-    \b
-    Single-Input Pattern Expansion (union & concatenate):
-        When providing a single -i flag with a pattern, union/concatenate operations
-        will expand the pattern within each run and merge all matching meshes.
-        This is useful for combining multiple versions/annotations within each run.
-
-    \b
     Examples:
+
+        \b
         # Single-input union: merge all matching meshes within each run
         copick logical meshop --operation union \\
             -i "membrane:user*/manual-*" \\
             -o "merged"
 
+        \b
         # Single-input concatenation: concatenate all matching meshes per run
         copick logical meshop --operation concatenate \\
             -i "part*:user1/session-*" \\
             -o "combined"
 
+        \b
         # N-way union with multiple -i flags (merge across different objects)
         copick logical meshop --operation union \\
             -i "membrane:user1/manual-*" \\
@@ -101,24 +99,33 @@ def meshop(
             -i "ribosome:user3/pred-*" \\
             -o "merged"
 
+        \b
         # N-way union with regex patterns
         copick logical meshop --operation union \\
             -i "re:membrane:user1/manual-\\d+" \\
             -i "re:vesicle:user2/auto-\\d+" \\
             -o "merged"
 
+        \b
         # 2-way difference (exactly 2 inputs required)
         copick logical meshop --operation difference \\
             -i "membrane:user1/manual-001" \\
             -i "mask:user1/mask-001" \\
             -o "membrane:meshop/masked"
 
+        \b
         # N-way concatenation with multiple -i flags
         copick logical meshop --operation concatenate \\
             -i "part1:user1/session" \\
             -i "part2:user1/session" \\
             -i "part3:user1/session" \\
             -o "combined"
+
+    See Also:
+
+        \b
+        copick convert mesh2caps: extract the top/bottom caps of a slab box built with meshop
+        copick logical clippicks: select picks by distance to a mesh produced here
     """
     logger = get_logger(__name__, debug=debug)
 

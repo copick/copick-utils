@@ -66,21 +66,40 @@ def picks2plane(
     """
     Convert picks to plane meshes.
 
-    \b
+    Fits a best-fit plane through each set of picks and emits it as a rectangular planar
+    mesh sized to cover the points. The `--padding` factor scales the plane beyond the exact
+    point extent (1.0 = exact fit, >1.0 = larger plane).
+
+    Picks can be clustered first (DBSCAN or k-means) so that distinct groups of points each
+    get their own plane; combined with `--individual-meshes` this writes one mesh per cluster
+    using the `{instance_id}` placeholder in the output URI.
+
     URI Format:
+
+        \b
         Picks: object_name:user_id/session_id
         Meshes: object_name:user_id/session_id
 
-    \b
     Examples:
+
+        \b
         # Convert single pick set to single plane mesh
         copick convert picks2plane -i "membrane:user1/manual-001" -o "membrane:picks2plane/plane-001"
 
+        \b
         # Create individual plane meshes from clusters
-        copick convert picks2plane -i "membrane:user1/manual-001" -o "membrane:picks2plane/plane-{instance_id}" --individual-meshes
+        copick convert picks2plane -i "membrane:user1/manual-001" \\
+            -o "membrane:picks2plane/plane-{instance_id}" --individual-meshes
 
+        \b
         # Convert all manual picks using pattern matching
         copick convert picks2plane -i "membrane:user1/manual-.*" -o "membrane:picks2plane/plane-{input_session_id}"
+
+    See Also:
+
+        \b
+        copick convert picks2surface: fit a curved 2D surface mesh to the same picks
+        copick convert picks2mesh: build a convex-hull or alpha-shape mesh from picks
     """
     from copick_utils.converters.plane_from_picks import plane_from_picks_lazy_batch
 

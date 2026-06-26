@@ -59,39 +59,36 @@ def segop(
     """
     Perform boolean operations between segmentations.
 
-    \b
+    Combine multiple segmentations using boolean set operations. Every input is first
+    converted to a binary mask, then combined with the chosen operation. The voxel spacing
+    given by `--voxel-spacing` applies globally to all inputs and to the output.
+
+    Supported operations: `union` combines segmentations (logical OR) and accepts N>=1
+    inputs; `difference` subtracts the second input from the first and requires exactly 2
+    inputs; `intersection` keeps voxels common to both inputs (logical AND) and requires
+    exactly 2 inputs; `exclusion` keeps voxels present in exactly one input (XOR) and
+    requires exactly 2 inputs.
+
+    Input URIs support glob wildcards (`*` and `?`) by default, or regular expressions when
+    prefixed with `re:` (for example `re:membrane:user\\d+/session-\\d+`). When a single `-i`
+    flag is given with a pattern, `union` expands the pattern within each run and merges every
+    matching segmentation, which is useful for combining multiple versions or annotations
+    within each run.
+
     URI Format:
-        Segmentations: name:user_id/session_id (voxel spacing via --voxel-spacing)
 
-    \b
-    Pattern Support:
-        - Glob (default): Use * and ? wildcards (e.g., "membrane:user*/session-*")
-        - Regex: Prefix with 're:' (e.g., "re:membrane:user\\d+/session-\\d+")
+        \b
+        Segmentations: name:user_id/session_id (voxel spacing supplied via --voxel-spacing)
 
-    \b
-    Operations:
-        - union: Combine segmentations (logical OR) - accepts N≥1 inputs
-        - difference: First minus second - requires exactly 2 inputs
-        - intersection: Common voxels (logical AND) - requires exactly 2 inputs
-        - exclusion: Exclusive or (XOR) - requires exactly 2 inputs
-
-    \b
-    Note: All segmentations are converted to binary for boolean operations.
-    Voxel spacing applies globally to all inputs and output.
-
-    \b
-    Single-Input Pattern Expansion (union only):
-        When providing a single -i flag with a pattern, the union operation will
-        expand the pattern within each run and merge all matching segmentations.
-        This is useful for combining multiple versions/annotations within each run.
-
-    \b
     Examples:
+
+        \b
         # Single-input union: merge all matching segmentations within each run
         copick logical segop --operation union -vs 10.0 \\
             -i "membrane:user*/manual-*" \\
             -o "merged"
 
+        \b
         # N-way union with multiple -i flags (merge across different objects)
         copick logical segop --operation union -vs 10.0 \\
             -i "membrane:user1/manual-*" \\
@@ -99,17 +96,25 @@ def segop(
             -i "ribosome:user3/pred-*" \\
             -o "merged"
 
+        \b
         # N-way union with regex patterns
         copick logical segop --operation union -vs 10.0 \\
             -i "re:membrane:user1/manual-\\d+" \\
             -i "re:vesicle:user2/auto-\\d+" \\
             -o "merged"
 
+        \b
         # 2-way difference (exactly 2 inputs required)
         copick logical segop --operation difference -vs 10.0 \\
             -i "membrane:user1/manual-001" \\
             -i "mask:user1/mask-001" \\
             -o "membrane:segop/masked"
+
+    See Also:
+
+        \b
+        copick logical meshop: the same boolean operations applied to meshes
+        copick logical clipseg: limit segmentation voxels by distance to a reference
     """
     logger = get_logger(__name__, debug=debug)
 

@@ -20,25 +20,22 @@ def from_picks(
     label_value: int = 1,
     voxel_spacing: float = 10,
 ) -> np.ndarray:
-    """
-    Paints picks into a segmentation volume as spheres.
+    """Paint picks into a segmentation volume as spheres.
 
-    Parameters:
-    -----------
-    pick : copick.models.CopickPicks
-        Copick object containing `points`, where each point has a `location` attribute with `x`, `y`, `z` coordinates.
-    seg_volume : numpy.ndarray
-        3D segmentation volume (numpy array) where the spheres are painted. Shape should be (Z, Y, X).
-    radius : float, optional
-        The radius of the spheres to be inserted in physical units (not voxel units). Default is 10.0.
-    label_value : int, optional
-        The integer value used to label the sphere regions in the segmentation volume. Default is 1.
-    voxel_spacing : float, optional
-        The spacing of voxels in the segmentation volume, used to scale the radius of the spheres. Default is 10.
+    Each pick location is converted from physical units to voxel indices and a
+    solid sphere of `radius` is written into `seg_volume` with `label_value`.
+
+    Args:
+        pick: Copick picks whose `points` each carry a `location` with x, y, z
+            coordinates in physical units.
+        seg_volume: 3D segmentation volume to paint into, shape (Z, Y, X).
+        radius: Sphere radius in physical units (angstroms), not voxels.
+        label_value: Integer label written into the sphere regions.
+        voxel_spacing: Voxel spacing of `seg_volume`, used to scale the radius.
+
     Returns:
-    --------
-    numpy.ndarray
-        The modified segmentation volume with spheres inserted at pick locations.
+        The modified segmentation volume with spheres painted at the pick
+        locations.
     """
 
     def create_sphere(shape, center, radius, val):

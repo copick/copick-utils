@@ -11,7 +11,7 @@ from copick_utils.util.config_models import create_simple_config
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="Fit 3D splines to skeletons and generate picks with orientations.",
+    short_help="Fit 3D splines to skeletons and generate oriented picks.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -96,25 +96,39 @@ def fit_spline(
     output_uri,
     debug,
 ):
-    """Fit 3D splines to skeletonized segmentations and generate picks with orientations.
+    """Fit 3D splines to skeletons and generate oriented picks.
 
-    \b
+    Fits regularized 3D parametric splines to skeletonized segmentation volumes and samples
+    points along each spline at a regular interval, producing picks. Orientations are computed
+    from the local spline direction when `--compute-transforms` is enabled.
+
+    Curvature-based outlier removal is applied iteratively to discard skeleton points that
+    produce unrealistically sharp bends, while the connectivity radius controls how skeleton
+    voxels are joined into a connected curve before fitting.
+
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
         Picks: object_name:user_id/session_id
 
-    \b
-    This command fits regularized 3D parametric splines to skeleton volumes and samples
-    points along the spline at regular intervals. Orientations are computed based on
-    the spline direction.
-
-    \b
     Examples:
-        # Fit splines to skeletonized components
-        copick process fit_spline -i "skeleton:skel/inst-.*@10.0" -o "skeleton:spline/spline-{input_session_id}" --spacing-distance 4.4 --voxel-spacing 10.0
 
-        # Process specific skeleton
-        copick process fit_spline -i "skeleton:skel/skel-0@10.0" -o "skeleton:spline/spline-0" --spacing-distance 2.0 --voxel-spacing 10.0
+        \b
+        # Fit splines to skeletonized components
+        copick process fit_spline -i "skeleton:skel/inst-.*@10.0" \\
+            -o "skeleton:spline/spline-{input_session_id}" --spacing-distance 4.4 --voxel-spacing 10.0
+
+        \b
+        # Process a single skeleton component
+        copick process fit_spline -i "skeleton:skel/skel-0@10.0" \\
+            -o "skeleton:spline/spline-0" --spacing-distance 2.0 --voxel-spacing 10.0
+
+    See Also:
+
+        \b
+        copick process skeletonize: produce the skeleton segmentations fed to this command
+        copick process separate_components: split a segmentation into per-instance skeletons first
     """
     from copick_utils.process.spline_fitting import fit_spline_lazy_batch
 

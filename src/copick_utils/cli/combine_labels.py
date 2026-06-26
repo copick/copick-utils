@@ -38,33 +38,41 @@ def combine(
     debug,
 ):
     """
-    Combine single-label segmentations into one multilabel segmentation.
+    Combine single-label segmentations into a multilabel segmentation.
 
-    This is the inverse of `copick process split`. Takes multiple binary/single-label
-    segmentations (matched by a pattern) and merges them into a single multilabel
-    volume. Each input segmentation's name is looked up in the copick config to
-    determine its integer label value.
+    This is the inverse of `copick process split`. It takes multiple binary/single-label
+    segmentations (matched by a pattern) and merges them into a single multilabel volume.
+    Each input segmentation's name is looked up in the copick config to determine its
+    integer label value.
 
-    \b
-    Overlap Resolution:
-        When multiple inputs overlap, the lowest label value wins. This is
-        deterministic and reproducible. Overlaps are logged as warnings.
+    When multiple inputs overlap, the lowest label value wins. This resolution is
+    deterministic and reproducible, and overlapping voxels are logged as warnings.
 
-    \b
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
         Use glob/regex patterns to match multiple segmentations per run.
 
-    \b
     Examples:
+
+        \b
         # Combine all segmentations from a split operation
         copick process combine -i "*:split/*@20" -o "multilabel:combine/0"
 
-        # Combine specific user's segmentations using regex
+        \b
+        # Combine a specific user's segmentations using regex
         copick process combine -i "re:.*:napari/manual@20" -o "combined:combine/0"
 
+        \b
         # Combine for specific runs
         copick process combine -r run1 -r run2 -i "*:user1/session@10.0" -o "labels:combine/0"
+
+    See Also:
+
+        \b
+        copick process split: the inverse operation (split a multilabel segmentation into single labels)
+        copick process expand-labels: grow labels to fill holes and gaps in a segmentation
     """
     from copick_utils.process.combine_labels import combine_labels_lazy_batch
 

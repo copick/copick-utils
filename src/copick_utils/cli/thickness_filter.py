@@ -64,20 +64,30 @@ def thickness_filter(
 
     For multilabel segmentations, each label is filtered independently.
 
-    \b
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
 
-    \b
     Examples:
+
+        \b
         # Remove membrane regions thinner than 50 Å
         copick process thickness-filter -i "membrane:user1/auto-001@10.0" -o "membrane_thick" --min-thickness 50.0
 
+        \b
         # Filter by voxel diameters instead of angstroms
         copick process thickness-filter -i "membrane:user1/auto-001@10.0" -o "membrane_thick" --min-thickness 5 --thickness-unit voxel
 
+        \b
         # Process specific runs with regex pattern
         copick process thickness-filter -i "membrane:user1/.*@10.0" -o "membrane_thick" --min-thickness 40.0 -r run001 -r run002
+
+    See Also:
+
+        \b
+        copick process filter-components: remove connected components below a size threshold
+        copick process expand-labels: grow labels to fill holes left after filtering
     """
     from copick_utils.process.thickness_filter import thickness_filter_lazy_batch
 

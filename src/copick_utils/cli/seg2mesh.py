@@ -16,7 +16,7 @@ from copick_utils.util.config_models import create_simple_config
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="Convert segmentation to mesh.",
+    short_help="Convert segmentation volumes to meshes using marching cubes.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -55,18 +55,43 @@ def seg2mesh(
     """
     Convert segmentation volumes to meshes using marching cubes.
 
-    \b
+    Runs the marching cubes algorithm on one or more segmentation volumes to produce
+    triangulated surface meshes. Input segmentations are selected by URI (with optional
+    regex/pattern matching on the user and session ids), and the resulting meshes are
+    written using a templated output URI.
+
+    Use `--individual-meshes` to emit a separate mesh per instance label (this enables the
+    `{instance_id}` placeholder in the output URI); otherwise a single mesh is produced per
+    matched segmentation. The `--level` and `--step-size` options control the marching cubes
+    iso-level and the sampling step (larger steps are faster but coarser).
+
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
         Meshes: object_name:user_id/session_id
 
-    \b
     Examples:
+
+        \b
         # Convert single segmentation to mesh
         copick convert seg2mesh -i "membrane:user1/manual-001@10.0" -o "membrane:seg2mesh/from-seg-001"
 
+        \b
         # Convert all manual segmentations using pattern matching
         copick convert seg2mesh -i "membrane:user1/manual-.*@10.0" -o "membrane:seg2mesh/from-seg-{input_session_id}"
+
+        \b
+        # Emit a separate mesh per instance label
+        copick convert seg2mesh --individual-meshes \\
+            -i "membrane:user1/manual-001@10.0" -o "membrane:seg2mesh/inst-{instance_id}"
+
+    See Also:
+
+        \b
+        copick convert mesh2seg: rasterize a mesh back into a segmentation volume
+        copick convert mesh2caps: extract the top/bottom caps of a slab box mesh
+        copick convert seg2picks: convert a segmentation into picks
     """
     from copick_utils.converters.mesh_from_segmentation import mesh_from_segmentation_lazy_batch
 

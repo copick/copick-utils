@@ -60,30 +60,46 @@ def clippicks(
     debug,
 ):
     """
-    Limit picks to those within a certain distance of a reference surface.
+    Limit picks to those within distance of a reference surface.
 
-    \b
+    The reference surface can be a mesh, segmentation, or tomogram boundary. Each input
+    pick is kept or dropped based on its distance to the nearest point on that surface.
+    By default, picks within the specified `--max-distance` are kept; use `--invert` to
+    keep only the picks that lie beyond that distance instead.
+
+    Exactly one reference must be supplied via `--ref-mesh`, `--ref-seg`, or
+    `--ref-tomogram`. Distances are measured in angstroms.
+
     URI Format:
+
+        \b
         Picks: object_name:user_id/session_id
         Meshes: object_name:user_id/session_id
         Segmentations: name:user_id/session_id@voxel_spacing
         Tomograms: tomo_type@voxel_spacing
 
-    \b
-    The reference surface can be a mesh, segmentation, or tomogram boundary.
-    By default, picks within the specified distance will be kept.
-    Use --invert to keep picks beyond the specified distance instead.
-
-    \b
     Examples:
-        # Keep picks within 50Å of mesh reference
-        copick logical clippicks -i "ribosome:user1/all-001" -rm "boundary:user1/boundary-001" -o "ribosome:clippicks/near-001" --max-distance 50.0
 
-        # Remove picks within 50Å of tomogram boundary (keep interior picks)
-        copick logical clippicks -i "ribosome:user1/all-001" -rt "wbp@10.0" -o "ribosome:clippicks/interior-001" --max-distance 50.0 --invert
+        \b
+        # Keep picks within 50A of a mesh reference
+        copick logical clippicks -i "ribosome:user1/all-001" -rm "boundary:user1/boundary-001" \\
+            -o "ribosome:clippicks/near-001" --max-distance 50.0
 
-        # Keep picks beyond 100Å from segmentation reference
-        copick logical clippicks -i "ribosome:user1/all-001" -rs "mask:user1/mask-001@10.0" -o "ribosome:clippicks/far-001" --max-distance 100.0 --invert
+        \b
+        # Remove picks within 50A of a tomogram boundary (keep interior picks)
+        copick logical clippicks -i "ribosome:user1/all-001" -rt "wbp@10.0" \\
+            -o "ribosome:clippicks/interior-001" --max-distance 50.0 --invert
+
+        \b
+        # Keep picks beyond 100A from a segmentation reference
+        copick logical clippicks -i "ribosome:user1/all-001" -rs "mask:user1/mask-001@10.0" \\
+            -o "ribosome:clippicks/far-001" --max-distance 100.0 --invert
+
+    See Also:
+
+        \b
+        copick convert mesh2caps: extract slab caps so clipping ignores the side walls
+        copick logical meshop: build the reference mesh used as the clipping surface
     """
     from copick_utils.logical.distance_operations import limit_picks_by_distance_lazy_batch
 
