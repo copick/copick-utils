@@ -16,7 +16,7 @@ from copick_utils.util.config_models import create_simple_config
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="Convert mesh to segmentation.",
+    short_help="Convert meshes to segmentation volumes.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -53,44 +53,49 @@ def mesh2seg(
     debug,
 ):
     """
-    Convert meshes to segmentation volumes with multiple voxelization modes.
+    Convert meshes to segmentation volumes.
 
-    \b
+    Voxelize one or more meshes into a label volume on a reference tomogram grid. Two
+    voxelization modes are supported: `watertight` fills the entire interior using ray
+    casting, while `boundary` voxelizes only the surface with a controllable sampling
+    density. Use `--invert` to fill outside the mesh instead of inside (watertight mode),
+    and `--boundary-sampling-density` to tune the surface sampling in boundary mode.
+
+    Input meshes are selected by pattern: exact (`membrane:user1/session1`), glob
+    (`membrane:user1/session*`), regex (`re:membrane:user\\d+/session\\d+`), or a bare
+    wildcard (`membrane`, which expands to `membrane:*/*`).
+
     URI Format:
+
+        \b
         Meshes: object_name:user_id/session_id
         Segmentations: name:user_id/session_id@voxel_spacing?multilabel=true
 
-    \b
-    Pattern Matching:
-        - Exact: "membrane:user1/session1"
-        - Glob: "membrane:user1/session*" or "membrane:*/manual-*"
-        - Regex: "re:membrane:user\\d+/session\\d+"
-        - Wildcard: "membrane" (expands to "membrane:*/*")
-
-    \b
-    Voxelization modes:
-        - watertight: Fill entire interior volume using ray casting
-        - boundary: Voxelize only the surface with controllable sampling density
-
-    \b
-    Additional options:
-        - --invert: Fill outside instead of inside (watertight mode)
-        - --boundary-sampling-density: Surface sampling density (boundary mode)
-
-    \b
     Examples:
+
+        \b
         # Convert mesh interior to segmentation (default)
         copick convert mesh2seg -i "membrane:user1/manual-001" -o "membrane:mesh2seg/from-mesh-001@10.0"
 
+        \b
         # Convert mesh boundary only with high sampling density
         copick convert mesh2seg --mode boundary --boundary-sampling-density 2.0 \\
             -i "membrane:user1/manual-001" -o "membrane:mesh2seg/boundary-001@10.0"
 
+        \b
         # Invert watertight mesh (fill outside)
         copick convert mesh2seg --invert -i "membrane:user1/manual-001" -o "membrane:mesh2seg/inverted-001@10.0"
 
+        \b
         # Convert all manual meshes using pattern matching with multilabel output
         copick convert mesh2seg -i "membrane:user1/manual-.*" -o "membrane:mesh2seg/from-mesh-{input_session_id}@10.0?multilabel=true"
+
+    See Also:
+
+        \b
+        copick convert seg2mesh: the inverse conversion (segmentation back to a mesh)
+        copick convert mesh2picks: sample picks from a mesh surface
+        copick convert mesh2caps: extract the top/bottom caps of a slab box mesh
     """
     from copick_utils.converters.segmentation_from_mesh import segmentation_from_mesh_lazy_batch
 

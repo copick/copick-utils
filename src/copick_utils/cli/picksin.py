@@ -50,23 +50,35 @@ def picksin(
     """
     Filter picks to include only those inside a reference volume.
 
-    \b
+    The reference volume can be either a watertight mesh or a segmentation (provide exactly one
+    via `--ref-mesh` or `--ref-seg`). Each input pick is tested against the volume and only those
+    whose coordinates fall inside it are written to the output. This is the inverse of
+    `copick logical picksout`, which keeps the picks that fall outside the volume instead.
+
     URI Format:
+
+        \b
         Picks: object_name:user_id/session_id
         Meshes: object_name:user_id/session_id
         Segmentations: name:user_id/session_id@voxel_spacing
 
-    \b
-    The reference volume can be either a watertight mesh or a segmentation.
-    Only picks that fall inside the reference volume will be kept.
-
-    \b
     Examples:
-        # Include only picks inside reference mesh
-        copick logical picksin -i "ribosome:user1/all-001" -rm "boundary:user1/boundary-001" -o "ribosome:picksin/inside-001"
 
-        # Include only picks inside segmentation
-        copick logical picksin -i "ribosome:user1/all-001" -rs "mask:user1/mask-001@10.0" -o "ribosome:picksin/inside-001"
+        \b
+        # Include only picks inside a reference mesh
+        copick logical picksin -i "ribosome:user1/all-001" -rm "boundary:user1/boundary-001" \\
+            -o "ribosome:picksin/inside-001"
+
+        \b
+        # Include only picks inside a segmentation
+        copick logical picksin -i "ribosome:user1/all-001" -rs "mask:user1/mask-001@10.0" \\
+            -o "ribosome:picksin/inside-001"
+
+    See Also:
+
+        \b
+        copick logical picksout: keep picks that fall outside the reference volume instead
+        copick logical clippicks: select picks by distance to a reference mesh
     """
     from copick_utils.logical.point_operations import picks_inclusion_by_mesh_lazy_batch
 

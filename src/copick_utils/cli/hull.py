@@ -59,21 +59,38 @@ def hull(
     """
     Compute hull operations on meshes.
 
-    \b
+    Currently supports convex hull computation, where the convex hull is the
+    smallest convex shape that contains all vertices of the original mesh. Each
+    input mesh is replaced by its hull; with `--individual-meshes` a separate
+    hull is written per instance using the `{instance_id}` placeholder in the
+    output URI.
+
     URI Format:
+
+        \b
         Meshes: object_name:user_id/session_id
 
-    \b
-    Currently supports convex hull computation, where the convex hull is the
-    smallest convex shape that contains all vertices of the original mesh.
-
-    \b
     Examples:
+
+        \b
         # Compute convex hull for meshes
         copick process hull -i "membrane:user1/session1" -o "membrane:hull/hull-session"
 
-        # Process specific runs
-        copick process hull -r run1 -r run2 -i "membrane:user1/session1" -o "membrane:hull/convex-001" --hull-type convex
+        \b
+        # Process specific runs with an explicit hull type
+        copick process hull -r run1 -r run2 --hull-type convex \\
+            -i "membrane:user1/session1" -o "membrane:hull/convex-001"
+
+        \b
+        # Emit one hull mesh per instance using the {instance_id} placeholder
+        copick process hull --individual-meshes \\
+            -i "membrane:user1/session1" -o "membrane:hull/inst-{instance_id}"
+
+    See Also:
+
+        \b
+        copick convert picks2mesh: build the meshes whose hulls you compute
+        copick logical meshop: combine hull meshes with boolean operations
     """
     from copick_utils.process.hull import hull_lazy_batch
 

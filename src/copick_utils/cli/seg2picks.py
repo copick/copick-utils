@@ -47,20 +47,45 @@ def seg2picks(
     debug,
 ):
     """
-    Convert segmentation volumes to picks by extracting centroids.
+    Convert segmentation to picks.
 
-    \b
+    Extracts particle centroids from segmentation volumes and writes them as picks. The chosen
+    label (`--segmentation-idx`) is split into connected components, each component becomes one
+    point at its centroid, and a maximum filter (`--maxima-filter-size`) controls how nearby
+    maxima are merged. Components outside the `--min-particle-size`/`--max-particle-size` voxel
+    range are discarded.
+
+    The input pattern and output template support regex matching and `{input_*}` substitutions,
+    so a single invocation can fan out across many runs and sessions in parallel.
+
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
         Picks: object_name:user_id/session_id
 
-    \b
     Examples:
-        # Convert single segmentation to picks
+
+        \b
+        # Convert a single segmentation to picks
         copick convert seg2picks -i "membrane:user1/manual-001@10.0" -o "membrane:seg2picks/centroid-001"
 
+        \b
         # Convert all manual segmentations using pattern matching
-        copick convert seg2picks -i "membrane:user1/manual-.*@10.0" -o "membrane:seg2picks/centroid-{input_session_id}"
+        copick convert seg2picks -i "membrane:user1/manual-.*@10.0" \\
+            -o "membrane:seg2picks/centroid-{input_session_id}"
+
+        \b
+        # Pick a specific label and filter by particle size
+        copick convert seg2picks --segmentation-idx 1 --min-particle-size 50 --max-particle-size 5000 \\
+            -i "membrane:user1/manual-001@10.0" -o "membrane:seg2picks/centroid-001"
+
+    See Also:
+
+        \b
+        copick convert picks2seg: rasterize picks back into a segmentation (the inverse)
+        copick convert seg2mesh: convert the same segmentation into a surface mesh instead
+        copick convert mesh2picks: sample picks from a mesh instead of a segmentation
     """
     from copick_utils.converters.picks_from_segmentation import picks_from_segmentation_lazy_batch
 

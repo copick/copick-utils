@@ -11,7 +11,7 @@ from copick_utils.util.config_models import create_simple_config
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="3D skeletonization of segmentations.",
+    short_help="Skeletonize segmentations in 3D using pattern matching.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -71,24 +71,44 @@ def skeletonize(
     output_uri,
     debug,
 ):
-    """3D skeletonization of segmentations using pattern matching.
+    """Skeletonize segmentations in 3D using pattern matching.
 
-    \b
+    Reduces each input segmentation to a 1-voxel-wide medial skeleton, exposing the
+    centerlines of the objects it contains. Two backends are available: `skimage`
+    (scikit-image 3D thinning) and `distance_transform` (local maxima of the
+    Euclidean distance transform).
+
+    The input session ID is treated as a regex, so a single invocation can skeletonize
+    many segmentations at once. This pairs naturally with the output of connected-component
+    separation (e.g. pattern `inst-.*` to match `inst-0`, `inst-1`, etc.). Optional cleanup
+    removes small objects before thinning and prunes short spur branches afterwards.
+
     URI Format:
-        Segmentations: name:user_id/session_id@voxel_spacing
 
     \b
-    This command can process multiple segmentations by matching session IDs against
-    a pattern. This is useful for processing the output of connected components
-    separation (e.g., pattern "inst-.*" to match "inst-0", "inst-1", etc.).
+    Segmentations: name:user_id/session_id@voxel_spacing
 
-    \b
     Examples:
-        # Skeletonize exact match
-        copick process skeletonize -i "membrane:user1/inst-0@10.0" -o "membrane:skel/skel-0@10.0"
 
-        # Skeletonize all instances using pattern
-        copick process skeletonize -i "membrane:user1/inst-.*@10.0" -o "membrane:skel/skel-{input_session_id}@10.0"
+    \b
+    # Skeletonize a single segmentation (exact session match)
+    copick process skeletonize -i "membrane:user1/inst-0@10.0" -o "membrane:skel/skel-0@10.0"
+
+    \b
+    # Skeletonize every instance matched by a session-ID pattern
+    copick process skeletonize -i "membrane:user1/inst-.*@10.0" \\
+        -o "membrane:skel/skel-{input_session_id}@10.0"
+
+    \b
+    # Use the distance-transform backend and keep short branches
+    copick process skeletonize --method distance_transform --keep-short-branches \\
+        -i "membrane:user1/inst-.*@10.0" -o "membrane:skel/skel-{input_session_id}@10.0"
+
+    See Also:
+
+    \b
+    copick process separate-components: split a segmentation into the inst-* instances skeletonized here
+    copick process filter-components: drop small connected components before skeletonizing
     """
     from copick_utils.process.skeletonize import skeletonize_lazy_batch
 

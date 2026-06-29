@@ -12,7 +12,7 @@ from copick_utils.cli.util import add_input_option, add_workers_option
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="Split multilabel segmentations into single-class segmentations.",
+    short_help="Split multilabel segmentations into single-class masks.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -53,35 +53,55 @@ def split(
     debug,
 ):
     """
-    Split multilabel segmentations into individual single-class binary segmentations.
+    Split multilabel segmentations into single-class masks.
 
     This command takes a multilabel segmentation and creates separate binary segmentations
     for each label value. Each output segmentation is named after the corresponding
-    PickableObject (as defined in the copick config) and uses the same session ID as
-    the input.
+    PickableObject (as defined in the copick config) and uses the same session ID as the
+    input.
 
-    \b
+    By default the object name for each label value is resolved from the pickable-objects
+    config. Pass --labels with an explicit 'name:value,...' map when the segmentation's label
+    values do not match the config object labels; only the listed values are then split. The
+    input URI must name an exact segmentation (no wildcards) and include a voxel spacing.
+
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
 
-    \b
     Label-to-Object Mapping:
+
+        \b
         The tool looks up each label value in the pickable_objects configuration
         and uses the object name for the output segmentation:
         - Label 1 (ribosome) → ribosome:split/session-001@10.0
         - Label 2 (membrane) → membrane:split/session-001@10.0
         - Label 3 (proteasome) → proteasome:split/session-001@10.0
 
-    \b
     Examples:
+
+        \b
         # Split multilabel segmentation (outputs named by pickable objects)
         copick process split -i "predictions:model/run-001@10.0"
 
+        \b
         # Split with custom output user ID
         copick process split -i "classes:annotator/manual@10.0" --output-user-id "per-class"
 
+        \b
         # Process specific runs only
-        copick process split -i "labels:*/*@10.0" --run-names TS_001 --run-names TS_002
+        copick process split -i "labels:curator/manual@10.0" --run-names TS_001 --run-names TS_002
+
+        \b
+        # Split only specific label values with an explicit name:value map
+        copick process split -i "predictions:model/run-001@10.0" --labels "sample:1,vacuum:2"
+
+    See Also:
+
+        \b
+        copick process combine: the inverse operation (merge single-label segmentations into a multilabel volume)
+        copick convert seg2picks: extract picks from each resulting single-class segmentation
     """
 
     logger = get_logger(__name__, debug=debug)

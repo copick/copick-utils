@@ -82,27 +82,45 @@ def enclosed(
 
     This command identifies connected components in the first segmentation (inner) that are
     completely surrounded by the second segmentation (outer), and removes them from the inner
-    segmentation. Useful for cleaning up noise, artifacts, or unwanted fragments.
+    segmentation. Useful for cleaning up noise, artifacts, or unwanted fragments that are trapped
+    inside a larger structure.
 
-    \b
-    URI Format:
-        Segmentations: name:user_id/session_id (voxel spacing specified via --voxel-spacing)
+    Components are filtered geometrically: each is dilated by `--margin` voxels and kept only if it
+    is fully contained within the outer segmentation. Optional `--min-size`/`--max-size` bounds (in
+    cubic angstroms) restrict which components are considered for removal.
 
-    \b
     Algorithm:
+
+        \b
         1. Label connected components in the inner segmentation (input1)
         2. Dilate each component by the specified margin
         3. Check if the dilated component is fully contained within the outer segmentation (input2)
         4. If enclosed (and within size limits), remove the component from the inner segmentation
         5. Output cleaned version of the inner segmentation
 
-    \b
-    Examples:
-        # Remove small vesicle fragments that are enclosed by membrane
-        copick logical enclosed -vs 10.0 -i1 "vesicle:user1/auto-001" -i2 "membrane:user1/manual-001" -o "vesicle_clean"
+    URI Format:
 
+        \b
+        Segmentations: name:user_id/session_id (voxel spacing specified via --voxel-spacing)
+
+    Examples:
+
+        \b
+        # Remove small vesicle fragments that are enclosed by membrane
+        copick logical enclosed -vs 10.0 -i1 "vesicle:user1/auto-001" -i2 "membrane:user1/manual-001" \\
+            -o "vesicle-clean:enclosed/0"
+
+        \b
         # Remove noise fragments with size filtering (volumes in Å³)
-        copick logical enclosed -vs 10.0 -i1 "fragments:user1/.*" -i2 "cell:user1/.*" -o "cleaned" --min-size 1000 --max-size 100000 --margin 2
+        copick logical enclosed -vs 10.0 -i1 "fragments:user1/.*" -i2 "cell:user1/.*" \\
+            -o "cleaned:enclosed/0" --min-size 1000 --max-size 100000 --margin 2
+
+    See Also:
+
+        \b
+        copick logical segop: combine two segmentations with boolean operations
+        copick logical clipseg: limit segmentation voxels by distance to a reference
+        copick process filter-components: remove connected components by size instead of enclosure
     """
 
     logger = get_logger(__name__, debug=debug)

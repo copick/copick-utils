@@ -78,24 +78,46 @@ def filter_components(
     """
     Filter connected components in segmentations by size.
 
-    This command identifies connected components in a segmentation and removes those
-    that fall outside the specified size range. Sizes can be specified in cubic
-    angstroms (default) or cubic voxels using --size-unit.
+    This command identifies connected components in a segmentation and removes those that
+    fall outside the specified size range. Sizes can be given in cubic angstroms (default)
+    or cubic voxels via --size-unit, and component adjacency is controlled by --connectivity
+    (face = 6-connected, face-edge = 18-connected, all = 26-connected).
 
-    \b
+    Pass --keep-largest N to retain only the N largest components by voxel count, applied on
+    top of any --min-size/--max-size limits. Run `copick process seg-stats` first to inspect
+    component sizes and choose sensible thresholds.
+
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
 
-    \b
     Examples:
+
+        \b
         # Remove small noise components (keep only larger than 50000 Å³)
         copick process filter-components -i "membrane:user1/auto-001@10.0" -o "membrane_clean" --min-size 50000
 
+        \b
         # Filter by cubic voxels instead of angstroms
-        copick process filter-components -i "membrane:user1/auto-001@10.0" -o "membrane_clean" --min-size 50 --size-unit voxel
+        copick process filter-components -i "membrane:user1/auto-001@10.0" -o "membrane_clean" \\
+            --min-size 50 --size-unit voxel
 
+        \b
         # Keep only medium-sized components (between 10000 and 1000000 Å³)
-        copick process filter-components -i "particles:user1/.*@10.0" -o "particles_filtered" --min-size 10000 --max-size 1000000
+        copick process filter-components -i "particles:user1/.*@10.0" -o "particles_filtered" \\
+            --min-size 10000 --max-size 1000000
+
+        \b
+        # Keep only the single largest connected component
+        copick process filter-components -i "membrane:user1/auto-001@10.0" -o "membrane_main" --keep-largest 1
+
+    See Also:
+
+        \b
+        copick process seg-stats: report connected-component size statistics to choose thresholds
+        copick process separate-components: relabel each connected component as a distinct class
+        copick logical enclosed: remove components fully enclosed by another segmentation
     """
     from copick_utils.process.filter_components import filter_components_lazy_batch
 

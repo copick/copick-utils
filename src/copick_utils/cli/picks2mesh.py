@@ -16,7 +16,7 @@ from copick_utils.util.config_models import create_simple_config
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="Convert picks to mesh using convex hull or alpha shapes.",
+    short_help="Convert picks to meshes using convex hull or alpha shapes.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -74,34 +74,46 @@ def picks2mesh(
     """
     Convert picks to meshes using convex hull or alpha shapes.
 
-    \b
+    For each matched pick set, builds a single surface mesh that encloses the pick
+    coordinates. Two methods are supported: `convex_hull` wraps the points in their
+    tightest convex envelope, while `alpha_shape` (requires `--alpha`) yields a tighter,
+    possibly non-convex surface. Optional clustering (DBSCAN or KMeans) first splits the
+    picks into groups, and `--individual-meshes` writes one mesh per cluster/instance via
+    the `{instance_id}` placeholder.
+
+    Input and output URIs select picks and meshes by object name, user id and session id.
+    They support exact, glob, regex (`re:` prefix) and bare-wildcard matching, enabling
+    one-to-one, one-to-many and many-to-many conversions through `{input_session_id}` and
+    `{instance_id}` placeholders in the output URI.
+
     URI Format:
+
+        \b
         Picks: object_name:user_id/session_id
         Meshes: object_name:user_id/session_id
 
-    \b
-    Pattern Matching:
-        - Exact: "ribosome:user1/session1"
-        - Glob: "ribosome:user1/session*" or "ribosome:*/manual-*"
-        - Regex: "re:ribosome:user\\d+/session\\d+"
-        - Wildcard: "ribosome" (expands to "ribosome:*/*")
-
-    \b
-    Supports flexible input/output selection modes:
-        - One-to-one: exact session ID → exact session ID
-        - One-to-many: exact session ID → template with {instance_id}
-        - Many-to-many: pattern → template with {input_session_id} and {instance_id}
-
-    \b
     Examples:
-        # Convert single pick set to single mesh
+
+        \b
+        # Convert a single pick set to a single convex-hull mesh
         copick convert picks2mesh -i "ribosome:user1/manual-001" -o "ribosome:picks2mesh/mesh-001"
 
+        \b
         # Create individual meshes from clusters
-        copick convert picks2mesh -i "ribosome:user1/manual-001" -o "ribosome:picks2mesh/mesh-{instance_id}" --individual-meshes
+        copick convert picks2mesh -i "ribosome:user1/manual-001" \\
+            -o "ribosome:picks2mesh/mesh-{instance_id}" --individual-meshes
 
-        # Convert all manual picks using pattern matching
-        copick convert picks2mesh -i "ribosome:user1/manual-.*" -o "ribosome:picks2mesh/mesh-{input_session_id}"
+        \b
+        # Build alpha-shape surfaces for all manual picks via regex matching
+        copick convert picks2mesh --mesh-type alpha_shape --alpha 150 \\
+            -i "re:ribosome:user\\d+/manual-.*" -o "ribosome:picks2mesh/mesh-{input_session_id}"
+
+    See Also:
+
+        \b
+        copick convert picks2sphere: convert picks to sphere meshes instead
+        copick convert mesh2seg: voxelize the resulting mesh into a segmentation
+        copick convert mesh2caps: extract the top/bottom caps of a slab box mesh
     """
     from copick_utils.converters.mesh_from_picks import mesh_from_picks_lazy_batch
 

@@ -70,29 +70,42 @@ def seg_stats(
 
     This command identifies connected components in a segmentation and reports
     the volume of each component (in voxels and cubic angstroms), grouped by label.
-    Output can be a CSV file or a histogram plot.
+    Output can be a CSV file or a histogram plot, and you can choose the voxel
+    connectivity (face, face-edge, or all) used to define components.
 
-    \b
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
         Voxel spacing is optional — omit to match all voxel spacings.
 
-    \b
     Examples:
+
+        \b
         # Export component stats as CSV
         copick process seg-stats -i "membrane:user1/auto-001@10.0" -f csv -op ./membrane_stats.csv
 
+        \b
         # Analyze without specifying voxel spacing (matches all)
         copick process seg-stats -i "proofread:napari/manual" -f csv -op ./stats.csv
 
+        \b
         # Create a histogram plot as HTML (interactive)
         copick process seg-stats -i "membrane:user1/auto-001@10.0" -f plot -op ./membrane_hist.html
 
+        \b
         # Create a histogram plot as PDF
         copick process seg-stats -i "organelle:user1/pred@10.0" -f plot -op ./organelle_hist.pdf
 
+        \b
         # Analyze specific runs and export as PNG
         copick process seg-stats -i "membrane:user1/auto-001@10.0" -f plot -op ./stats.png -r run1 -r run2
+
+    See Also:
+
+        \b
+        copick process filter-components: remove connected components by the size thresholds chosen here
+        copick process separate-components: relabel each connected component as a distinct class
     """
     from copick_utils.process.seg_stats import export_stats_csv, export_stats_plot, seg_stats_batch
 

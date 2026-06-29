@@ -13,7 +13,7 @@ from copick_utils.util.config_models import create_simple_config
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="Convert mesh to picks.",
+    short_help="Convert meshes to picks using different sampling strategies.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -90,19 +90,46 @@ def mesh2picks(
     """
     Convert meshes to picks using different sampling strategies.
 
-    \b
+    Samples points from copick meshes and writes them out as picks. Four sampling types
+    are supported: `inside` (points within the mesh volume), `surface` (points on the
+    mesh surface), `outside` (points outside the mesh), and `vertices` (the mesh vertices
+    themselves). For surface sampling you can attach the surface normals as orientations,
+    or request random orientations for any type.
+
+    A tomogram is required to define the volume bounds: it constrains `inside`/`outside`
+    sampling and the `--edge-dist` buffer (in voxels) that keeps points away from the
+    volume edges, and its voxel spacing sets the default `--min-dist` between points.
+
     URI Format:
+
+        \b
         Meshes: object_name:user_id/session_id
         Picks: object_name:user_id/session_id
         Tomograms: tomo_type@voxel_spacing
 
-    \b
     Examples:
-        # Convert single mesh to picks with surface sampling
-        copick convert mesh2picks -i "boundary:user1/boundary-001" --tomogram wbp@10.0 --sampling-type surface -o "boundary"
 
-        # Convert all boundary meshes using pattern matching
-        copick convert mesh2picks -i "boundary:user1/boundary-.*" -t wbp@10.0 --sampling-type inside -o "{input_session_id}"
+        \b
+        # Convert a single mesh to picks with surface sampling
+        copick convert mesh2picks -i "boundary:user1/boundary-001" --tomogram wbp@10.0 \\
+            --sampling-type surface -o "boundary"
+
+        \b
+        # Convert all boundary meshes using pattern matching, sampling inside the volume
+        copick convert mesh2picks -i "boundary:user1/boundary-.*" -t wbp@10.0 \\
+            --sampling-type inside -o "{input_session_id}"
+
+        \b
+        # Return the mesh vertices directly as picks
+        copick convert mesh2picks -i "boundary:user1/boundary-001" -t wbp@10.0 \\
+            --sampling-type vertices -o "boundary-vertices"
+
+    See Also:
+
+        \b
+        copick convert picks2mesh: the inverse — build a mesh from picks
+        copick convert mesh2caps: extract the top/bottom caps of a slab box mesh
+        copick convert mesh2seg: rasterize a mesh into a segmentation
     """
     from copick_utils.converters.picks_from_mesh import picks_from_mesh_lazy_batch
 

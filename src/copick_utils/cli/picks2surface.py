@@ -73,21 +73,44 @@ def picks2surface(
     """
     Convert picks to 2D surface meshes.
 
-    \b
+    Fit an open 2D surface (a sheet-like membrane) through a set of point picks and write it as
+    a mesh. This is useful for reconstructing membranes or other laminar structures sampled by
+    individual particle picks.
+
+    Three surface-fitting methods are supported via `--surface-method`: `delaunay` (Delaunay
+    triangulation of the points), `rbf` (radial-basis-function interpolation onto a regular grid),
+    and `grid` (gridded surface at `--grid-resolution`). Optional clustering can split the picks
+    into separate instances first; with `--individual-meshes` each cluster is written to its own
+    mesh using the `{instance_id}` placeholder in the output session id.
+
     URI Format:
+
+        \b
         Picks: object_name:user_id/session_id
         Meshes: object_name:user_id/session_id
 
-    \b
     Examples:
+
+        \b
         # Convert single pick set to single surface mesh
         copick convert picks2surface -i "membrane:user1/manual-001" -o "membrane:picks2surface/surface-001"
 
+        \b
         # Create individual surface meshes from clusters
-        copick convert picks2surface -i "membrane:user1/manual-001" -o "membrane:picks2surface/surface-{instance_id}" --individual-meshes
+        copick convert picks2surface --individual-meshes \\
+            -i "membrane:user1/manual-001" -o "membrane:picks2surface/surface-{instance_id}"
 
+        \b
         # Convert all manual picks using pattern matching
         copick convert picks2surface -i "membrane:user1/manual-.*" -o "membrane:picks2surface/surface-{input_session_id}"
+
+    See Also:
+
+        \b
+        copick convert picks2plane: fit a single flat plane mesh to picks
+        copick convert picks2mesh: build a convex-hull or alpha-shape mesh from picks
+        copick convert mesh2caps: extract the top/bottom cap surfaces of a slab box mesh
+        copick logical clippicks: select picks by distance to a reference surface
     """
     from copick_utils.converters.surface_from_picks import surface_from_picks_lazy_batch
 

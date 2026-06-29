@@ -3,19 +3,24 @@ from copick.util.uri import resolve_copick_objects
 
 
 def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: bool = False, verbose=True):
-    """
-    Reads a tomogram from a Copick run.
+    """Read a tomogram from a copick run as a NumPy array.
 
-    Parameters:
-    -----------
-    run: copick.Run
-    voxel_size: float
-    algorithm: str
-    raise_error: bool
-    verbose: bool
+    Resolves the tomogram `{algorithm}@{voxel_size}` for the run. If it is not
+    found, reports the available voxel spacings / algorithms (raising or printing
+    depending on `raise_error` / `verbose`).
+
+    Args:
+        run: The copick run to read from.
+        voxel_size: Voxel spacing to query, in angstroms.
+        algorithm: Tomogram algorithm / type to read (e.g. `wbp`).
+        raise_error: Raise `ValueError` if the tomogram is missing instead of
+            returning `None`.
+        verbose: Print a diagnostic message listing what is available when the
+            tomogram is missing.
+
     Returns:
-    --------
-    vol: np.ndarray - The tomogram.
+        The tomogram as a NumPy array of shape (Z, Y, X), or `None` if it is
+        missing and `raise_error` is False.
     """
 
     # Get the tomogram from the Copick URI
@@ -60,21 +65,26 @@ def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: b
 
 
 def segmentation(run, voxel_spacing: float, name: str, user_id=None, session_id=None, raise_error=False, verbose=True):
-    """
-    Reads a segmentation from a Copick run.
+    """Read a segmentation from a copick run as a NumPy array.
 
-    Parameters:
-    -----------
-    run: copick.Run
-    voxel_spacing: float
-    name: str
-    user_id: str
-    session_id: str
-    raise_error: bool
-    verbose: bool
+    Resolves the segmentation matching `name` (optionally filtered by `user_id`
+    and `session_id`) at the given voxel spacing. If none matches, reports the
+    available segmentations.
+
+    Args:
+        run: The copick run to read from.
+        voxel_spacing: Voxel spacing of the segmentation, in angstroms.
+        name: Segmentation / pickable-object name.
+        user_id: Restrict to this user id (optional).
+        session_id: Restrict to this session id (optional).
+        raise_error: Raise `ValueError` if no segmentation matches instead of
+            returning `None`.
+        verbose: Print a diagnostic message listing what is available when no
+            segmentation matches.
+
     Returns:
-    --------
-    seg: np.ndarray - The segmentation.
+        The segmentation as a NumPy array of shape (Z, Y, X), or `None` if none
+        matches and `raise_error` is False.
     """
 
     # Construct the Target URI
@@ -130,22 +140,24 @@ def coordinates(
     raise_error: bool = False,
     verbose: bool = True,
 ):
-    """
-    Reads the coordinates of the picks from a Copick run.
+    """Read pick coordinates from a copick run as an array of voxel indices.
 
-    Parameters:
-    -----------
-    run: copick.Run
-    name: str
-    user_id: str
-    session_id: str
-    voxel_size: float
-    raise_error: bool
-    verbose: bool
+    Looks up the picks for `name` (optionally filtered by `user_id` and
+    `session_id`) and returns their locations divided by `voxel_size`. If several
+    pick sets match, the first is used; if none match, reports the available picks.
+
+    Args:
+        run: The copick run to read from.
+        name: Pickable-object / protein name.
+        user_id: Identifier of the user that generated the picks.
+        session_id: Identifier of the session that generated the picks (optional).
+        voxel_size: Voxel spacing used to scale physical coordinates to voxels.
+        raise_error: Raise `ValueError` if no picks match instead of returning `None`.
+        verbose: Print a diagnostic message when no picks (or several) match.
 
     Returns:
-    --------
-    coordinates: np.ndarray - The 3D coordinates of the picks in voxel space.
+        An (N, 3) array of (z, y, x) coordinates in voxel space, or `None` if no
+        picks match and `raise_error` is False.
     """
     # Retrieve the pick points associated with the specified object and user ID
     picks = run.get_picks(object_name=name, user_id=user_id, session_id=session_id)

@@ -80,29 +80,44 @@ def expand_labels(
     When --max-hole-size is specified, expansion is restricted to only fill background
     holes smaller than the given volume. This prevents labels from expanding beyond
     their natural borders (e.g., filling internal holes in a cell without expanding
-    outward into the surrounding background). Use "seg-stats --include-background"
+    outward into the surrounding background). Use `seg-stats --include-background`
     to determine appropriate hole size values.
 
-    \b
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
 
-    \b
     Examples:
+
+        \b
         # Expand labels by 20 angstroms
         copick process expand-labels -i "membrane:user1/auto-001@10.0" -o "membrane_filled" --distance 20.0
 
+        \b
         # Fill only holes smaller than 500000 cubic angstroms
-        copick process expand-labels -i "membrane:user1/auto-001@10.0" -o "filled" --distance 20.0 --max-hole-size 500000
+        copick process expand-labels -i "membrane:user1/auto-001@10.0" -o "filled" \\
+            --distance 20.0 --max-hole-size 500000
 
+        \b
         # Fill holes using voxel units
-        copick process expand-labels -i "membrane:user1/auto-001@10.0" -o "filled" --distance 20.0 --max-hole-size 500 --size-unit voxel
+        copick process expand-labels -i "membrane:user1/auto-001@10.0" -o "filled" \\
+            --distance 20.0 --max-hole-size 500 --size-unit voxel
 
+        \b
         # Expand labels across specific runs
-        copick process expand-labels -i "organelle:user1/pred@10.0" -o "organelle_expanded" --distance 15.0 -r run1 -r run2
+        copick process expand-labels -i "organelle:user1/pred@10.0" -o "organelle_expanded" \\
+            --distance 15.0 -r run1 -r run2
 
+        \b
         # Expand with custom output URI
         copick process expand-labels -i "membrane:user1/manual@10.0" -o "membrane:expand-labels/0@10.0" --distance 30.0
+
+    See Also:
+
+        \b
+        copick process seg-stats: report connected-component sizes to choose --max-hole-size
+        copick process filter-components: remove small connected components by size
     """
     from copick_utils.process.expand_labels import expand_labels_lazy_batch
 

@@ -67,32 +67,46 @@ def rescale(
 
     Resamples segmentation data using nearest-neighbor interpolation (default) to
     preserve label integrity. Supports both upscaling (finer spacing) and downscaling
-    (coarser spacing). When --tomo-type is provided, the output shape is matched to
+    (coarser spacing). When `--tomo-type` is provided, the output shape is matched to
     an existing tomogram at the target spacing for exact alignment.
 
-    \b
     URI Format:
+
+        \b
         Segmentations: name:user_id/session_id@voxel_spacing
 
-    \b
     Examples:
+
+        \b
         # Upscale: 10 angstrom -> 5 angstrom
         copick process rescale -i "membrane:user1/auto@10.0" -o "membrane:rescale/0@5.0"
 
+        \b
         # Downscale: 5 angstrom -> 20 angstrom
         copick process rescale -i "membrane:user1/manual@5.0" -o "membrane:rescale/0@20.0"
 
+        \b
         # Match tomogram shape exactly
         copick process rescale -i "membrane:user1/auto@10.0" -o "membrane:rescale/0@5.0" --tomo-type wbp
 
+        \b
         # Explicit target spacing (when output URI uses smart defaults)
         copick process rescale -i "membrane:user1/auto@10.0" -o "membrane_rescaled" --target-voxel-spacing 5.0
 
+        \b
         # Rescale specific runs
         copick process rescale -i "organelle:pred/auto@10.0" -o "organelle:rescale/0@7.5" -r run1 -r run2
 
+        \b
         # Linear interpolation (for non-label float data)
         copick process rescale -i "density:user1/auto@10.0" -o "density:rescale/0@5.0" --order 1
+
+    See Also:
+
+        \b
+        copick process expand_labels: fill label holes/gaps that nearest-neighbor resampling can introduce
+        copick convert mesh2seg: rasterize meshes into a segmentation at a target voxel spacing
+        copick process combine: merge single-label segmentations into one multilabel volume
     """
     from copick_utils.process.rescale import rescale_lazy_batch
 

@@ -16,7 +16,7 @@ from copick_utils.util.config_models import create_simple_config
 
 @click.command(
     context_settings={"show_default": True},
-    short_help="Convert picks to segmentation.",
+    short_help="Convert picks to segmentation volumes by painting spheres.",
     no_args_is_help=True,
 )
 @add_config_option
@@ -53,18 +53,40 @@ def picks2seg(
     """
     Convert picks to segmentation volumes by painting spheres.
 
-    \b
+    Paints a solid sphere of the given `--radius` (in physical units) at every pick location into a
+    label segmentation, producing a dense volume from sparse point annotations. The output is sized
+    and aligned to the reference tomogram (`--tomo-type`) at the voxel spacing given in the output URI.
+
+    Both input and output URIs accept regex patterns and `{input_*}` templating, so many pick sets can
+    be painted in one call; runs are discovered and processed in parallel via `--workers`.
+
     URI Format:
+
+        \b
         Picks: object_name:user_id/session_id
         Segmentations: name:user_id/session_id@voxel_spacing
 
-    \b
     Examples:
-        # Convert single pick set to segmentation
+
+        \b
+        # Convert a single pick set to a segmentation
         copick convert picks2seg -i "ribosome:user1/manual-001" -o "ribosome:picks2seg/painted-001@10.0"
 
-        # Convert all manual picks using pattern matching
+        \b
+        # Convert all manual picks using pattern matching, keeping the source session id
         copick convert picks2seg -i "ribosome:user1/manual-.*" -o "ribosome:picks2seg/painted-{input_session_id}@10.0"
+
+        \b
+        # Paint larger spheres against a denoised reference tomogram
+        copick convert picks2seg --radius 80 --tomo-type denoised \\
+            -i "ribosome:user1/manual-001" -o "ribosome:picks2seg/painted-001@10.0"
+
+    See Also:
+
+        \b
+        copick convert seg2picks: the inverse — extract picks from a segmentation
+        copick convert mesh2seg: paint a segmentation from a mesh instead of picks
+        copick convert picks2mesh: build a mesh from picks instead of a segmentation
     """
     from copick_utils.converters.segmentation_from_picks import segmentation_from_picks_lazy_batch
 
