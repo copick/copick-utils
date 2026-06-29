@@ -87,8 +87,15 @@ class TubeSkeletonizer3D:
             min_branch_length: Minimum length of branches to keep
         """
         if remove_short_branches and len(self.skeleton_coords) > 0:
-            # Remove small objects from skeleton
-            cleaned_skeleton = remove_small_objects(self.skeleton, min_size=min_branch_length)
+            # Remove small (spur) objects from the skeleton. Use full connectivity so a thin,
+            # diagonally-stepping centerline stays a single connected object — with the default
+            # face-connectivity it fragments into tiny pieces that are then all removed (newer
+            # scikit-image removes objects <= min_size), emptying the skeleton entirely.
+            cleaned_skeleton = remove_small_objects(
+                self.skeleton,
+                min_size=min_branch_length,
+                connectivity=self.skeleton.ndim,
+            )
             self.skeleton = cleaned_skeleton
             self.skeleton_coords = np.array(np.where(self.skeleton)).T
 
