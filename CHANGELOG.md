@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.7.1](https://github.com/copick/copick-utils/compare/copick-utils-v1.7.0...copick-utils-v1.7.1) (2026-06-29)
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.22.1 to 6.26.3 ([#70](https://github.com/copick/copick-utils/issues/70)) ([221e1da](https://github.com/copick/copick-utils/commit/221e1da7c410ce3d22c36c3d7079da990cf12ad7))
+* Fix skeletonize and seg2picks ([#73](https://github.com/copick/copick-utils/issues/73)) ([efef59e](https://github.com/copick/copick-utils/commit/efef59ebe9b38dd6bc32099a2e3715a145f5d8fb))
+* Normalize Docstrings ([#72](https://github.com/copick/copick-utils/issues/72)) ([00e226a](https://github.com/copick/copick-utils/commit/00e226a239c18852239b57d28021cf432fdd45ad))
+
 ## [1.7.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.6.0...copick-utils-v1.7.0) (2026-06-25)
 
 
