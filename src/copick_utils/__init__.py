@@ -1,4 +1,4 @@
 # SPDX-FileCopyrightText: 2024-present Kyle Harrington <czi@kyleharrington.com>
 #
 # SPDX-License-Identifier: MIT
-__version__ = "1.7.1"
+__version__ = "1.8.0"
