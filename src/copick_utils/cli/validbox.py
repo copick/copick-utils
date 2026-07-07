@@ -3,7 +3,7 @@
 import click
 import copick
 from click_option_group import optgroup
-from copick.cli.util import add_config_option, add_debug_option
+from copick.cli.util import add_config_option, add_debug_option, add_run_names_option
 from copick.util.log import get_logger
 from copick.util.uri import expand_output_uri, parse_copick_uri
 
@@ -16,13 +16,8 @@ from copick_utils.cli.util import add_output_option, add_tomogram_option
     no_args_is_help=True,
 )
 @add_config_option
+@add_run_names_option
 @optgroup.group("\nInput Options", help="Options related to the input runs.")
-@optgroup.option(
-    "--run-names",
-    "-r",
-    multiple=True,
-    help="Specific run names to process (default: all runs).",
-)
 @add_tomogram_option(required=True)
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(

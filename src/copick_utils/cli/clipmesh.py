@@ -1,7 +1,7 @@
 import click
 import copick
 from click_option_group import optgroup
-from copick.cli.util import add_config_option, add_debug_option
+from copick.cli.util import add_config_option, add_debug_option, add_run_names_option
 from copick.util.log import get_logger
 from copick.util.uri import parse_copick_uri
 
@@ -24,13 +24,8 @@ from copick_utils.util.config_models import create_reference_config
     no_args_is_help=True,
 )
 @add_config_option
+@add_run_names_option
 @optgroup.group("\nInput Options", help="Options related to the input meshes.")
-@optgroup.option(
-    "--run-names",
-    "-r",
-    multiple=True,
-    help="Specific run names to process (default: all runs).",
-)
 @add_input_option("mesh")
 @optgroup.group("\nReference Options", help="Options for reference surface (provide mesh, segmentation, or tomogram).")
 @add_reference_mesh_option(required=False)
