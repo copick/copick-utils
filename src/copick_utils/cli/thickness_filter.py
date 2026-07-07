@@ -3,7 +3,12 @@
 import click
 import copick
 from click_option_group import optgroup
-from copick.cli.util import add_config_option, add_debug_option, add_run_names_option
+from copick.cli.util import (
+    add_config_option,
+    add_debug_option,
+    add_run_names_option,
+    resolve_deprecated_option,
+)
 from copick.util.log import get_logger
 from copick.util.uri import parse_copick_uri
 
@@ -23,10 +28,20 @@ from copick_utils.util.config_models import create_simple_config
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
     "--min-thickness",
-    "-t",
+    "-mt",
     type=float,
-    required=True,
+    required=False,
+    default=None,
     help="Minimum thickness (diameter) of structures to keep. Unit set by --thickness-unit.",
+)
+# TODO:remove once deprecation takes effect -- legacy -t alias (reserve -t for --tomogram); also restore --min-thickness required=True
+@optgroup.option(
+    "-t",
+    "legacy_min_thickness",
+    type=float,
+    default=None,
+    hidden=True,
+    help="Deprecated: use -mt/--min-thickness instead.",
 )
 @optgroup.option(
     "--thickness-unit",
@@ -43,6 +58,7 @@ def thickness_filter(
     run_names,
     input_uri,
     min_thickness,
+    legacy_min_thickness,
     thickness_unit,
     workers,
     output_uri,
@@ -87,6 +103,17 @@ def thickness_filter(
     from copick_utils.process.thickness_filter import thickness_filter_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
+
+    # TODO:remove once deprecation takes effect -- legacy -t alias resolution (drop legacy_min_thickness + None-check)
+    min_thickness = resolve_deprecated_option(
+        min_thickness,
+        legacy_min_thickness,
+        old_flag="-t",
+        new_flag="-mt/--min-thickness",
+        logger=logger,
+    )
+    if min_thickness is None:
+        raise click.BadParameter("Missing required option: -mt/--min-thickness.")
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None

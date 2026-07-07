@@ -335,17 +335,20 @@ def add_distance_options(func: click.Command) -> click.Command:
 # ============================================================================
 
 
-def add_input_option(object_type: str, func: click.Command = None) -> Callable:
+def add_input_option(object_type: str, func: click.Command = None, required: bool = True) -> Callable:
     """
     Add --input/-i option for URI-based input selection.
 
     Supports copick URI format with pattern matching:
     - Picks/Meshes: object_name:user_id/session_id
     - Segmentations: name:user_id/session_id@voxel_spacing?multilabel=true
+    - Tomograms: tomo_type@voxel_spacing
 
     Args:
-        object_type (str): Type of object ('picks', 'mesh', 'segmentation').
+        object_type (str): Type of object ('picks', 'mesh', 'segmentation', 'tomogram').
         func (click.Command, optional): The Click command to which the option will be added.
+        required (bool): Whether the option is required. Default is True. Pass False for
+            commands that keep deprecated fallback flags (e.g. --tomo-alg/--voxel-size).
 
     Returns:
         Callable: The Click command with the input option added.
@@ -358,6 +361,7 @@ def add_input_option(object_type: str, func: click.Command = None) -> Callable:
             "picks": "object_name:user_id/session_id",
             "mesh": "object_name:user_id/session_id",
             "segmentation": "name:user_id/session_id@voxel_spacing",
+            "tomogram": "tomo_type@voxel_spacing",
         }
 
         help_text = (
@@ -369,7 +373,7 @@ def add_input_option(object_type: str, func: click.Command = None) -> Callable:
             "-i",
             "input_uri",
             type=CopickURI(object_type, "input"),
-            required=True,
+            required=required,
             help=help_text,
         )
         return opt(_func)
@@ -380,7 +384,12 @@ def add_input_option(object_type: str, func: click.Command = None) -> Callable:
         return add_input_option_decorator(func)
 
 
-def add_output_option(object_type: str, func: click.Command = None, default_tool: str = None) -> Callable:
+def add_output_option(
+    object_type: str,
+    func: click.Command = None,
+    default_tool: str = None,
+    required: bool = True,
+) -> Callable:
     """
     Add --output/-o option for URI-based output specification with smart defaults.
 
@@ -411,21 +420,25 @@ def add_output_option(object_type: str, func: click.Command = None, default_tool
             "picks": '"ribosome", "ribosome/my-session", or "/my-session"',
             "mesh": '"membrane", "membrane/my-session", or "/my-session"',
             "segmentation": '"membrane", "membrane/my-session", or "/my-session"',
+            "tomogram": '"wbp@20.0" or "denoised@10.0"',
         }
 
-        voxel_suffix = "@voxel_spacing" if object_type == "segmentation" else ""
-        help_text = (
-            f"Output {object_type} URI. "
-            f"Supports smart defaults (e.g., {shorthand_examples.get(object_type, 'shorthand')}). "
-            f"Full format: object_name:user_id/session_id{voxel_suffix}."
-        )
+        voxel_suffix = "@voxel_spacing" if object_type in ("segmentation", "tomogram") else ""
+        if object_type == "tomogram":
+            help_text = f"Output tomogram URI (format: tomo_type{voxel_suffix}). Example: 'wbp@20.0'."
+        else:
+            help_text = (
+                f"Output {object_type} URI. "
+                f"Supports smart defaults (e.g., {shorthand_examples.get(object_type, 'shorthand')}). "
+                f"Full format: object_name:user_id/session_id{voxel_suffix}."
+            )
 
         opt = optgroup.option(
             "--output",
             "-o",
             "output_uri",
             type=CopickURI(object_type, "output"),
-            required=True,
+            required=required,
             help=help_text,
         )
         return opt(_func)
