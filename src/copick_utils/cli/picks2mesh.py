@@ -1,7 +1,12 @@
 import click
 import copick
 from click_option_group import optgroup
-from copick.cli.util import add_config_option, add_debug_option, add_run_names_option
+from copick.cli.util import (
+    add_config_option,
+    add_debug_option,
+    add_run_names_option,
+    resolve_deprecated_option,
+)
 from copick.util.log import get_logger
 from copick.util.uri import parse_copick_uri
 
@@ -26,10 +31,19 @@ from copick_utils.util.config_models import create_simple_config
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
     "--mesh-type",
-    "-t",
+    "-mt",
     type=click.Choice(["convex_hull", "alpha_shape"]),
     default="convex_hull",
     help="Type of mesh to create.",
+)
+# TODO:remove once deprecation takes effect -- legacy -t alias (reserve -t for --tomogram)
+@optgroup.option(
+    "-t",
+    "legacy_mesh_type",
+    type=click.Choice(["convex_hull", "alpha_shape"]),
+    default=None,
+    hidden=True,
+    help="Deprecated: use -mt/--mesh-type instead.",
 )
 @optgroup.option(
     "--alpha",
@@ -54,6 +68,7 @@ def picks2mesh(
     run_names,
     input_uri,
     mesh_type,
+    legacy_mesh_type,
     alpha,
     use_clustering,
     clustering_method,
@@ -113,6 +128,15 @@ def picks2mesh(
     from copick_utils.converters.mesh_from_picks import mesh_from_picks_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
+
+    # TODO:remove once deprecation takes effect -- legacy -t alias resolution (also drop the legacy_mesh_type param)
+    mesh_type = resolve_deprecated_option(
+        mesh_type,
+        legacy_mesh_type,
+        old_flag="-t",
+        new_flag="-mt/--mesh-type",
+        logger=logger,
+    )
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None

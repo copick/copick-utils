@@ -1,7 +1,12 @@
 import click
 import copick
 from click_option_group import optgroup
-from copick.cli.util import add_config_option, add_debug_option, add_run_names_option
+from copick.cli.util import (
+    add_config_option,
+    add_debug_option,
+    add_run_names_option,
+    resolve_deprecated_option,
+)
 from copick.util.log import get_logger
 from copick.util.uri import parse_copick_uri
 
@@ -18,12 +23,15 @@ from copick_utils.util.config_models import create_simple_config
 @add_run_names_option
 @optgroup.group("\nInput Options", help="Options related to the input segmentation.")
 @add_input_option("segmentation")
+# TODO:remove once deprecation takes effect -- legacy --voxel-spacing/-vs override (vs now comes from the input URI)
 @optgroup.option(
     "--voxel-spacing",
     "-vs",
     type=float,
-    required=True,
-    help="Voxel spacing for coordinate scaling.",
+    required=False,
+    default=None,
+    hidden=True,
+    help="Deprecated: the @voxel_spacing in -i/--input is used instead.",
 )
 @optgroup.group("\nTool Options", help="Options related to this tool.")
 @optgroup.option(
@@ -111,14 +119,14 @@ def fit_spline(
     Examples:
 
         \b
-        # Fit splines to skeletonized components
+        # Fit splines to skeletonized components (voxel spacing from the @10.0 in -i)
         copick process fit_spline -i "skeleton:skel/inst-.*@10.0" \\
-            -o "skeleton:spline/spline-{input_session_id}" --spacing-distance 4.4 --voxel-spacing 10.0
+            -o "skeleton:spline/spline-{input_session_id}" --spacing-distance 4.4
 
         \b
         # Process a single skeleton component
         copick process fit_spline -i "skeleton:skel/skel-0@10.0" \\
-            -o "skeleton:spline/spline-0" --spacing-distance 2.0 --voxel-spacing 10.0
+            -o "skeleton:spline/spline-0" --spacing-distance 2.0
 
     See Also:
 
@@ -147,6 +155,24 @@ def fit_spline(
 
     # Extract parameters for logging only
     input_params = parse_copick_uri(input_uri, "segmentation")
+
+    # Voxel spacing comes from the @voxel_spacing in the input URI; the legacy
+    # --voxel-spacing/-vs flag remains a deprecated override.
+    uri_vs_raw = input_params.get("voxel_spacing")
+    uri_vs = float(uri_vs_raw) if uri_vs_raw not in (None, "*") else None
+    # TODO:remove once deprecation takes effect -- legacy -vs override (drop the voxel_spacing param; use uri_vs directly)
+    voxel_spacing = resolve_deprecated_option(
+        uri_vs,
+        voxel_spacing,
+        old_flag="--voxel-spacing/-vs",
+        new_flag="the @voxel_spacing in -i/--input",
+        logger=logger,
+    )
+    if voxel_spacing is None:
+        raise click.BadParameter(
+            "Input URI must include a specific voxel spacing (e.g., @10.0), or pass --voxel-spacing/-vs.",
+        )
+
     logger.info(f"Fitting splines to segmentations '{input_params['name']}'")
     logger.info(
         f"Source segmentation pattern: {input_params['name']} ({input_params['user_id']}/{input_params['session_id']})",
