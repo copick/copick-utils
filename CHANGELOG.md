@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.8.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.7.1...copick-utils-v1.8.0) (2026-07-07)
+
+
+### ✨ Features
+
+* Normalize run options across copick-utils CLI ([#75](https://github.com/copick/copick-utils/issues/75)) ([570e4c7](https://github.com/copick/copick-utils/commit/570e4c734cfab50d30705889dcc6af47ca1ca228))
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.26.3 to 6.29.4 ([#74](https://github.com/copick/copick-utils/issues/74)) ([eae782c](https://github.com/copick/copick-utils/commit/eae782c46ab841c87f1288cca1743d24e5bf1242))
+* Normalize more CLI flags. ([#77](https://github.com/copick/copick-utils/issues/77)) ([29b8876](https://github.com/copick/copick-utils/commit/29b8876f8d9e999ea8275d7435368b94d29ee4f5))
+
 ## [1.7.1](https://github.com/copick/copick-utils/compare/copick-utils-v1.7.0...copick-utils-v1.7.1) (2026-06-29)
 
 
