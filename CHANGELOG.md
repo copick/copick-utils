@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.1](https://github.com/copick/copick-utils/compare/copick-utils-v1.8.0...copick-utils-v1.8.1) (2026-08-05)
+
+
+### 🐞 Bug Fixes
+
+* bump actions/setup-python from 6 to 7 ([#80](https://github.com/copick/copick-utils/issues/80)) ([45aed3d](https://github.com/copick/copick-utils/commit/45aed3d50c63cae37e212402952546b2aa09450a))
+* bump chanzuckerberg/github-actions from 6.29.4 to 6.32.0 ([#82](https://github.com/copick/copick-utils/issues/82)) ([9e5da98](https://github.com/copick/copick-utils/commit/9e5da988c3dd9f803a752fb8143bc700fbce4f84))
+
 ## [1.8.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.7.1...copick-utils-v1.8.0) (2026-07-07)
 
 
