@@ -8,6 +8,7 @@ from pathlib import Path
 
 EXPECTED_REQUIREMENTS = {
     "copick>=2.0.0a1",
+    "pydantic<2.13,>=2",
     "zarr<4,>=3.1.6",
 }
 EXPECTED_ENTRY_POINTS = 32
