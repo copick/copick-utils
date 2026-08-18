@@ -12,7 +12,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import zarr
-
 from copick_utils.features.skimage import compute_skimage_features
 from copick_utils.io.zarr import get_level_array
 
