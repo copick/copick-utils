@@ -7,7 +7,6 @@ import pytest
 import zarr
 from copick.impl.filesystem import CopickConfigFSSpec, CopickRootFSSpec
 from copick.util.ome import get_level_path
-
 from copick_utils.converters import lazy_converter
 from copick_utils.io import writers
 from copick_utils.process.rescale import rescale_segmentation
