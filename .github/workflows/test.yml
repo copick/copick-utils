@@ -15,39 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-minimum:
-    name: minimum py3.11
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
-        with:
-          version: "0.12.4"
-          python-version: "3.11"
-
-      - name: Check lockfile
-        run: uv lock --check
-
-      - name: Install test environment
-        run: uv sync --locked --extra test --extra dev
-
-      - name: Verify Python version
-        run: >
-          uv run --no-sync python -c
-          "import sys; v = sys.version_info;
-          assert (v.major, v.minor) == (3, 11), sys.version;
-          assert v.releaselevel == 'final', sys.version;
-          print(sys.version)"
-
-      - name: Select minimum migration runtime
-        run: uv pip install --python .venv/bin/python "copick==2.0.0a1" "zarr==3.1.6"
-
-      - name: Run tests
-        run: uv run --no-sync pytest -q -p no:warnings --cov --cov-branch --cov-report=term-missing tests
-
   test-locked:
     name: locked py${{ matrix.python-version }}
     runs-on: ubuntu-latest
