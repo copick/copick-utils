@@ -9,5 +9,5 @@ def test_installed_distribution_declares_migration_runtime():
 
     assert metadata["Requires-Python"] == ">=3.11"
     assert "copick>=2.0.0a1" in requirements
-    assert "pydantic<2.13,>=2" in requirements
+    assert "pydantic>=2" in requirements
     assert "zarr<4,>=3.1.6" in requirements
