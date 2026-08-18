@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.0.0-alpha.1](https://github.com/copick/copick-utils/compare/copick-utils-v1.8.0...copick-utils-v2.0.0-alpha.1) (2026-08-18)
+
+
+### ✨ Features
+
+* delegate feature persistence to copick ([#95](https://github.com/copick/copick-utils/issues/95)) ([71b8290](https://github.com/copick/copick-utils/commit/71b8290b9fcf53693feb09afe6cf31af9b435455))
+* resolve tomogram levels from OME metadata ([#93](https://github.com/copick/copick-utils/issues/93)) ([63e6273](https://github.com/copick/copick-utils/commit/63e6273aa7c310191f60ef3e722033112c108a6c))
+
+
+### 🐞 Bug Fixes
+
+* bump actions/setup-python from 6 to 7 ([#80](https://github.com/copick/copick-utils/issues/80)) ([45aed3d](https://github.com/copick/copick-utils/commit/45aed3d50c63cae37e212402952546b2aa09450a))
+* bump chanzuckerberg/github-actions from 6.29.4 to 6.32.0 ([#82](https://github.com/copick/copick-utils/issues/82)) ([9e5da98](https://github.com/copick/copick-utils/commit/9e5da988c3dd9f803a752fb8143bc700fbce4f84))
+
+
+### 🧪 Tests
+
+* establish Zarr migration baseline ([#94](https://github.com/copick/copick-utils/issues/94)) ([d55fc36](https://github.com/copick/copick-utils/commit/d55fc362ae69a5c9c92cc3100005866e84e440bf))
+* verify delegated canonical writers ([#96](https://github.com/copick/copick-utils/issues/96)) ([0c9e5cd](https://github.com/copick/copick-utils/commit/0c9e5cd2ca90b03d20654042a8b6c5e0f79b2760))
+
+
+### ⚙ Continuous Integration
+
+* configure v2 alpha releases ([0696b9b](https://github.com/copick/copick-utils/commit/0696b9b04cbeec14de4c49c59ef7e5224ae49ef0))
+* gate releases on validated artifacts ([#97](https://github.com/copick/copick-utils/issues/97)) ([ae873d3](https://github.com/copick/copick-utils/commit/ae873d3726118aa68811aa5f203dc2cfeed45102))
+
 ## [1.8.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.7.1...copick-utils-v1.8.0) (2026-07-07)
 
 
