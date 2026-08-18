@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  test-locked:
     name: locked py${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:

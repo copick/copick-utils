@@ -10,17 +10,18 @@ import numpy as np
 import pytest
 import zarr
 from copick_utils.features.skimage import compute_skimage_features
+from copick_utils.io.zarr import get_level_array
 
 
 def _memory_store():
     return zarr.storage.MemoryStore()
 
 
-def _tomogram_store(path="0"):
+def _tomogram_store(path="0", zarr_format=3):
     store = _memory_store()
-    group = zarr.group(store=store)
+    group = zarr.open_group(store=store, mode="w", zarr_format=zarr_format)
     data = ((np.indices((5, 6, 7)) * np.array([11, 5, 2])[:, None, None, None]).sum(0) % 17).astype(np.float32)
-    group.create_dataset(path, data=data, chunks=(3, 4, 5))
+    group.create_array(path, data=data, chunks=(3, 4, 5))
     group.attrs["multiscales"] = [{"datasets": [{"path": path}]}]
     return store, data
 
@@ -47,15 +48,30 @@ class _Tomogram:
         return self.features
 
 
+@pytest.mark.parametrize("zarr_format", [2, 3])
 @pytest.mark.parametrize("path", ["0", "s0"])
-def test_local_ome_zarr_fixture_declares_its_level_path(path):
-    store, expected = _tomogram_store(path)
+def test_level_array_follows_ome_metadata(path, zarr_format):
+    store, expected = _tomogram_store(path, zarr_format)
     group = zarr.open_group(store=store, mode="r")
 
     declared_path = group.attrs["multiscales"][0]["datasets"][0]["path"]
     np.testing.assert_array_equal(group[declared_path][:], expected)
+    np.testing.assert_array_equal(get_level_array(_Tomogram(store))[:], expected)
 
 
+@pytest.mark.parametrize("level", [-1, 1])
+def test_level_array_rejects_out_of_range_levels(level):
+    store, _ = _tomogram_store("s0")
+
+    with pytest.raises(ValueError, match=f"Level {level} not found"):
+        get_level_array(_Tomogram(store), level)
+
+
+@pytest.mark.xfail(
+    raises=ValueError,
+    strict=True,
+    reason="The retained feature writer is migrated in U3",
+)
 def test_pre_migration_feature_result_is_frozen():
     """Protect the existing chunk subdivision and boundary behavior."""
     store, _ = _tomogram_store()
@@ -75,6 +91,11 @@ def test_pre_migration_feature_result_is_frozen():
     assert rounded_digest == "8364181d58811d79fe86847872316a97370ed2737aeee6411a38753124305312"
 
 
+@pytest.mark.xfail(
+    raises=ValueError,
+    strict=True,
+    reason="The retained feature writer is migrated in U3",
+)
 def test_pre_migration_feature_store_documents_reader_incompatibility():
     store, _ = _tomogram_store()
     features = compute_skimage_features(

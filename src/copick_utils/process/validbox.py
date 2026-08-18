@@ -1,9 +1,11 @@
 """Generate valid area box meshes for tomographic reconstructions."""
+
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import numpy as np
 import trimesh as tm
-import zarr
+
+from copick_utils.io.zarr import get_level_array
 
 if TYPE_CHECKING:
     from copick.models import CopickRoot, CopickRun
@@ -138,7 +140,7 @@ def create_validbox_mesh(
         return None
 
     # Get pixel dimensions and calculate physical dimensions
-    pixel_max_dim = zarr.open(tomo.zarr())["0"].shape[::-1]
+    pixel_max_dim = get_level_array(tomo).shape[::-1]
     pixel_center = np.floor(np.array(pixel_max_dim) / 2) + 1
     max_dim = np.array([d * voxel_spacing for d in pixel_max_dim])
     center = np.array([c * voxel_spacing for c in pixel_center])

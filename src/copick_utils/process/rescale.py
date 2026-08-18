@@ -3,11 +3,11 @@
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import numpy as np
-import zarr
 from copick.util.log import get_logger
 from scipy.ndimage import zoom
 
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.io.zarr import get_level_array
 
 if TYPE_CHECKING:
     from copick.models import CopickRun, CopickSegmentation
@@ -72,8 +72,7 @@ def _get_tomogram_shape(
     if tomogram is None:
         return None
 
-    tomo_zarr = zarr.open(tomogram.zarr(), "r")
-    return tuple(tomo_zarr["0"].shape)
+    return tuple(get_level_array(tomogram).shape)
 
 
 def rescale_segmentation(
