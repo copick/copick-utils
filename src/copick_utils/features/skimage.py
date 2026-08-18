@@ -1,6 +1,4 @@
 import numpy as np
-import zarr
-from numcodecs import Blosc
 from skimage.feature import multiscale_basic_features
 
 from copick_utils.io.zarr import get_level_array
@@ -16,6 +14,9 @@ def compute_skimage_features(
     sigma_min=0.5,
     sigma_max=16.0,
     feature_chunk_size=None,
+    *,
+    chunks=None,
+    shards=None,
 ):
     """
     Processes the tomogram chunkwise and computes the multiscale basic features.
@@ -42,25 +43,11 @@ def compute_skimage_features(
     )
     num_features = test_features.shape[-1]
 
-    # Prepare output Zarr array directly in the tomogram store
+    # Preserve the existing entity-creation timing, but defer all persistence
+    # until the complete feature tensor has been assembled.
     print(f"Creating new feature store with {num_features} features...")
     copick_features = tomogram.new_features(feature_type)
-    feature_store = copick_features.zarr()
-
-    # Use the provided feature chunk size if available, otherwise default to the input chunk size
-    if feature_chunk_size is None:
-        feature_chunk_size = (num_features, *chunk_size)
-    else:
-        feature_chunk_size = (num_features, *feature_chunk_size)
-
-    out_array = zarr.create(
-        shape=(num_features, *image.shape),
-        chunks=feature_chunk_size,
-        dtype="float32",
-        compressor=Blosc(cname="zstd", clevel=3, shuffle=2),
-        store=feature_store,
-        overwrite=True,
-    )
+    out_array = np.empty((num_features, *image.shape), dtype=np.float32)
 
     # Process each chunk
     for z in range(0, image.shape[0], chunk_size[0]):
@@ -97,6 +84,18 @@ def compute_skimage_features(
                     y : y + chunk_size[1],
                     x : x + chunk_size[2],
                 ] = contiguous_chunk
+
+    storage_chunks = chunks
+    if storage_chunks is None and feature_chunk_size is not None:
+        storage_chunks = feature_chunk_size
+
+    copick_features.from_numpy(
+        out_array,
+        chunks=storage_chunks,
+        shards=shards,
+        dtype=np.float32,
+        overwrite=True,
+    )
 
     print(f"Features saved under feature type '{feature_type}'")
     return copick_features

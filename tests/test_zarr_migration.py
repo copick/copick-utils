@@ -5,6 +5,7 @@ migration so the migrated implementation can be checked against it.
 """
 
 import hashlib
+import inspect
 
 import numpy as np
 import pytest
@@ -28,10 +29,15 @@ def _tomogram_store(path="0", zarr_format=3):
 
 class _Features:
     def __init__(self):
-        self.store = _memory_store()
+        self.data = None
+        self.write_calls = []
 
-    def zarr(self):
-        return self.store
+    def from_numpy(self, data, **kwargs):
+        self.data = np.array(data, copy=True)
+        self.write_calls.append(kwargs)
+
+    def numpy(self):
+        return np.array(self.data, copy=True)
 
 
 class _Tomogram:
@@ -67,11 +73,6 @@ def test_level_array_rejects_out_of_range_levels(level):
         get_level_array(_Tomogram(store), level)
 
 
-@pytest.mark.xfail(
-    raises=ValueError,
-    strict=True,
-    reason="The retained feature writer is migrated in U3",
-)
 def test_pre_migration_feature_result_is_frozen():
     """Protect the existing chunk subdivision and boundary behavior."""
     store, _ = _tomogram_store()
@@ -83,7 +84,7 @@ def test_pre_migration_feature_result_is_frozen():
         sigma_max=0.5,
         feature_chunk_size=(3, 4, 5),
     )
-    result = zarr.open(features.zarr(), mode="r")[:]
+    result = features.numpy()
 
     assert result.shape == (5, 5, 6, 7)
     assert result.dtype == np.float32
@@ -91,12 +92,7 @@ def test_pre_migration_feature_result_is_frozen():
     assert rounded_digest == "8364181d58811d79fe86847872316a97370ed2737aeee6411a38753124305312"
 
 
-@pytest.mark.xfail(
-    raises=ValueError,
-    strict=True,
-    reason="The retained feature writer is migrated in U3",
-)
-def test_pre_migration_feature_store_documents_reader_incompatibility():
+def test_feature_writer_delegates_one_final_float32_write():
     store, _ = _tomogram_store()
     features = compute_skimage_features(
         _Tomogram(store),
@@ -110,9 +106,25 @@ def test_pre_migration_feature_store_documents_reader_incompatibility():
         feature_chunk_size=(3, 4, 5),
     )
 
-    # The old implementation writes an array at the store root.  CopickFeatures
-    # expects an OME group and therefore cannot resolve a metadata-defined level.
-    root = zarr.open(features.zarr(), mode="r")
-    assert isinstance(root, zarr.Array)
-    with pytest.raises((AttributeError, TypeError, zarr.errors.ContainsArrayError)):
-        zarr.open_group(store=features.zarr(), mode="r")
+    assert features.data.shape == (1, 5, 6, 7)
+    assert features.data.dtype == np.float32
+    assert features.write_calls == [
+        {
+            "chunks": (3, 4, 5),
+            "shards": None,
+            "dtype": np.float32,
+            "overwrite": True,
+        },
+    ]
+
+
+def test_feature_layout_controls_are_optional_keyword_only():
+    signature = inspect.signature(compute_skimage_features)
+
+    # All pre-migration parameters still bind positionally in their original order.
+    signature.bind(object(), "features", object(), True, True, True, 0.5, 16.0, (32, 32, 32))
+
+    assert signature.parameters["chunks"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["chunks"].default is None
+    assert signature.parameters["shards"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["shards"].default is None
