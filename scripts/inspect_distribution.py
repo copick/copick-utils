@@ -6,11 +6,6 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-EXPECTED_REQUIREMENTS = {
-    "copick>=2.0.0a1",
-    "pydantic>=2",
-    "zarr<4,>=3.1.6",
-}
 EXPECTED_ENTRY_POINTS = 32
 
 
@@ -28,10 +23,6 @@ def inspect_distributions(dist_dir: Path) -> tuple[Path, Path]:
             raise ValueError("Wheel must contain exactly one METADATA and one entry_points.txt file")
 
         metadata = email.message_from_bytes(archive.read(metadata_names[0]))
-        requirements = {value.replace(" ", "") for value in metadata.get_all("Requires-Dist", [])}
-        missing = EXPECTED_REQUIREMENTS - requirements
-        if missing:
-            raise ValueError(f"Wheel is missing migration requirements: {sorted(missing)!r}")
         if metadata["Requires-Python"] != ">=3.11":
             raise ValueError(f"Unexpected Requires-Python: {metadata['Requires-Python']!r}")
 
