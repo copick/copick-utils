@@ -11,6 +11,7 @@ import pytest
 import zarr
 from copick_utils.features.skimage import compute_skimage_features
 
+
 def _memory_store():
     return zarr.storage.MemoryStore()
 
