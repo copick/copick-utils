@@ -4,27 +4,28 @@ build-backend = "hatchling.build"
 
 [project]
 name = "copick-utils"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
 dependencies = [
-    "copick>=1.26.0",
+    "copick>=2.0.0a1",
     "click",
     "click-option-group",
     "numpy",
     "scipy",
     "scikit-image",
-    "zarr",
+    "zarr>=3.1.6,<4",
     "trimesh",
     "manifold3d",
     "mapbox-earcut",
@@ -45,9 +46,9 @@ license = { file = "LICENSE" }
 keywords = ["copick", "cryoet", "cryo-et", "tomography", "annotation", "utilities"]
 
 [project.urls]
-Repository = "https://github.com/KyleHarrington/copick-utils.git"
-Issues = "https://github.com/KyleHarrington/copick-utils/issues"
-Documentation = "https://github.com/KyleHarrington/copick-utils#readme"
+Repository = "https://github.com/copick/copick-utils.git"
+Issues = "https://github.com/copick/copick-utils/issues"
+Documentation = "https://github.com/copick/copick-utils#readme"
 
 [project.optional-dependencies]
 test = [

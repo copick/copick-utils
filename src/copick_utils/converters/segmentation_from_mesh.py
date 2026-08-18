@@ -9,6 +9,7 @@ from copick.util.log import get_logger
 from trimesh.ray.ray_triangle import RayMeshIntersector
 
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.io.zarr import get_level_array
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickRun, CopickSegmentation
@@ -227,10 +228,8 @@ def segmentation_from_mesh(
             logger.error(f"Tomogram type {tomo_type} not found")
             return None
 
-        # Get dimensions from zarr
-        import zarr
-
-        tomo_array = zarr.open(tomos[0].zarr())["0"]
+        # Get dimensions from the metadata-declared highest-resolution level.
+        tomo_array = get_level_array(tomos[0])
         vox_dim = tomo_array.shape[::-1]  # zarr is (z,y,x), we want (x,y,z)
 
         # Convert mesh to volume based on mode

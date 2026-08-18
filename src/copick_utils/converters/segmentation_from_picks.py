@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import numpy as np
-import zarr
 from copick.util.log import get_logger
 
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.io.zarr import get_level_array
 
 if TYPE_CHECKING:
     from copick.models import CopickObject, CopickPicks, CopickRun, CopickSegmentation
@@ -145,8 +145,7 @@ def _create_segmentation_from_picks_legacy(
         seg = segs[0]
 
     # Paint the picks into a fresh full-resolution label volume.
-    tomogram_zarr = zarr.open(tomogram.zarr(), "r")
-    highest_res_shape = tomogram_zarr["0"].shape
+    highest_res_shape = get_level_array(tomogram).shape
     highest_res_seg = np.zeros(highest_res_shape, dtype=np.uint16)
     highest_res_seg = from_picks(pick_set, highest_res_seg, radius, pickable_object.label, voxel_spacing)
 

@@ -3,6 +3,8 @@ import zarr
 from numcodecs import Blosc
 from skimage.feature import multiscale_basic_features
 
+from copick_utils.io.zarr import get_level_array
+
 
 def compute_skimage_features(
     tomogram,
@@ -19,7 +21,7 @@ def compute_skimage_features(
     Processes the tomogram chunkwise and computes the multiscale basic features.
     Allows for optional feature chunk size.
     """
-    image = zarr.open(tomogram.zarr(), mode="r")["0"]
+    image = get_level_array(tomogram)
     input_chunk_size = feature_chunk_size if feature_chunk_size else image.chunks
     chunk_size = input_chunk_size if len(input_chunk_size) == 3 else input_chunk_size[1:]
 

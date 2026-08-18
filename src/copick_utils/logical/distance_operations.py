@@ -10,6 +10,7 @@ from copick_utils.converters.converter_common import (
     store_mesh_with_stats,
 )
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.io.zarr import get_level_array
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickPicks, CopickRun, CopickSegmentation
@@ -116,8 +117,6 @@ def _get_tomogram_bounds(
     Raises:
         ValueError: If voxel spacing or tomogram type not found
     """
-    import zarr
-
     vs = run.get_voxel_spacing(voxel_spacing)
     if vs is None:
         available = [v.voxel_size for v in run.voxel_spacings]
@@ -131,7 +130,7 @@ def _get_tomogram_bounds(
         )
 
     # Get shape from zarr (z, y, x order)
-    zarr_array = zarr.open(tomo.zarr())["0"]
+    zarr_array = get_level_array(tomo)
     shape_zyx = zarr_array.shape
     shape_xyz = shape_zyx[::-1]  # Convert to (x, y, z)
 

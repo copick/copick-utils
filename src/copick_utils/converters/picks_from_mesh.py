@@ -6,6 +6,7 @@ from copick.util.log import get_logger
 from scipy.stats.qmc import PoissonDisk
 
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.io.zarr import get_level_array
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickPicks, CopickRun
@@ -197,9 +198,7 @@ def picks_from_mesh(
         print(f"Warning: Could not find tomogram of type '{tomo_type}' for run {run.name}")
         return None
 
-    import zarr
-
-    pixel_max_dim = zarr.open(tomo.zarr())["0"].shape[::-1]
+    pixel_max_dim = get_level_array(tomo).shape[::-1]
     max_dim = np.array([d * voxel_spacing for d in pixel_max_dim])
 
     # Set default min_dist if not provided

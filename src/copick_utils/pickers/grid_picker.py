@@ -1,6 +1,7 @@
 import numpy as np
-import zarr
 from copick.models import CopickPoint
+
+from copick_utils.io.zarr import get_level_array
 
 
 def grid_picker(pickable_obj, run, tomogram, grid_spacing_factor, session_id="0", user_id="gridPicker"):
@@ -29,7 +30,7 @@ def grid_picker(pickable_obj, run, tomogram, grid_spacing_factor, session_id="0"
     grid_spacing = radius * grid_spacing_factor
 
     # Open the highest resolution of the tomogram
-    image = zarr.open(tomogram.zarr(), mode="r")["0"]
+    image = get_level_array(tomogram)
 
     # Create a grid of points
     points = []
