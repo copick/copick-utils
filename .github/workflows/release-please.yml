@@ -51,16 +51,19 @@ jobs:
       tag_name: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
 
-  publish-pypi-package:
-    name: Build and publish Python package to PyPI
-    runs-on: ubuntu-latest
+  validate-release:
+    name: Validate released commit
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
-    environment:
-      name: pypi
-      url: https://pypi.org/p/copick-utils
-    permissions:
-      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+    uses: ./.github/workflows/test.yml
+    with:
+      ref: ${{ needs.release-please.outputs.sha }}
+
+  build-release:
+    name: Build and inspect release artifacts
+    runs-on: ubuntu-latest
+    needs: [release-please, validate-release]
+    if: needs.release-please.outputs.release_created == 'true'
     steps:
       - name: Checkout released commit
         uses: actions/checkout@v7
@@ -69,14 +72,55 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
         with:
-          version: "0.7.13"
+          version: "0.12.4"
           python-version: "3.12"
 
-      - name: build
-        run: |
-          uv build
+      - name: Check lockfile
+        run: uv lock --check
+
+      - name: Install inspection environment
+        run: uv sync --locked --extra test
+
+      - name: Verify Python version
+        run: >
+          uv run --no-sync python -c
+          "import sys; v = sys.version_info;
+          assert (v.major, v.minor) == (3, 12), sys.version;
+          assert v.releaselevel == 'final', sys.version;
+          print(sys.version)"
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Inspect distributions
+        run: uv run --no-sync python scripts/inspect_distribution.py dist
+
+      - name: Preserve validated artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: copick-utils-${{ needs.release-please.outputs.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-pypi-package:
+    name: Publish validated Python package to PyPI
+    runs-on: ubuntu-latest
+    needs: [release-please, build-release]
+    if: needs.release-please.outputs.release_created == 'true'
+    environment:
+      name: pypi
+      url: https://pypi.org/p/copick-utils
+    permissions:
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+    steps:
+      - name: Download validated artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: copick-utils-${{ needs.release-please.outputs.sha }}
+          path: dist/
 
       - name: Publish distribution 📦 to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

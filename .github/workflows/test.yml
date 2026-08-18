@@ -1,6 +1,12 @@
 name: Tests
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact commit to validate
+        required: false
+        type: string
   push:
     branches: [main, v2.0]
     paths-ignore:
@@ -24,6 +30,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
