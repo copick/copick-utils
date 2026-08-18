@@ -98,7 +98,7 @@ jobs:
         run: uv run --no-sync python scripts/inspect_distribution.py dist
 
       - name: Preserve validated artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: copick-utils-${{ needs.release-please.outputs.sha }}
           path: dist/
@@ -117,7 +117,7 @@ jobs:
       id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
       - name: Download validated artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: copick-utils-${{ needs.release-please.outputs.sha }}
           path: dist/

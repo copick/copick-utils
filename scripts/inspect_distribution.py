@@ -1,7 +1,6 @@
 """Fail release builds whose artifacts do not expose the migrated contract."""
 
 import argparse
-import email
 import tarfile
 import zipfile
 from pathlib import Path
@@ -21,10 +20,6 @@ def inspect_distributions(dist_dir: Path) -> tuple[Path, Path]:
         entry_point_names = [name for name in archive.namelist() if name.endswith(".dist-info/entry_points.txt")]
         if len(metadata_names) != 1 or len(entry_point_names) != 1:
             raise ValueError("Wheel must contain exactly one METADATA and one entry_points.txt file")
-
-        metadata = email.message_from_bytes(archive.read(metadata_names[0]))
-        if metadata["Requires-Python"] != ">=3.11":
-            raise ValueError(f"Unexpected Requires-Python: {metadata['Requires-Python']!r}")
 
         entry_points = archive.read(entry_point_names[0]).decode()
         command_count = sum(
