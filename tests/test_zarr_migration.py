@@ -68,7 +68,6 @@ def test_level_array_rejects_out_of_range_levels(level):
 
 
 @pytest.mark.xfail(
-    int(zarr.__version__.split(".")[0]) >= 3,
     raises=ValueError,
     strict=True,
     reason="The retained feature writer is migrated in U3",
@@ -93,7 +92,6 @@ def test_pre_migration_feature_result_is_frozen():
 
 
 @pytest.mark.xfail(
-    int(zarr.__version__.split(".")[0]) >= 3,
     raises=ValueError,
     strict=True,
     reason="The retained feature writer is migrated in U3",
