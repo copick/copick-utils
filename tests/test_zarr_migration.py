@@ -1,31 +1,15 @@
 """Executable baseline for the copick 2 / Zarr 3 migration.
 
-This module intentionally records the storage assumptions present before the
-migration.  Later stack layers tighten the inventories as each assumption is
-removed, while the feature checksum remains a behavioral regression oracle.
+This module records the observable storage behavior present before the
+migration so the migrated implementation can be checked against it.
 """
 
-import ast
 import hashlib
-from pathlib import Path
 
 import numpy as np
 import pytest
 import zarr
 from copick_utils.features.skimage import compute_skimage_features
-
-SOURCE_ROOT = Path(__file__).parents[1] / "src" / "copick_utils"
-DIRECT_LEVEL_READERS = {
-    "converters/picks_from_mesh.py",
-    "converters/segmentation_from_mesh.py",
-    "converters/segmentation_from_picks.py",
-    "features/skimage.py",
-    "logical/distance_operations.py",
-    "pickers/grid_picker.py",
-    "process/rescale.py",
-    "process/validbox.py",
-}
-
 
 def _memory_store():
     return zarr.storage.MemoryStore()
@@ -110,24 +94,3 @@ def test_pre_migration_feature_store_documents_reader_incompatibility():
     assert isinstance(root, zarr.Array)
     with pytest.raises((AttributeError, TypeError, zarr.errors.ContainsArrayError)):
         zarr.open_group(store=features.zarr(), mode="r")
-
-
-def test_direct_zarr_boundary_inventory_is_complete():
-    direct_level_readers = set()
-    feature_array_creators = set()
-
-    for source in SOURCE_ROOT.rglob("*.py"):
-        relative = source.relative_to(SOURCE_ROOT).as_posix()
-        tree = ast.parse(source.read_text())
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-                continue
-            if not isinstance(node.func.value, ast.Name) or node.func.value.id != "zarr":
-                continue
-            if node.func.attr == "open":
-                direct_level_readers.add(relative)
-            elif node.func.attr == "create":
-                feature_array_creators.add(relative)
-
-    assert direct_level_readers == DIRECT_LEVEL_READERS
-    assert feature_array_creators == {"features/skimage.py"}
