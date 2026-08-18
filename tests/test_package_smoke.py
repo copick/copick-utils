@@ -17,10 +17,17 @@ def test_all_implementation_modules_import():
 
 
 def test_all_copick_command_entry_points_load_and_render_help():
+    groups = (
+        "copick.convert.commands",
+        "copick.download.commands",
+        "copick.logical.commands",
+        "copick.process.commands",
+    )
     entry_points = [
         entry_point
-        for entry_point in importlib.metadata.entry_points()
-        if entry_point.group.startswith("copick.") and entry_point.dist.name == "copick-utils"
+        for group in groups
+        for entry_point in importlib.metadata.entry_points(group=group)
+        if entry_point.dist.name == "copick-utils"
     ]
 
     assert len(entry_points) == 32
