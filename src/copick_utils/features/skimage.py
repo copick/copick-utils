@@ -1,7 +1,23 @@
+import tempfile
+
 import numpy as np
 from skimage.feature import multiscale_basic_features
 
 from copick_utils.io.zarr import get_level_array
+
+
+def _axis_slices(origin, chunk_size, overlap, image_size):
+    target_end = min(origin + chunk_size, image_size)
+    read_start = max(origin - overlap, 0)
+    read_end = min(target_end + overlap, image_size)
+    crop_start = origin - read_start
+    crop_end = target_end - read_start
+
+    return (
+        slice(read_start, read_end),
+        slice(crop_start, crop_end),
+        slice(origin, target_end),
+    )
 
 
 def compute_skimage_features(
@@ -44,58 +60,54 @@ def compute_skimage_features(
     num_features = test_features.shape[-1]
 
     # Preserve the existing entity-creation timing, but defer all persistence
-    # until the complete feature tensor has been assembled.
+    # until the complete feature tensor has been assembled on disk.
     print(f"Creating new feature store with {num_features} features...")
     copick_features = tomogram.new_features(feature_type)
-    out_array = np.empty((num_features, *image.shape), dtype=np.float32)
+    with tempfile.TemporaryDirectory(prefix="copick-utils-skimage-") as directory:
+        out_array = np.memmap(
+            f"{directory}/features.dat",
+            dtype=np.float32,
+            mode="w+",
+            shape=(num_features, *image.shape),
+        )
+        try:
+            # Process each chunk
+            for z in range(0, image.shape[0], chunk_size[0]):
+                for y in range(0, image.shape[1], chunk_size[1]):
+                    for x in range(0, image.shape[2], chunk_size[2]):
+                        z_read, z_crop, z_output = _axis_slices(z, chunk_size[0], overlap, image.shape[0])
+                        y_read, y_crop, y_output = _axis_slices(y, chunk_size[1], overlap, image.shape[1])
+                        x_read, x_crop, x_output = _axis_slices(x, chunk_size[2], overlap, image.shape[2])
 
-    # Process each chunk
-    for z in range(0, image.shape[0], chunk_size[0]):
-        for y in range(0, image.shape[1], chunk_size[1]):
-            for x in range(0, image.shape[2], chunk_size[2]):
-                z_start = max(z - overlap, 0)
-                z_end = min(z + chunk_size[0] + overlap, image.shape[0])
-                y_start = max(y - overlap, 0)
-                y_end = min(y + chunk_size[1] + overlap, image.shape[1])
-                x_start = max(x - overlap, 0)
-                x_end = min(x + chunk_size[2] + overlap, image.shape[2])
+                        chunk = image[z_read, y_read, x_read]
+                        chunk_features = multiscale_basic_features(
+                            chunk,
+                            intensity=intensity,
+                            edges=edges,
+                            texture=texture,
+                            sigma_min=sigma_min,
+                            sigma_max=sigma_max,
+                        )
 
-                chunk = image[z_start:z_end, y_start:y_end, x_start:x_end]
-                chunk_features = multiscale_basic_features(
-                    chunk,
-                    intensity=intensity,
-                    edges=edges,
-                    texture=texture,
-                    sigma_min=sigma_min,
-                    sigma_max=sigma_max,
-                )
+                        contiguous_chunk = np.ascontiguousarray(
+                            chunk_features[z_crop, y_crop, x_crop].transpose(3, 0, 1, 2),
+                        )
+                        out_array[:, z_output, y_output, x_output] = contiguous_chunk
 
-                # Adjust indices for overlap
-                z_slice = slice(overlap if z_start > 0 else 0, None if z_end == image.shape[0] else -overlap)
-                y_slice = slice(overlap if y_start > 0 else 0, None if y_end == image.shape[1] else -overlap)
-                x_slice = slice(overlap if x_start > 0 else 0, None if x_end == image.shape[2] else -overlap)
+            storage_chunks = chunks
+            if storage_chunks is None and feature_chunk_size is not None:
+                storage_chunks = feature_chunk_size
 
-                # Ensure contiguous array and correct slicing
-                contiguous_chunk = np.ascontiguousarray(chunk_features[z_slice, y_slice, x_slice].transpose(3, 0, 1, 2))
-
-                out_array[
-                    0:num_features,
-                    z : z + chunk_size[0],
-                    y : y + chunk_size[1],
-                    x : x + chunk_size[2],
-                ] = contiguous_chunk
-
-    storage_chunks = chunks
-    if storage_chunks is None and feature_chunk_size is not None:
-        storage_chunks = feature_chunk_size
-
-    copick_features.from_numpy(
-        out_array,
-        chunks=storage_chunks,
-        shards=shards,
-        dtype=np.float32,
-        overwrite=True,
-    )
+            out_array.flush()
+            copick_features.from_numpy(
+                out_array,
+                chunks=storage_chunks,
+                shards=shards,
+                dtype=np.float32,
+                overwrite=True,
+            )
+        finally:
+            del out_array
 
     print(f"Features saved under feature type '{feature_type}'")
     return copick_features
