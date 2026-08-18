@@ -4,9 +4,8 @@ import importlib
 import importlib.metadata
 import pkgutil
 
-from click.testing import CliRunner
-
 import copick_utils
+from click.testing import CliRunner
 
 
 def test_all_implementation_modules_import():
