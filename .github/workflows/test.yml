@@ -1,0 +1,46 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, v2.0]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "LICENSE"
+  pull_request:
+    branches: [main, v2.0]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "LICENSE"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: locked py${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.7.13"
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check lockfile
+        run: uv lock --check
+
+      - name: Install test environment
+        run: uv sync --locked --extra test --extra dev
+
+      - name: Run tests
+        run: uv run --no-sync pytest -q -p no:warnings --cov --cov-branch --cov-report=term-missing tests

@@ -50,6 +50,10 @@ Issues = "https://github.com/KyleHarrington/copick-utils/issues"
 Documentation = "https://github.com/KyleHarrington/copick-utils#readme"
 
 [project.optional-dependencies]
+test = [
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+]
 dev = [
     "black>=25.1.0",
     "hatchling>=1.25.0",
@@ -165,3 +169,7 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
 ]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
