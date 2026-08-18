@@ -23,7 +23,7 @@ dependencies = [
     "click",
     "click-option-group",
     "numpy",
-    "pydantic>=2,<2.13",
+    "pydantic>=2",
     "scipy",
     "scikit-image",
     "zarr>=3.1.6,<4",
