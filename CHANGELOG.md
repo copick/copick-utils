@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.2](https://github.com/copick/copick-utils/compare/copick-utils-v1.8.1...copick-utils-v1.8.2) (2026-08-18)
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.32.0 to 6.38.0 ([#91](https://github.com/copick/copick-utils/issues/91)) ([20d8189](https://github.com/copick/copick-utils/commit/20d818929a29bc6dfb062fbb6095b283baa1f5d1))
+
 ## [1.8.1](https://github.com/copick/copick-utils/compare/copick-utils-v1.8.0...copick-utils-v1.8.1) (2026-08-05)
 
 
