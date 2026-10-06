@@ -45,9 +45,9 @@ license = { file = "LICENSE" }
 keywords = ["copick", "cryoet", "cryo-et", "tomography", "annotation", "utilities"]
 
 [project.urls]
-Repository = "https://github.com/KyleHarrington/copick-utils.git"
-Issues = "https://github.com/KyleHarrington/copick-utils/issues"
-Documentation = "https://github.com/KyleHarrington/copick-utils#readme"
+Repository = "https://github.com/copick/copick-utils.git"
+Issues = "https://github.com/copick/copick-utils/issues"
+Documentation = "https://github.com/copick/copick-utils#readme"
 
 [project.optional-dependencies]
 dev = [
@@ -70,6 +70,9 @@ picks2sphere = "copick_utils.cli.conversion_commands:picks2sphere"
 picks2ellipsoid = "copick_utils.cli.conversion_commands:picks2ellipsoid"
 picks2plane = "copick_utils.cli.conversion_commands:picks2plane"
 picks2surface = "copick_utils.cli.conversion_commands:picks2surface"
+seg2fil = "copick_utils.cli.conversion_commands:seg2fil"
+fil2picks = "copick_utils.cli.conversion_commands:fil2picks"
+fil2seg = "copick_utils.cli.conversion_commands:fil2seg"
 
 [project.entry-points."copick.process.commands"]
 separate_components = "copick_utils.cli.processing_commands:separate_components"

@@ -9,11 +9,21 @@ from skimage import morphology
 from skimage.morphology import remove_small_objects, skeletonize
 
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.process.skeleton_graph import pruned_skeleton
 
 if TYPE_CHECKING:
     from copick.models import CopickRun, CopickSegmentation
 
 logger = get_logger(__name__)
+
+
+def _remove_small(volume: np.ndarray, min_size: int, connectivity: int = 1) -> np.ndarray:
+    """Remove connected objects with fewer than ``min_size`` voxels (scikit-image's keyword changed in 0.26)."""
+    import inspect
+
+    if "max_size" in inspect.signature(remove_small_objects).parameters:
+        return remove_small_objects(volume, max_size=max(int(min_size) - 1, 0), connectivity=connectivity)
+    return remove_small_objects(volume, min_size=min_size, connectivity=connectivity)
 
 
 class TubeSkeletonizer3D:
@@ -42,7 +52,7 @@ class TubeSkeletonizer3D:
             min_object_size: Minimum size of objects to keep
         """
         if remove_noise and np.any(self.original_volume):
-            self.original_volume = remove_small_objects(self.original_volume, min_size=min_object_size)
+            self.original_volume = _remove_small(self.original_volume, min_object_size)
 
     def skeletonize(self, method: str = "skimage"):
         """
@@ -52,7 +62,7 @@ class TubeSkeletonizer3D:
             method: Method to use ('skimage', 'distance_transform')
         """
         if not np.any(self.original_volume):
-            print("Warning: Volume is empty, creating empty skeleton")
+            logger.warning("Volume is empty, creating empty skeleton")
             self.skeleton = np.zeros_like(self.original_volume, dtype=bool)
             self.skeleton_coords = np.array([]).reshape(0, 3)
             return
@@ -78,24 +88,31 @@ class TubeSkeletonizer3D:
         # Get skeleton coordinates
         self.skeleton_coords = np.array(np.where(self.skeleton)).T
 
-    def post_process_skeleton(self, remove_short_branches: bool = True, min_branch_length: int = 5):
+    def post_process_skeleton(
+        self,
+        remove_short_branches: bool = True,
+        min_branch_length: int = 5,
+        prune_length: Optional[float] = None,
+    ):
         """
         Post-process the skeleton to remove artifacts.
 
         Args:
-            remove_short_branches: Whether to remove short branches
-            min_branch_length: Minimum length of branches to keep
+            remove_short_branches: Whether to remove small skeleton pieces. Despite the name, this removes whole
+                connected skeleton pieces with fewer than ``min_branch_length`` voxels; it does not shorten side
+                branches of a larger skeleton (``prune_length`` does).
+            min_branch_length: Minimum number of voxels of a skeleton piece to keep
+            prune_length: If set, prune side branches (spurs) shorter than this many voxels
         """
+        if prune_length and len(self.skeleton_coords) > 0:
+            self.skeleton = pruned_skeleton(self.skeleton, prune_length)
+            self.skeleton_coords = np.array(np.where(self.skeleton)).T
         if remove_short_branches and len(self.skeleton_coords) > 0:
             # Remove small (spur) objects from the skeleton. Use full connectivity so a thin,
             # diagonally-stepping centerline stays a single connected object — with the default
             # face-connectivity it fragments into tiny pieces that are then all removed (newer
             # scikit-image removes objects <= min_size), emptying the skeleton entirely.
-            cleaned_skeleton = remove_small_objects(
-                self.skeleton,
-                min_size=min_branch_length,
-                connectivity=self.skeleton.ndim,
-            )
+            cleaned_skeleton = _remove_small(self.skeleton, min_branch_length, connectivity=self.skeleton.ndim)
             self.skeleton = cleaned_skeleton
             self.skeleton_coords = np.array(np.where(self.skeleton)).T
 
@@ -129,6 +146,8 @@ def skeletonize_segmentation(
     min_branch_length: int = 5,
     output_session_id: Optional[str] = None,
     output_user_id: str = "skel",
+    output_name: Optional[str] = None,
+    prune_length: Optional[float] = None,
 ) -> Optional["CopickSegmentation"]:
     """
     Skeletonize a segmentation volume.
@@ -142,6 +161,8 @@ def skeletonize_segmentation(
         min_branch_length: Minimum length of branches to keep
         output_session_id: Session ID for output segmentation (default: same as input)
         output_user_id: User ID for output segmentation
+        output_name: Name of the output segmentation (default: the input's name)
+        prune_length: If set, prune skeleton side branches shorter than this many voxels
 
     Returns:
         Created skeleton segmentation or None if failed
@@ -149,18 +170,18 @@ def skeletonize_segmentation(
     # Get the segmentation volume
     volume = segmentation.numpy()
     if volume is None:
-        print(f"Error: Could not load segmentation data for {segmentation.run.name}")
+        logger.error(f"Could not load segmentation data for {segmentation.run.name}")
         return None
 
     run = segmentation.run
     voxel_size = segmentation.voxel_size
-    name = segmentation.name
+    name = output_name or segmentation.name
 
     # Use input session_id if no output session_id specified
     if output_session_id is None:
         output_session_id = segmentation.session_id
 
-    print(f"Skeletonizing segmentation {segmentation.session_id} in run {run.name}")
+    logger.info(f"Skeletonizing segmentation {segmentation.session_id} in run {run.name}")
 
     # Initialize skeletonizer
     skeletonizer = TubeSkeletonizer3D()
@@ -175,11 +196,15 @@ def skeletonize_segmentation(
     skeletonizer.skeletonize(method=method)
 
     # Post-process
-    skeletonizer.post_process_skeleton(remove_short_branches=remove_short_branches, min_branch_length=min_branch_length)
+    skeletonizer.post_process_skeleton(
+        remove_short_branches=remove_short_branches,
+        min_branch_length=min_branch_length,
+        prune_length=prune_length,
+    )
 
     # Get properties
     properties = skeletonizer.get_skeleton_properties()
-    print(f"Skeleton properties: {properties['n_voxels']} voxels")
+    logger.info(f"Skeleton properties: {properties['n_voxels']} voxels")
 
     # Create output segmentation
     try:
@@ -195,11 +220,11 @@ def skeletonize_segmentation(
         # Store the skeleton volume
         output_seg.from_numpy(skeletonizer.skeleton.astype(np.uint8))
 
-        print(f"Created skeleton segmentation with session_id: {output_session_id}")
+        logger.info(f"Created skeleton segmentation with session_id: {output_session_id}")
         return output_seg
 
     except Exception as e:
-        print(f"Error creating skeleton segmentation: {e}")
+        logger.error(f"Error creating skeleton segmentation: {e}")
         return None
 
 
@@ -214,6 +239,7 @@ def skeletonize_converter(
     min_object_size: int = 50,
     remove_short_branches: bool = True,
     min_branch_length: int = 5,
+    prune_length: Optional[float] = None,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
     """
@@ -233,6 +259,7 @@ def skeletonize_converter(
         min_object_size: Minimum size of objects to keep during preprocessing.
         remove_short_branches: Whether to remove short branches from skeleton.
         min_branch_length: Minimum length of branches to keep.
+        prune_length: If set, prune skeleton side branches shorter than this, in angstroms.
         **kwargs: Additional keyword arguments from lazy converter (ignored).
 
     Returns:
@@ -246,6 +273,8 @@ def skeletonize_converter(
         remove_short_branches=remove_short_branches,
         min_branch_length=min_branch_length,
         output_session_id=session_id,
+        output_name=object_name,
+        prune_length=None if not prune_length else prune_length / float(segmentation.voxel_size),
         output_user_id=user_id,
     )
 

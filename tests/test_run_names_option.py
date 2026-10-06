@@ -24,6 +24,9 @@ COMMANDS = [
     ("copick_utils.cli.segop", "segop"),
     ("copick_utils.cli.rescale", "rescale"),
     ("copick_utils.cli.combine_labels", "combine"),
+    ("copick_utils.cli.seg2fil", "seg2fil"),
+    ("copick_utils.cli.fil2picks", "fil2picks"),
+    ("copick_utils.cli.fil2seg", "fil2seg"),
 ]
 
 

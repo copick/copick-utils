@@ -739,3 +739,175 @@ def add_invert_option(func: click.Command = None) -> Callable:
         return add_invert_option_decorator
     else:
         return add_invert_option_decorator(func)
+
+
+def add_filament_tracing_options(func: click.Command = None) -> Callable:
+    """
+    Add the filament tracing options (seg2fil, fit-spline).
+
+    Lengths are in angstroms unless --length-unit voxel is given, and --min-volume in cubic angstroms unless
+    --volume-unit voxel is given. Options left unset take values derived from the segmentation itself, so they carry
+    over between objects and voxel sizes.
+
+    Args:
+        func (click.Command, optional): The Click command to which the options will be added.
+
+    Returns:
+        Callable: The Click command with the tracing options added.
+    """
+
+    def add_filament_tracing_options_decorator(_func: click.Command) -> click.Command:
+        opts = [
+            optgroup.option(
+                "--min-length",
+                type=float,
+                default=None,
+                help="Reject filaments shorter than this (unit: --length-unit). Unset: no length filter.",
+            ),
+            optgroup.option(
+                "--min-aspect",
+                type=float,
+                default=3.0,
+                help="Reject filaments shorter than this many label diameters (compact blobs and specks). The "
+                "default rejects only microtubule-thick stubs under ~44 nm on dataset 10521.",
+            ),
+            optgroup.option(
+                "--min-radius",
+                type=float,
+                default=None,
+                help="Reject filaments whose median label radius is below this (unit: --length-unit): thin slivers "
+                "of segmentation noise. Unset: a third of the object's (tube) radius.",
+            ),
+            optgroup.option(
+                "--fill-lumen",
+                type=float,
+                default=None,
+                help="Before tracing, fill holes up to this radius (unit: --length-unit) in every slice of the label, "
+                "so a tube whose wall alone is labelled traces as one filament. Unset: the object's (tube) radius; "
+                "0: no filling.",
+            ),
+            optgroup.option(
+                "--min-volume",
+                type=float,
+                default=None,
+                help="Drop connected components smaller than this before tracing (unit: --volume-unit). "
+                "Unset: no volume filter.",
+            ),
+            optgroup.option(
+                "--prune-length",
+                type=float,
+                default=None,
+                help="Prune skeleton side branches shorter than this (unit: --length-unit). "
+                "Unset: one label diameter.",
+            ),
+            optgroup.option(
+                "--junction-merge",
+                type=float,
+                default=None,
+                help="Merge junctions joined by a bridge up to this long, as two crossing filaments often "
+                "skeletonize (unit: --length-unit). Unset: one label diameter.",
+            ),
+            optgroup.option(
+                "--max-bend",
+                type=float,
+                default=45.0,
+                help="Largest deviation from a straight line, in degrees, for a filament to continue through a "
+                "junction.",
+            ),
+            optgroup.option(
+                "--smoothing",
+                type=float,
+                default=None,
+                help="RMS deviation of the fitted spline from the skeleton (unit: --length-unit). "
+                "Unset: half a voxel.",
+            ),
+            optgroup.option(
+                "--extend-ends/--no-extend-ends",
+                default=True,
+                help="Extend free filament ends along their direction to the edge of the segmentation (thinning "
+                "shortens each end by about one radius).",
+            ),
+            optgroup.option(
+                "--label",
+                type=int,
+                default=None,
+                help="Label to trace in a multilabel or panoptic segmentation (default: the output object's label).",
+            ),
+            optgroup.option(
+                "--length-unit",
+                type=click.Choice(["angstrom", "voxel"]),
+                default="angstrom",
+                help="Unit of --min-length, --min-radius, --fill-lumen, --prune-length, --junction-merge and --smoothing.",
+            ),
+            optgroup.option(
+                "--volume-unit",
+                type=click.Choice(["angstrom", "voxel"]),
+                default="angstrom",
+                help="Unit of --min-volume: 'angstrom' for Å³, 'voxel' for cubic voxels.",
+            ),
+        ]
+        for opt in reversed(opts):
+            _func = opt(_func)
+        return _func
+
+    if func is None:
+        return add_filament_tracing_options_decorator
+    else:
+        return add_filament_tracing_options_decorator(func)
+
+
+def add_filament_sampling_options(func: click.Command = None) -> Callable:
+    """
+    Add the filament sampling options (fil2picks).
+
+    Args:
+        func (click.Command, optional): The Click command to which the options will be added.
+
+    Returns:
+        Callable: The Click command with the sampling options added.
+    """
+
+    def add_filament_sampling_options_decorator(_func: click.Command) -> click.Command:
+        opts = [
+            optgroup.option(
+                "--spacing",
+                type=float,
+                required=True,
+                help="Distance between picks along a filament (unit: --length-unit). Required: no spacing suits "
+                "every filament.",
+            ),
+            optgroup.option(
+                "--anchor",
+                type=click.Choice(["center", "start"]),
+                default="center",
+                help="'center' splits the length left after the last full step evenly between both ends; "
+                "'start' places the first pick at the filament's start.",
+            ),
+            optgroup.option(
+                "--roll",
+                type=click.Choice(["parallel", "random"]),
+                default="parallel",
+                help="Rotation of the picks about the filament axis: 'parallel' turns as little as possible along "
+                "the filament (rotation-minimizing frames); 'random' is uniformly random per pick.",
+            ),
+            optgroup.option(
+                "--seed",
+                type=int,
+                default=None,
+                help="Random seed for --roll random.",
+            ),
+            optgroup.option(
+                "--length-unit",
+                type=click.Choice(["angstrom", "voxel"]),
+                default="angstrom",
+                help="Unit of --spacing ('voxel' needs the filaments' voxel spacing).",
+            ),
+        ]
+        for opt in reversed(opts):
+            _func = opt(_func)
+        return _func
+
+    if func is None:
+        return add_filament_sampling_options_decorator
+    else:
+        return add_filament_sampling_options_decorator(func)
