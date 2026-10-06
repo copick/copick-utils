@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0-alpha.4](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.3...copick-utils-v2.0.0-alpha.4) (2026-10-06)
+
+
+### ✨ Features
+
+* seg2fil stores editable Catmull-Rom curves by default (v2.0) ([#117](https://github.com/copick/copick-utils/issues/117)) ([e768a0d](https://github.com/copick/copick-utils/commit/e768a0d21f9609dc7ad953b3f89587f7f9b5f60a))
+
 ## [2.0.0-alpha.3](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.2...copick-utils-v2.0.0-alpha.3) (2026-10-06)
 
 
