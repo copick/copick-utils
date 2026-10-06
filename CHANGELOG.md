@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.9.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.8.1...copick-utils-v1.9.0) (2026-10-06)
+
+
+### ✨ Features
+
+* filament tracing (seg2fil, fil2picks, fil2seg) ([#107](https://github.com/copick/copick-utils/issues/107)) ([314885e](https://github.com/copick/copick-utils/commit/314885e9ea60af0a36346eea33e0666a8e5111c3))
+* instance and panoptic segmentations in copick-utils ([#106](https://github.com/copick/copick-utils/issues/106)) ([100d838](https://github.com/copick/copick-utils/commit/100d838eceab00f8207dcc5c6a174fc8a0e40668))
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.32.0 to 6.38.0 ([#91](https://github.com/copick/copick-utils/issues/91)) ([20d8189](https://github.com/copick/copick-utils/commit/20d818929a29bc6dfb062fbb6095b283baa1f5d1))
+* bump chanzuckerberg/github-actions from 6.38.0 to 6.41.2 ([#104](https://github.com/copick/copick-utils/issues/104)) ([c7ba9af](https://github.com/copick/copick-utils/commit/c7ba9af42ad9bc7a04f3a6d008ca1815ad32e61e))
+* pick tools keep identity and place particles at their centre ([#105](https://github.com/copick/copick-utils/issues/105)) ([8a944f0](https://github.com/copick/copick-utils/commit/8a944f016da8961317a8dadb945c049c6f0cd166))
+
 ## [1.8.1](https://github.com/copick/copick-utils/compare/copick-utils-v1.8.0...copick-utils-v1.8.1) (2026-08-05)
 
 
