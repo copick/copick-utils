@@ -32,6 +32,12 @@ from copick_utils.cli.util import add_input_option, add_workers_option
     help="Include background (label=0) connected component analysis in CSV output. "
     "Background components are never included in plots.",
 )
+@optgroup.option(
+    "--skeleton/--no-skeleton",
+    default=False,
+    help="Also skeletonize each component (or instance) and report its skeleton length, label radius "
+    "(median distance from the skeleton to the background) and branch, junction and endpoint counts, in angstroms.",
+)
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to the output.")
 @optgroup.option(
@@ -55,6 +61,7 @@ def seg_stats(
     input_uri,
     connectivity,
     include_background,
+    skeleton,
     workers,
     output_format,
     output_path,
@@ -68,11 +75,18 @@ def seg_stats(
     Output can be a CSV file or a histogram plot, and you can choose the voxel
     connectivity (face, face-edge, or all) used to define components.
 
+    An instance segmentation (`?instance=true`) gets one row per instance ID, and a panoptic
+    segmentation (`?panoptic=true`) one row per (label, instance) segment, plus the connected
+    components of regions without instances. Without a type flag, the URI matches binary and
+    multilabel segmentations only. With `--skeleton`, each row also reports the component's
+    skeleton length and label radius, for example to choose length thresholds for filaments.
+
     URI Format:
 
         \b
         Segmentations: name:user_id/session_id@voxel_spacing
         Voxel spacing is optional — omit to match all voxel spacings.
+        Instance or panoptic segmentations: append ?instance=true or ?panoptic=true
 
     Examples:
 
@@ -95,6 +109,10 @@ def seg_stats(
         \b
         # Analyze specific runs and export as PNG
         copick process seg-stats -i "membrane:user1/auto-001@10.0" -f plot -op ./stats.png -r run1 -r run2
+
+        \b
+        # Per-instance volumes and skeleton lengths of a microtubule instance segmentation
+        copick process seg-stats -i "microtubule:trace/1@10.0?instance=true" --skeleton -f csv -op ./mt.csv
 
     See Also:
 
@@ -121,6 +139,7 @@ def seg_stats(
         include_background=include_background,
         run_names=run_names_list,
         workers=workers,
+        skeleton=skeleton,
     )
 
     # Summarize
