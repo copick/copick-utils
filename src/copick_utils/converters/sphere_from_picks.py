@@ -11,6 +11,7 @@ from copick_utils.converters.converter_common import (
     validate_points,
 )
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.util.picks import pick_centres
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickRun
@@ -287,9 +288,10 @@ def sphere_from_picks(
 
 # Lazy batch converter for new architecture
 def sphere_from_picks_standard(picks, run, object_name, session_id, user_id, voxel_spacing=None, **kwargs):
-    """Adapt sphere_from_picks to the lazy-batch contract: take a CopickPicks and extract its points."""
-    pos, _ = picks.numpy()
-    if pos is None or len(pos) == 0:
+    """Adapt sphere_from_picks to the lazy-batch contract: take a CopickPicks and extract its particle centres
+    (``location`` plus the transform's shift)."""
+    pos = pick_centres(picks)
+    if len(pos) == 0:
         logger.warning("Could not load pick data")
         return None
     return sphere_from_picks(pos, run, object_name, session_id, user_id, **kwargs)

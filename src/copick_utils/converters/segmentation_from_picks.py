@@ -5,6 +5,7 @@ from copick.util.log import get_logger
 
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
 from copick_utils.io.zarr import get_level_array
+from copick_utils.util.picks import pick_centres
 
 if TYPE_CHECKING:
     from copick.models import CopickObject, CopickPicks, CopickRun, CopickSegmentation
@@ -54,14 +55,10 @@ def from_picks(
     radius_voxel = max(radius / voxel_spacing, 1)
     delta = int(np.ceil(radius_voxel))
 
-    # Paint each pick as a sphere
-    for point in pick.points:
-        # Convert the pick's location from angstroms to voxel units
-        cx, cy, cz = (
-            point.location.x / voxel_spacing,
-            point.location.y / voxel_spacing,
-            point.location.z / voxel_spacing,
-        )
+    # Paint each pick as a sphere at its particle centre (location plus the transform's shift)
+    for centre in pick_centres(pick):
+        # Convert the particle centre from angstroms to voxel units
+        cx, cy, cz = centre / voxel_spacing
 
         # Calculate subarray bounds
         xLow, xHigh = get_relative_target_coordinates(cx, delta, seg_volume.shape[2])

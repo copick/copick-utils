@@ -65,6 +65,11 @@ def clippicks(
     Exactly one reference must be supplied via `--ref-mesh`, `--ref-seg`, or
     `--ref-tomogram`. Distances are measured in angstroms.
 
+    Each pick is measured at its particle centre (its location plus the shift stored in its
+    transform). Kept picks are written unchanged and in their original order, so their
+    orientations, instance IDs (e.g. filament IDs) and scores survive. If no pick is kept, an
+    empty pick set is written.
+
     URI Format:
 
         \b
