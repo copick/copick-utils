@@ -15,6 +15,7 @@
   "packages": {
     ".": {
       "package-name": "copick-utils",
+      "extra-files": [{ "type": "generic", "path": "src/copick_utils/__init__.py" }],
       "tag-prefix": "v",
       "release-type": "python",
       "versioning": "prerelease",
