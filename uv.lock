@@ -701,7 +701,7 @@ wheels = [
 [[package]]
 name = "copick"
 version = "2.0.0a1"
-source = { git = "https://github.com/copick/copick?rev=uermel%2Fpanoptic-segmentations-v2#a5bf1949970593f9b65a6bb28d1d4ef2ebc8e429" }
+source = { git = "https://github.com/copick/copick?rev=uermel%2Fpanoptic-segmentations-v2#dcbbd5e287bbe58f2e14999d8124db14f414f072" }
 dependencies = [
     { name = "aiohttp" },
     { name = "click" },
