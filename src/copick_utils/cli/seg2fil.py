@@ -103,7 +103,8 @@ def seg2fil(
     Holes up to `--fill-lumen` are filled first, so a tube labelled by its wall alone traces as one
     filament. Side branches shorter than `--prune-length` are pruned, and at each junction the branches
     that continue most nearly straight (within `--max-bend`) are joined, so two crossing
-    filaments stay two filaments. Free ends are extended to the edge of the segmentation, and
+    filaments stay two filaments; a path that bends more sharply than `--max-bend` (two filaments
+    touching end to end) is split there. Free ends are extended to the edge of the segmentation, and
     filaments shorter than `--min-length`, shorter than `--min-aspect` label diameters (blobs),
     or thinner than `--min-radius` (slivers of segmentation noise) are rejected. Options left
     unset are derived from the segmentation's own thickness or the object's radius.
@@ -217,6 +218,7 @@ def seg2fil(
     short = sum(result.get("rejected_length", 0) for result in results.values() if result)
     blobs = sum(result.get("rejected_aspect", 0) for result in results.values() if result)
     thin = sum(result.get("rejected_radius", 0) for result in results.values() if result)
+    bends = sum(result.get("split_at_bends", 0) for result in results.values() if result)
 
     all_errors = []
     for result in results.values():
@@ -225,7 +227,8 @@ def seg2fil(
 
     logger.info(f"Completed: {successful}/{len(results)} runs processed successfully")
     logger.info(
-        f"Total filaments: {filaments} ({length / 10:.0f} nm); rejected {short} short, {blobs} blob-like, {thin} thin",
+        f"Total filaments: {filaments} ({length / 10:.0f} nm); rejected {short} short, {blobs} blob-like, {thin} thin; "
+        f"split {bends} at sharp bends",
     )
 
     if all_errors:

@@ -94,7 +94,7 @@ def filaments_from_segmentation(
             (the filament's tube radius), or no radius filter if the object has none.
         prune_length: Prune skeleton spurs shorter than this (Å). None: one label diameter.
         junction_merge: Merge junctions joined by a bridge up to this long (Å). None: one label diameter.
-        max_bend: Largest deviation from a straight line (degrees) to continue through a junction.
+        max_bend: Largest deviation from a straight line (degrees) to continue through a junction or around a bend.
         smoothing: RMS deviation of the fitted spline from the skeleton (Å). None: half a voxel.
         extend_ends: Extend free ends to the edge of the label.
         fill_lumen: Fill holes up to this radius (Å) in each axis-aligned slice before tracing, the empty lumen of
@@ -199,7 +199,7 @@ def filaments_from_segmentation(
         logger.info(
             f"Traced {len(centrelines)} filaments ({report.total_length / 10:.0f} nm) in {run.name}; "
             f"rejected {report.rejected_length} short, {report.rejected_aspect} blob-like and "
-            f"{report.rejected_radius} thin",
+            f"{report.rejected_radius} thin; split {report.split_at_bends} at sharp bends",
         )
         return filaments, stats
 
