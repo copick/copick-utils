@@ -167,7 +167,7 @@ def test_bspline_tangent_matches_the_curve_direction():
 # --- the commands ------------------------------------------------------------------------------------------------------
 
 
-def _traced(run, config_path, volume):
+def _traced(run, config_path, volume, extra=()):
     _write_seg(run, volume)
     _invoke(
         seg2fil,
@@ -182,6 +182,7 @@ def _traced(run, config_path, volume):
             "microtubule:trace/s@10.0?instance=true",
             "--min-length",
             "150",
+            *extra,
         ],
     )
     run.refresh()
@@ -190,15 +191,13 @@ def _traced(run, config_path, volume):
     return filaments, instances
 
 
-def test_ids_are_shared_by_instances_filaments_and_picks(run, config_path):
-    volume = tube(tube(np.zeros(SHAPE, np.uint8), (20, 40, 5), (20, 40, 75), 3), (20, 5, 40), (20, 75, 40), 3)
-    filaments, instances = _traced(run, config_path, volume)
-    ids = sorted(f.instance_id for f in filaments.filaments)
-    assert ids == [1, 2]
-    assert sorted(np.unique(instances.numpy()[volume > 0]).tolist()) == ids
-
-    # Each stored curve is the exact fit, and copick's points are its evaluation
-    for f in filaments.filaments:
+def test_seg2fil_stores_the_exact_fit_on_request(run, config_path):
+    volume = tube(np.zeros(SHAPE, np.uint8), (20, 40, 5), (20, 40, 75), 3)
+    editable, _ = _traced(run, config_path, volume)
+    editable_points = {f.instance_id: np.asarray(f.points) for f in editable.filaments}
+    exact, _ = _traced(run, config_path, volume, extra=("--curve", "bspline"))
+    for f in exact.filaments:
+        # the stored curve is the fit, and copick's points are its evaluation
         assert f.curve.kind == "bspline" and f.curve_is_current()
         regenerated = evaluate_curve(
             f.curve.control_points,
@@ -209,7 +208,24 @@ def test_ids_are_shared_by_instances_filaments_and_picks(run, config_path):
             f.curve.knots,
         )
         np.testing.assert_allclose(np.asarray(f.points), regenerated, atol=1e-6)
+        assert f.metadata["fit"]["stored_curve"] == "bspline"
+        # the default Catmull-Rom curve stays within half a voxel (5 Å) of the fit
+        distance = np.linalg.norm(editable_points[f.instance_id][:, None] - np.asarray(f.points)[None], axis=2)
+        assert distance.min(axis=1).max() <= 5.0 + 1e-6
+
+
+def test_ids_are_shared_by_instances_filaments_and_picks(run, config_path):
+    volume = tube(tube(np.zeros(SHAPE, np.uint8), (20, 40, 5), (20, 40, 75), 3), (20, 5, 40), (20, 75, 40), 3)
+    filaments, instances = _traced(run, config_path, volume)
+    ids = sorted(f.instance_id for f in filaments.filaments)
+    assert ids == [1, 2]
+    assert sorted(np.unique(instances.numpy()[volume > 0]).tolist()) == ids
+
+    # Each stored curve is an editable Catmull-Rom curve, and copick's points are its evaluation
+    for f in filaments.filaments:
+        assert f.curve.kind == "catmull-rom" and f.curve_is_current()
         assert f.metadata["fit"]["method"] == "splprep" and f.metadata["fit"]["tool"] == "copick-utils seg2fil"
+        assert f.metadata["fit"]["stored_curve"] == "catmull-rom"
 
     _invoke(fil2picks, ["-c", config_path, "-i", "microtubule:trace/s", "-o", "microtubule:trace/s", "--spacing", "82"])
     run.refresh()
