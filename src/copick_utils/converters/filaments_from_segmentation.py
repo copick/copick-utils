@@ -67,13 +67,15 @@ def filaments_from_segmentation(
     instances_object_name: Optional[str] = None,
     instances_user_id: Optional[str] = None,
     instances_session_id: Optional[str] = None,
+    curve_kind: str = "catmull-rom",
     **kwargs,
 ) -> Optional[Tuple["CopickFilaments", Dict[str, float]]]:
     """
     Trace the filaments of a segmentation and store them as copick Filaments.
 
-    Each filament is stored with its fitted spline as a ``bspline`` curve (copick regenerates the filament's points
-    from it) and the fit's settings in ``metadata["fit"]``. IDs are 1..K by length (longest first) for a binary,
+    Each filament is stored with an editable ``catmull-rom`` curve through its fitted spline, within half a voxel of
+    it (``curve_kind="bspline"`` stores the fit itself, whose control points editors can move but not add or remove);
+    copick regenerates the filament's points from the curve, and the fit's settings go in ``metadata["fit"]``. IDs are 1..K by length (longest first) for a binary,
     multilabel or panoptic-region input; an instance segmentation (or a panoptic segmentation's instances) keeps
     its IDs. With ``instances_*`` set, the instance segmentation of the traced filaments is stored as well: each
     label voxel holds the ID of the nearest filament of its connected component, with the same IDs as the
@@ -101,12 +103,14 @@ def filaments_from_segmentation(
         instances_object_name: Object name of the instance segmentation to store, or None for none.
         instances_user_id: User ID of the instance segmentation.
         instances_session_id: Session ID of the instance segmentation ({input_session_id} is replaced).
+        curve_kind: Curve stored per filament: ``catmull-rom`` (editable, derived from the fit) or ``bspline`` (the
+            exact fit).
         **kwargs: Additional keyword arguments from the lazy converter.
 
     Returns:
         Tuple of (CopickFilaments, stats dict) or None if the operation failed.
     """
-    from copick.models import CopickFilamentCurve
+    from copick.models import CopickFilament, CopickFilamentCurve
 
     import copick_utils
     from copick_utils.util.segmentations import new_segmentation
@@ -139,16 +143,29 @@ def filaments_from_segmentation(
         source = f"{segmentation.name}:{segmentation.user_id}/{segmentation.session_id}@{voxel_size}"
         curves, metadata = [], []
         for centreline in centrelines:
-            curves.append(
-                CopickFilamentCurve.from_tck(
-                    centreline.tck,
-                    step=voxel_size,
-                    smoothing=centreline.smoothing,
-                    scale=1.0,
-                ),
+            curve = CopickFilamentCurve.from_tck(
+                centreline.tck,
+                step=voxel_size,
+                smoothing=centreline.smoothing,
+                scale=1.0,
             )
+            if curve_kind == "catmull-rom":
+                # The editors' own conversion: points a voxel apart, within half a voxel of the fit.
+                curve = CopickFilament.from_curve(centreline.instance_id, curve).editable_curve(
+                    tolerance=voxel_size / 2,
+                    step=voxel_size,
+                    kinds=("catmull-rom",),
+                )
+            curves.append(curve)
             fit = dict(centreline.metadata)
-            fit.update({"tool": "copick-utils seg2fil", "version": copick_utils.__version__, "source": source})
+            fit.update(
+                {
+                    "tool": "copick-utils seg2fil",
+                    "version": copick_utils.__version__,
+                    "source": source,
+                    "stored_curve": curve_kind,
+                },
+            )
             metadata.append({"fit": fit})
 
         filaments = run.new_filaments(object_name, session_id, user_id, exist_ok=True)

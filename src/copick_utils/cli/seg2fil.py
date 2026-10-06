@@ -59,6 +59,14 @@ def volume_in_angstrom3(value, unit, input_uri):
     description="Also write the instance segmentation of the traced filaments (each voxel holds the ID of its "
     "filament, the same IDs as the filaments). Smart defaults as for -o; ?instance=true is implied.",
 )
+@optgroup.option(
+    "--curve",
+    type=click.Choice(["catmull-rom", "bspline"]),
+    default="catmull-rom",
+    help="Curve stored for each filament: 'catmull-rom' control points through the fitted spline (within half a "
+    "voxel of it), which ChimeraX-copick and napari-copick edit freely; 'bspline' the exact fit, whose control points "
+    "can be moved but not added or removed.",
+)
 @add_debug_option
 def seg2fil(
     config,
@@ -80,15 +88,16 @@ def seg2fil(
     workers,
     output_uri,
     instances_uri,
+    curve,
     debug,
 ):
     """
     Trace filaments in segmentations.
 
     Traces the centreline of every filament (e.g. microtubules or actin) in a segmentation and
-    stores it as a copick Filaments entry: the filament's fitted B-spline (an exact `bspline`
-    curve that editors can reopen) and the centreline points copick regenerates from it.
-    Filaments are numbered 1, 2, ... by length, longest first.
+    stores it as a copick Filaments entry: an editable Catmull-Rom curve through the filament's
+    fitted spline (`--curve bspline` stores the fit itself) and the centreline points copick
+    regenerates from it. Filaments are numbered 1, 2, ... by length, longest first.
 
     Each connected component is skeletonized and split into branches between ends and junctions.
     Holes up to `--fill-lumen` are filled first, so a tube labelled by its wall alone traces as one
@@ -198,6 +207,7 @@ def seg2fil(
         smoothing=smoothing,
         extend_ends=extend_ends,
         label=label,
+        curve_kind=curve,
         **instance_params,
     )
 
