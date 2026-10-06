@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0-alpha.2](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.1...copick-utils-v2.0.0-alpha.2) (2026-10-06)
+
+
+### 🐞 Bug Fixes
+
+* bump the version of prereleases in src/copick_utils/__init__.py ([#111](https://github.com/copick/copick-utils/issues/111)) ([2001d3e](https://github.com/copick/copick-utils/commit/2001d3e16c4dc51cb64962ba8596a1b2b2b4adc2))
+
 ## [2.0.0-alpha.1](https://github.com/copick/copick-utils/compare/copick-utils-v1.8.0...copick-utils-v2.0.0-alpha.1) (2026-08-18)
 
 
