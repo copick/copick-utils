@@ -14,11 +14,60 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _component_rows(
+    labeled: np.ndarray,
+    voxel_spacing: float,
+    skeleton: bool = False,
+    ids: Optional[np.ndarray] = None,
+) -> List[Dict[str, Any]]:
+    """
+    One row per positive value of a labeled array (a component, or an instance).
+
+    Args:
+        labeled: Integer array; each positive value is one component or instance.
+        voxel_spacing: Voxel spacing in angstroms.
+        skeleton: Also measure each one's skeleton (length, label radius, branches, junctions, endpoints).
+        ids: The values to report (default: every positive value present).
+
+    Returns:
+        List of dicts with component_id, volume_voxels, volume_angstroms3 (and skeleton columns).
+    """
+    from scipy.ndimage import find_objects
+
+    counts = np.bincount(labeled.ravel()) if labeled.size else np.zeros(1, dtype=int)
+    if ids is None:
+        ids = np.flatnonzero(counts[1:]) + 1
+    slices = find_objects(labeled) if skeleton else None
+    voxel_volume = voxel_spacing**3
+    rows = []
+    for value in ids:
+        value = int(value)
+        voxels = int(counts[value]) if value < len(counts) else 0
+        row = {"component_id": value, "volume_voxels": voxels, "volume_angstroms3": voxels * voxel_volume}
+        if skeleton:
+            from copick_utils.process.skeleton_graph import summarize
+
+            box = slices[value - 1] if value - 1 < len(slices) else None
+            summary = summarize(labeled[box] == value) if box is not None else summarize(np.zeros((1, 1, 1), bool))
+            row.update(
+                {
+                    "skeleton_length_angstroms": summary.length * voxel_spacing,
+                    "label_radius_angstroms": None if summary.radius is None else summary.radius * voxel_spacing,
+                    "n_branches": summary.n_branches,
+                    "n_junctions": summary.n_junctions,
+                    "n_endpoints": summary.n_endpoints,
+                },
+            )
+        rows.append(row)
+    return rows
+
+
 def _analyze_components_single(
     seg: np.ndarray,
     voxel_spacing: float,
     connectivity: str = "all",
     include_background: bool = True,
+    skeleton: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Analyze connected components per label in a segmentation.
@@ -29,6 +78,7 @@ def _analyze_components_single(
         connectivity: Connectivity for connected components.
                      "face" = 6-connected, "face-edge" = 18-connected, "all" = 26-connected.
         include_background: If True, also analyze connected components of the background (label 0).
+        skeleton: If True, also measure each foreground component's skeleton.
 
     Returns:
         List of dicts, one per component:
@@ -41,50 +91,79 @@ def _analyze_components_single(
     }
     connectivity_value = connectivity_map.get(connectivity, 3)
     struct = generate_binary_structure(seg.ndim, connectivity_value)
-    voxel_volume = voxel_spacing**3
 
     all_unique_labels = np.unique(seg)
     foreground_labels = all_unique_labels[all_unique_labels != 0]
 
     components = []
-
     for label_value in foreground_labels:
-        binary_mask = seg == label_value
-        labeled_array, num_components = label(binary_mask, structure=struct)
-
-        # Use bincount for O(n) counting of all components in one pass
-        counts = np.bincount(labeled_array.ravel())
-        # counts[0] is background within this label mask, skip it
-        for component_id in range(1, num_components + 1):
-            component_voxels = int(counts[component_id])
-            components.append(
-                {
-                    "label": int(label_value),
-                    "component_id": component_id,
-                    "volume_voxels": component_voxels,
-                    "volume_angstroms3": component_voxels * voxel_volume,
-                },
-            )
+        labeled_array, _ = label(seg == label_value, structure=struct)
+        for row in _component_rows(labeled_array, voxel_spacing, skeleton=skeleton):
+            components.append({"label": int(label_value), **row})
 
     # Analyze background connected components (label 0)
     if include_background and 0 in all_unique_labels:
-        background_mask = seg == 0
-        labeled_bg, num_bg_components = label(background_mask, structure=struct)
-
-        if num_bg_components > 0:
-            bg_counts = np.bincount(labeled_bg.ravel())
-            for component_id in range(1, num_bg_components + 1):
-                component_voxels = int(bg_counts[component_id])
-                components.append(
-                    {
-                        "label": 0,
-                        "component_id": component_id,
-                        "volume_voxels": component_voxels,
-                        "volume_angstroms3": component_voxels * voxel_volume,
-                    },
-                )
+        labeled_bg, _ = label(seg == 0, structure=struct)
+        for row in _component_rows(labeled_bg, voxel_spacing):
+            components.append({"label": 0, **row})
 
     return components
+
+
+def _analyze_instances(
+    instances: np.ndarray,
+    voxel_spacing: float,
+    label_value: int,
+    skeleton: bool = False,
+) -> List[Dict[str, Any]]:
+    """One row per instance ID of an instance segmentation (an instance may span several pieces)."""
+    return [
+        {"label": int(label_value), "instance_id": row["component_id"], **row}
+        for row in _component_rows(instances, voxel_spacing, skeleton=skeleton)
+    ]
+
+
+def _analyze_panoptic(
+    panoptic: np.ndarray,
+    voxel_spacing: float,
+    connectivity: str = "all",
+    include_background: bool = True,
+    skeleton: bool = False,
+) -> List[Dict[str, Any]]:
+    """Rows for a panoptic segmentation: one per (label, instance) segment, and the connected components of each
+    label's region without instances (instance 0) and of the background."""
+    labels, instances = panoptic[0], panoptic[1]
+    rows = []
+    for label_value in np.unique(labels[labels > 0]):
+        in_label = labels == label_value
+        ids = np.unique(instances[in_label])
+        ids = ids[ids > 0]
+        if len(ids):
+            per_label = np.where(in_label, instances, 0)
+            rows.extend(_analyze_instances(per_label, voxel_spacing, int(label_value), skeleton=skeleton))
+        stuff = in_label & (instances == 0)
+        if stuff.any():
+            rows.extend(
+                _analyze_components_single(
+                    stuff.astype(np.uint8) * int(label_value),
+                    voxel_spacing,
+                    connectivity=connectivity,
+                    include_background=False,
+                    skeleton=skeleton,
+                ),
+            )
+    if include_background:
+        rows.extend(
+            r
+            for r in _analyze_components_single(
+                (labels > 0).astype(np.uint8),
+                voxel_spacing,
+                connectivity=connectivity,
+                include_background=True,
+            )
+            if r["label"] == 0
+        )
+    return rows
 
 
 def analyze_segmentation_components(
@@ -92,36 +171,65 @@ def analyze_segmentation_components(
     voxel_spacing: float,
     connectivity: str = "all",
     include_background: bool = True,
+    skeleton: bool = False,
 ) -> Optional[List[Dict[str, Any]]]:
     """
     Analyze connected components in a CopickSegmentation.
+
+    Binary and multilabel segmentations give one row per connected component of each label. An instance
+    segmentation gives one row per instance ID, and a panoptic segmentation one row per (label, instance) segment
+    plus the connected components of regions without instances.
 
     Args:
         segmentation: Input CopickSegmentation object.
         voxel_spacing: Voxel spacing in angstroms.
         connectivity: Connectivity for connected components.
         include_background: If True, also analyze background (label 0) components.
+        skeleton: If True, also measure each component's or instance's skeleton.
 
     Returns:
         List of component dicts, or None if loading failed.
     """
+    from copick_utils.util.segmentations import segmentation_type
+
     try:
         seg_array = segmentation.numpy()
-
         if seg_array is None:
             logger.error("Could not load segmentation data")
             return None
-
         if seg_array.size == 0:
             logger.error("Empty segmentation data")
             return None
 
-        return _analyze_components_single(
-            seg_array,
-            voxel_spacing=voxel_spacing,
-            connectivity=connectivity,
-            include_background=include_background,
-        )
+        seg_type = segmentation_type(segmentation)
+        if seg_type == "instance":
+            obj = segmentation.run.root.get_object(segmentation.name)
+            label_value = obj.label if obj is not None else 0
+            rows = _analyze_instances(seg_array, voxel_spacing, label_value, skeleton=skeleton)
+            if include_background:
+                rows.extend(
+                    r
+                    for r in _analyze_components_single(
+                        (seg_array > 0).astype(np.uint8),
+                        voxel_spacing,
+                        connectivity=connectivity,
+                        include_background=True,
+                    )
+                    if r["label"] == 0
+                )
+        elif seg_type == "panoptic":
+            rows = _analyze_panoptic(seg_array, voxel_spacing, connectivity, include_background, skeleton)
+        else:
+            rows = _analyze_components_single(
+                seg_array,
+                voxel_spacing=voxel_spacing,
+                connectivity=connectivity,
+                include_background=include_background,
+                skeleton=skeleton,
+            )
+        for row in rows:
+            row["segmentation_type"] = seg_type
+        return rows
 
     except Exception as e:
         logger.error(f"Error analyzing segmentation components: {e}")
@@ -133,15 +241,17 @@ def _seg_stats_worker(
     input_uri: str,
     connectivity: str,
     include_background: bool = True,
+    skeleton: bool = False,
 ) -> Dict[str, Any]:
     """Worker function for batch segmentation stats.
 
-    Uses resolve_copick_objects for proper URI resolution with pattern support.
+    Uses resolve_copick_objects for proper URI resolution with pattern support. A URI without a type flag selects
+    binary and multilabel segmentations only; ``?instance=true`` or ``?panoptic=true`` selects those types.
     """
-    from copick.util.uri import resolve_copick_objects
+    from copick_utils.util.segmentations import resolve_segmentations
 
     try:
-        segmentations = resolve_copick_objects(input_uri, run.root, "segmentation", run_name=run.name)
+        segmentations = resolve_segmentations(input_uri, run.root, run_name=run.name)
 
         if not segmentations:
             return {"processed": 0, "components": [], "errors": [f"No segmentation found for {run.name}"]}
@@ -154,6 +264,7 @@ def _seg_stats_worker(
                 voxel_spacing=segmentation.voxel_size,
                 connectivity=connectivity,
                 include_background=include_background,
+                skeleton=skeleton,
             )
 
             if components:
@@ -179,6 +290,7 @@ def seg_stats_batch(
     include_background: bool = True,
     run_names: Optional[List[str]] = None,
     workers: int = 8,
+    skeleton: bool = False,
 ) -> Dict[str, Any]:
     """
     Batch analyze connected component sizes across multiple runs.
@@ -190,6 +302,7 @@ def seg_stats_batch(
         include_background: If True, also analyze background (label 0) components.
         run_names: List of run names to process. If None, processes all runs.
         workers: Number of worker processes.
+        skeleton: If True, also measure each component's or instance's skeleton.
 
     Returns:
         Dictionary with processing results per run.
@@ -207,6 +320,7 @@ def seg_stats_batch(
         input_uri=input_uri,
         connectivity=connectivity,
         include_background=include_background,
+        skeleton=skeleton,
     )
 
     return results
@@ -233,6 +347,17 @@ def export_stats_csv(results: Dict[str, Any], output_path: str) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     fieldnames = ["run", "label", "component_id", "volume_voxels", "volume_angstroms3", "voxel_spacing"]
+    for optional in (
+        "segmentation_type",
+        "instance_id",
+        "skeleton_length_angstroms",
+        "label_radius_angstroms",
+        "n_branches",
+        "n_junctions",
+        "n_endpoints",
+    ):
+        if any(optional in c for c in all_components):
+            fieldnames.append(optional)
 
     with open(output, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)

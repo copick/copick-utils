@@ -117,6 +117,68 @@ def split_multilabel_segmentation(
     return output_segmentations
 
 
+def split_panoptic_segmentation(
+    segmentation: "CopickSegmentation",
+    run: "CopickRun",
+    output_user_id: str = "split",
+    labels: Optional[Dict[str, int]] = None,
+) -> List["CopickSegmentation"]:
+    """
+    Split a panoptic segmentation into per-object segmentations.
+
+    For each label, the voxels with an instance ID become an instance segmentation named after the object (the IDs
+    are kept), and the voxels without one (regions such as membranes) become a binary segmentation of that object.
+
+    Args:
+        segmentation: Input panoptic segmentation.
+        run: CopickRun object containing the segmentation.
+        output_user_id: User ID for output segmentations (default: "split").
+        labels: Optional explicit ``{name: label_value}`` mapping, as for ``split_multilabel_segmentation``.
+
+    Returns:
+        List of created CopickSegmentation objects.
+    """
+    from copick_utils.util.segmentations import new_segmentation
+
+    volume = segmentation.numpy()
+    if volume is None or volume.size == 0:
+        raise ValueError("Could not load segmentation data")
+    label_channel, instance_channel = volume[0], volume[1]
+    root = run.root
+    if labels:
+        label_items = [(int(value), name) for name, value in labels.items()]
+    else:
+        label_items = []
+        for value in np.unique(label_channel[label_channel > 0]):
+            obj = next((o for o in root.config.pickable_objects if o.label == int(value)), None)
+            label_items.append((int(value), obj.name if obj is not None else str(int(value))))
+
+    outputs = []
+    for label_value, object_name in label_items:
+        in_label = label_channel == label_value
+        things = in_label & (instance_channel > 0)
+        stuff = in_label & (instance_channel == 0)
+        for seg_type, mask, data in (
+            ("instance", things, np.where(things, instance_channel, 0)),
+            ("binary", stuff, stuff.astype(np.uint8)),
+        ):
+            if not mask.any():
+                continue
+            output = new_segmentation(
+                run,
+                segmentation.voxel_size,
+                object_name,
+                segmentation.session_id,
+                output_user_id,
+                seg_type,
+            )
+            output.from_numpy(data)
+            outputs.append(output)
+    if outputs:
+        logger.info(f"Run '{run.name}': split panoptic segmentation into {len(outputs)} segmentations")
+    return outputs
+
+
 def _split_labels_worker(
     run: "CopickRun",
     segmentation_name: str,
@@ -125,9 +187,10 @@ def _split_labels_worker(
     voxel_spacing: float,
     output_user_id: str,
     labels: Optional[Dict[str, int]] = None,
+    panoptic: bool = False,
 ) -> Dict[str, Any]:
     """
-    Worker function for batch splitting of multilabel segmentations.
+    Worker function for batch splitting of multilabel (or panoptic) segmentations.
 
     Args:
         run: CopickRun to process
@@ -142,6 +205,24 @@ def _split_labels_worker(
     """
     try:
         # Get the input segmentation
+        if panoptic:
+            segmentations = run.get_segmentations(
+                name=segmentation_name,
+                user_id=segmentation_user_id,
+                session_id=segmentation_session_id,
+                voxel_size=voxel_spacing,
+                is_panoptic=True,
+            )
+            if not segmentations:
+                return {"processed": 0, "errors": [f"No panoptic segmentation found for run {run.name}"]}
+            outputs = split_panoptic_segmentation(segmentations[0], run, output_user_id, labels)
+            return {
+                "processed": 1,
+                "errors": [],
+                "labels_split": len(outputs),
+                "object_names": [seg.name for seg in outputs],
+            }
+
         segmentations = run.get_segmentations(
             name=segmentation_name,
             user_id=segmentation_user_id,
@@ -195,6 +276,7 @@ def split_labels_batch(
     run_names: Optional[List[str]] = None,
     workers: int = 8,
     labels: Optional[Dict[str, int]] = None,
+    panoptic: bool = False,
 ) -> Dict[str, Any]:
     """
     Batch split multilabel segmentations across multiple runs.
@@ -210,6 +292,7 @@ def split_labels_batch(
         workers: Number of worker processes (default: 8)
         labels: Optional explicit ``{name: label_value}`` mapping for naming outputs
             (see ``split_multilabel_segmentation``). None = resolve names from config.
+        panoptic: Split a panoptic segmentation (see ``split_panoptic_segmentation``).
 
     Returns:
         Dictionary with processing results and statistics per run
@@ -230,6 +313,7 @@ def split_labels_batch(
         voxel_spacing=voxel_spacing,
         output_user_id=output_user_id,
         labels=labels,
+        panoptic=panoptic,
     )
 
     return results

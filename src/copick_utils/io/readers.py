@@ -65,7 +65,17 @@ def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: b
             return None
 
 
-def segmentation(run, voxel_spacing: float, name: str, user_id=None, session_id=None, raise_error=False, verbose=True):
+def segmentation(
+    run,
+    voxel_spacing: float,
+    name: str,
+    user_id=None,
+    session_id=None,
+    raise_error=False,
+    verbose=True,
+    is_instance: bool = False,
+    is_panoptic: bool = False,
+):
     """Read a segmentation from a copick run as a NumPy array.
 
     Resolves the segmentation matching `name` (optionally filtered by `user_id`
@@ -82,10 +92,14 @@ def segmentation(run, voxel_spacing: float, name: str, user_id=None, session_id=
             returning `None`.
         verbose: Print a diagnostic message listing what is available when no
             segmentation matches.
+        is_instance: Read an instance segmentation (voxel value = instance ID). By
+            default only binary and multilabel segmentations match, even when an
+            instance or panoptic segmentation shares the name, user and session.
+        is_panoptic: Read a panoptic segmentation (shape (2, Z, Y, X)).
 
     Returns:
-        The segmentation as a NumPy array of shape (Z, Y, X), or `None` if none
-        matches and `raise_error` is False.
+        The segmentation as a NumPy array of shape (Z, Y, X) ((2, Z, Y, X) for a
+        panoptic one), or `None` if none matches and `raise_error` is False.
     """
 
     # Construct the Target URI
@@ -98,7 +112,15 @@ def segmentation(run, voxel_spacing: float, name: str, user_id=None, session_id=
 
     # Try to resolve the segmentation using the Copick URI
     try:
+        if is_instance or is_panoptic:
+            uri += "?instance=true" if is_instance else "?panoptic=true"
         segs = resolve_copick_objects(uri, run.root, "segmentation", run_name=run.name)
+        segs = [
+            s
+            for s in segs
+            if bool(getattr(s, "is_instance", False)) == is_instance
+            and bool(getattr(s, "is_panoptic", False)) == is_panoptic
+        ]
         return segs[0].numpy()
     except Exception as err:
         # Force the voxel spacing to be a float

@@ -20,6 +20,15 @@ from copick_utils.util.config_models import create_single_selector_config
 @add_run_names_option
 @optgroup.group("\nInput Options", help="Options related to the input segmentations.")
 @add_input_option("segmentation")
+@optgroup.option(
+    "--instances",
+    "instances_uri",
+    type=str,
+    default=None,
+    help="Instance segmentations to add to a panoptic output (-o ...?panoptic=true), e.g. "
+    '"microtubule:trace/1@10.0" (patterns allowed; ?instance=true is implied). Each one adds its object\'s '
+    "label and its instance IDs.",
+)
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to the output segmentation.")
 @add_output_option("segmentation", default_tool="combine")
@@ -28,6 +37,7 @@ def combine(
     config,
     run_names,
     input_uri,
+    instances_uri,
     workers,
     output_uri,
     debug,
@@ -43,11 +53,17 @@ def combine(
     When multiple inputs overlap, the lowest label value wins. This resolution is
     deterministic and reproducible, and overlapping voxels are logged as warnings.
 
+    With an output URI ending in `?panoptic=true`, the result is a panoptic segmentation
+    instead: the inputs fill its label channel (regions without instances, such as
+    membranes), and the instance segmentations given with `--instances` add their objects'
+    labels and their instance IDs. An instance ID is kept where its object's label won.
+
     URI Format:
 
         \b
         Segmentations: name:user_id/session_id@voxel_spacing
         Use glob/regex patterns to match multiple segmentations per run.
+        Panoptic output: append ?panoptic=true to the output URI
 
     Examples:
 
@@ -62,6 +78,11 @@ def combine(
         \b
         # Combine for specific runs
         copick process combine -r run1 -r run2 -i "*:user1/session@10.0" -o "labels:combine/0"
+
+        \b
+        # Membranes as regions plus microtubule instances, as one panoptic segmentation
+        copick process combine -i "membrane:data-portal/*@10.0" --instances "microtubule:trace/1@10.0" \\
+            -o "cell:combine/0@10.0?panoptic=true"
 
     See Also:
 
@@ -100,6 +121,7 @@ def combine(
         config=task_config,
         run_names=run_names_list,
         workers=workers,
+        instances_uri=instances_uri,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)

@@ -4,12 +4,15 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+#: The object types a selector reads or writes.
+ObjectType = Literal["picks", "mesh", "segmentation", "filaments"]
+
 
 class SelectorConfig(BaseModel):
     """Pydantic model for selector configuration with validation."""
 
-    input_type: Literal["picks", "mesh", "segmentation"]
-    output_type: Literal["picks", "mesh", "segmentation"]
+    input_type: ObjectType
+    output_type: ObjectType
     input_object_name: str
     input_user_id: str
     input_session_id: str
@@ -19,6 +22,23 @@ class SelectorConfig(BaseModel):
     individual_outputs: bool = False
     segmentation_name: Optional[str] = None
     voxel_spacing: Optional[float] = None
+    # Segmentation type flags from the URIs' query parameters (?multilabel=true, ?instance=true, ?panoptic=true).
+    # An input without an instance or panoptic flag selects binary and multilabel segmentations only.
+    input_multilabel: Optional[bool] = None
+    input_instance: Optional[bool] = None
+    input_panoptic: Optional[bool] = None
+    output_multilabel: Optional[bool] = None
+    output_instance: Optional[bool] = None
+    output_panoptic: Optional[bool] = None
+
+    @property
+    def output_segmentation_type(self) -> Optional[str]:
+        """The segmentation type the output URI names (``multilabel``, ``instance``, ``panoptic``), or None."""
+        from copick_utils.util.segmentations import type_from_flags
+
+        if self.output_type != "segmentation":
+            return None
+        return type_from_flags(self.output_multilabel, self.output_instance, self.output_panoptic)
 
     @field_validator("segmentation_name")
     @classmethod
@@ -86,9 +106,9 @@ class SelectorConfig(BaseModel):
     def from_uris(
         cls,
         input_uri: str,
-        input_type: Literal["picks", "mesh", "segmentation"],
+        input_type: ObjectType,
         output_uri: str,
-        output_type: Literal["picks", "mesh", "segmentation"],
+        output_type: ObjectType,
         individual_outputs: bool = False,
         command_name: Optional[str] = None,
     ) -> "SelectorConfig":
@@ -155,7 +175,17 @@ class SelectorConfig(BaseModel):
                 voxel_spacing = None if voxel_spacing == "*" else float(voxel_spacing)
             config_dict["voxel_spacing"] = voxel_spacing
 
+        if input_type == "segmentation":
+            config_dict.update(_type_flags(input_params, "input"))
+        if output_type == "segmentation":
+            config_dict.update(_type_flags(output_params, "output"))
+
         return cls(**config_dict)
+
+
+def _type_flags(params: Dict[str, Any], prefix: str) -> Dict[str, Optional[bool]]:
+    """A parsed segmentation URI's type flags as ``<prefix>_multilabel/instance/panoptic`` fields."""
+    return {f"{prefix}_{flag}": params.get(flag) for flag in ("multilabel", "instance", "panoptic")}
 
 
 class ReferenceConfig(BaseModel):
@@ -167,6 +197,10 @@ class ReferenceConfig(BaseModel):
     session_id: Optional[str] = None
     voxel_spacing: Optional[float] = None
     tomo_type: Optional[str] = None
+    # Segmentation references: the URI's type flags (without an instance or panoptic flag, binary or multilabel).
+    multilabel: Optional[bool] = None
+    instance: Optional[bool] = None
+    panoptic: Optional[bool] = None
     additional_params: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("voxel_spacing")
@@ -255,6 +289,9 @@ class ReferenceConfig(BaseModel):
                 user_id=user_id,
                 session_id=session_id,
                 voxel_spacing=voxel_spacing,
+                multilabel=params.get("multilabel"),
+                instance=params.get("instance"),
+                panoptic=params.get("panoptic"),
                 additional_params=additional_params or {},
             )
 
@@ -315,9 +352,9 @@ class TaskConfig(BaseModel):
 # URI-based convenience functions (simplified interface)
 def create_simple_config(
     input_uri: str,
-    input_type: Literal["picks", "mesh", "segmentation"],
+    input_type: ObjectType,
     output_uri: str,
-    output_type: Literal["picks", "mesh", "segmentation"],
+    output_type: ObjectType,
     individual_outputs: bool = False,
     command_name: Optional[str] = None,
 ) -> TaskConfig:
@@ -357,9 +394,9 @@ def create_simple_config(
 
 def create_single_selector_config(
     input_uri: str,
-    input_type: Literal["picks", "mesh", "segmentation"],
+    input_type: ObjectType,
     output_uri: str,
-    output_type: Literal["picks", "mesh", "segmentation"],
+    output_type: ObjectType,
     command_name: Optional[str] = None,
     operation: str = "union",
 ) -> TaskConfig:
@@ -416,9 +453,9 @@ def create_single_selector_config(
 def create_dual_selector_config(
     input1_uri: str,
     input2_uri: str,
-    input_type: Literal["picks", "mesh", "segmentation"],
+    input_type: ObjectType,
     output_uri: str,
-    output_type: Literal["picks", "mesh", "segmentation"],
+    output_type: ObjectType,
     pairing_method: str = "index_order",
     individual_outputs: bool = False,
     command_name: Optional[str] = None,
@@ -490,6 +527,7 @@ def create_dual_selector_config(
 
         selector2_dict["segmentation_name"] = seg_name
         selector2_dict["voxel_spacing"] = voxel_spacing
+        selector2_dict.update(_type_flags(input2_params, "input"))
 
     selector2_config = SelectorConfig(**selector2_dict)
 
@@ -502,9 +540,9 @@ def create_dual_selector_config(
 
 def create_multi_selector_config(
     input_uris: List[str],
-    input_type: Literal["picks", "mesh", "segmentation"],
+    input_type: ObjectType,
     output_uri: str,
-    output_type: Literal["picks", "mesh", "segmentation"],
+    output_type: ObjectType,
     pairing_method: str = "n_way",
     individual_outputs: bool = False,
     command_name: Optional[str] = None,
@@ -582,6 +620,7 @@ def create_multi_selector_config(
 
             selector_dict["segmentation_name"] = object_name
             selector_dict["voxel_spacing"] = voxel_spacing
+            selector_dict.update(_type_flags(params, "input"))
 
         selectors.append(SelectorConfig(**selector_dict))
 
@@ -594,9 +633,9 @@ def create_multi_selector_config(
 
 def create_reference_config(
     input_uri: str,
-    input_type: Literal["picks", "mesh", "segmentation"],
+    input_type: ObjectType,
     output_uri: str,
-    output_type: Literal["picks", "mesh", "segmentation"],
+    output_type: ObjectType,
     reference_uri: str,
     reference_type: Literal["mesh", "segmentation", "tomogram"],
     additional_params: Optional[Dict[str, Any]] = None,
