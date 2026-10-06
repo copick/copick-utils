@@ -8,9 +8,9 @@ from copick.cli.util import (
     resolve_deprecated_option,
 )
 from copick.util.log import get_logger
-from copick.util.uri import parse_copick_uri
+from copick.util.uri import expand_output_uri, parse_copick_uri
 
-from copick_utils.cli.util import add_input_option, add_output_option
+from copick_utils.cli.util import add_input_option, add_output_option, add_workers_option
 from copick_utils.util.config_models import create_simple_config
 
 
@@ -38,12 +38,12 @@ from copick_utils.util.config_models import create_simple_config
     "--spacing-distance",
     type=float,
     required=True,
-    help="Distance between consecutive sampled points along the spline.",
+    help="Distance between consecutive sampled points along each spline, in voxels.",
 )
 @optgroup.option(
     "--smoothing-factor",
     type=float,
-    help="Smoothing parameter for spline fitting (auto if not provided).",
+    help="Smoothing parameter for spline fitting (scipy's s, in voxels squared; auto if not provided).",
 )
 @optgroup.option(
     "--degree",
@@ -51,11 +51,13 @@ from copick_utils.util.config_models import create_simple_config
     default=3,
     help="Degree of the spline (1-5).",
 )
+# TODO:remove once deprecation takes effect -- --connectivity-radius has no effect (26-connected skeleton graph)
 @optgroup.option(
     "--connectivity-radius",
     type=float,
-    default=2.0,
-    help="Maximum distance to consider skeleton points as connected.",
+    default=None,
+    hidden=True,
+    help="Deprecated and ignored: skeleton voxels are joined to their 26 neighbours.",
 )
 @optgroup.option(
     "--compute-transforms/--no-compute-transforms",
@@ -67,22 +69,32 @@ from copick_utils.util.config_models import create_simple_config
     "--curvature-threshold",
     type=float,
     default=0.2,
-    help="Maximum allowed curvature before outlier removal.",
+    help="Largest sine of the turning angle between consecutive sampled points; a spline that turns more "
+    "sharply is smoothed further.",
 )
 @optgroup.option(
     "--max-iterations",
     type=int,
     default=5,
-    help="Maximum number of outlier removal iterations.",
+    help="Maximum number of smoothing increases.",
 )
 @optgroup.option(
-    "--workers",
+    "--label",
     type=int,
-    default=8,
-    help="Number of worker processes.",
+    default=None,
+    help="Label to fit in a multilabel segmentation (default: every non-zero voxel).",
 )
+@add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output picks.")
 @add_output_option("picks", default_tool="spline")
+@add_output_option(
+    "filaments",
+    flag="--filaments",
+    short_flag="-of",
+    param_name="filaments_uri",
+    required=False,
+    description="Also store the fitted splines as copick Filaments (exact B-spline curves) under this URI.",
+)
 @add_debug_option
 def fit_spline(
     config,
@@ -96,19 +108,30 @@ def fit_spline(
     compute_transforms,
     curvature_threshold,
     max_iterations,
+    label,
     workers,
     output_uri,
+    filaments_uri,
     debug,
 ):
     """Fit 3D splines to skeletons and generate oriented picks.
 
-    Fits regularized 3D parametric splines to skeletonized segmentation volumes and samples
-    points along each spline at a regular interval, producing picks. Orientations are computed
-    from the local spline direction when `--compute-transforms` is enabled.
+    Fits a smoothing 3D spline to every filament of a skeleton (or segmentation) volume and
+    samples points along each spline exactly `--spacing-distance` voxels apart, producing picks.
+    The skeleton is split into filaments between ends and junctions, continuing straight
+    through junctions, so crossing or separate filaments each get their own spline. All picks go
+    into one pick set: grouped by filament, in order along it, with the filament's number
+    (1, 2, ... by length) as the pick's instance ID. With `--compute-transforms`, each pick's
+    +Z axis follows the spline's direction, and the rotation about it changes as little as
+    possible along the filament.
 
-    Curvature-based outlier removal is applied iteratively to discard skeleton points that
-    produce unrealistically sharp bends, while the connectivity radius controls how skeleton
-    voxels are joined into a connected curve before fitting.
+    Where a spline turns more sharply than `--curvature-threshold` between samples, its
+    smoothing is increased (up to `--max-iterations` times). `--filaments` also stores the
+    fitted splines as copick Filaments.
+
+    For new work, `copick convert seg2fil` (tracing, with an instance segmentation and
+    thickness-based filters) and `copick convert fil2picks` (sampling in angstroms) separate
+    tracing from sampling.
 
     URI Format:
 
@@ -120,23 +143,27 @@ def fit_spline(
 
         \b
         # Fit splines to skeletonized components (voxel spacing from the @10.0 in -i)
-        copick process fit_spline -i "skeleton:skel/inst-.*@10.0" \\
+        copick process fit-spline -i "skeleton:skel/inst-.*@10.0" \\
             -o "skeleton:spline/spline-{input_session_id}" --spacing-distance 4.4
 
         \b
         # Process a single skeleton component
-        copick process fit_spline -i "skeleton:skel/skel-0@10.0" \\
+        copick process fit-spline -i "skeleton:skel/skel-0@10.0" \\
             -o "skeleton:spline/spline-0" --spacing-distance 2.0
 
     See Also:
 
         \b
+        copick convert seg2fil: trace filaments in a segmentation (Filaments and an instance segmentation)
+        copick convert fil2picks: sample picks along filaments, in angstroms
         copick process skeletonize: produce the skeleton segmentations fed to this command
-        copick process separate_components: split a segmentation into per-instance skeletons first
     """
     from copick_utils.process.spline_fitting import fit_spline_lazy_batch
 
     logger = get_logger(__name__, debug=debug)
+    logger.info("fit-spline is kept for compatibility; see copick convert seg2fil and fil2picks for new work")
+    if connectivity_radius is not None:
+        logger.warning("--connectivity-radius is deprecated and has no effect")
 
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
@@ -173,12 +200,30 @@ def fit_spline(
             "Input URI must include a specific voxel spacing (e.g., @10.0), or pass --voxel-spacing/-vs.",
         )
 
+    filament_params = {}
+    if filaments_uri:
+        parsed = parse_copick_uri(
+            expand_output_uri(
+                output_uri=filaments_uri,
+                input_uri=input_uri,
+                input_type="segmentation",
+                output_type="filaments",
+                command_name="spline",
+            ),
+            "filaments",
+        )
+        filament_params = {
+            "filaments_object_name": parsed["object_name"],
+            "filaments_user_id": parsed["user_id"],
+            "filaments_session_id": parsed["session_id"],
+        }
+
     logger.info(f"Fitting splines to segmentations '{input_params['name']}'")
     logger.info(
         f"Source segmentation pattern: {input_params['name']} ({input_params['user_id']}/{input_params['session_id']})",
     )
     logger.info(f"Spacing distance: {spacing_distance}, degree: {degree}")
-    logger.info(f"Smoothing factor: {smoothing_factor}, connectivity radius: {connectivity_radius}")
+    logger.info(f"Smoothing factor: {smoothing_factor}")
     logger.info(f"Compute transforms: {compute_transforms}")
     logger.info(f"Curvature threshold: {curvature_threshold}, max iterations: {max_iterations}")
     logger.info(f"Voxel spacing: {voxel_spacing}")
@@ -193,11 +238,12 @@ def fit_spline(
         spacing_distance=spacing_distance,
         smoothing_factor=smoothing_factor,
         degree=degree,
-        connectivity_radius=connectivity_radius,
         compute_transforms=compute_transforms,
         curvature_threshold=curvature_threshold,
         max_iterations=max_iterations,
         voxel_spacing=voxel_spacing,
+        label=label,
+        **filament_params,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
@@ -212,7 +258,8 @@ def fit_spline(
 
     logger.info(f"Completed: {successful}/{len(results)} runs processed successfully")
     logger.info(f"Total conversion tasks completed: {total_processed}")
-    logger.info(f"Total picks created: {total_picks}")
+    total_filaments = sum(result.get("filaments_fitted", 0) for result in results.values() if result)
+    logger.info(f"Total picks created: {total_picks} on {total_filaments} filaments")
 
     if all_errors:
         logger.warning(f"Encountered {len(all_errors)} errors during processing")

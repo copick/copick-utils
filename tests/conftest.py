@@ -10,7 +10,8 @@ OBJECTS = [
         "name": "microtubule",
         "is_particle": True,
         "label": 1,
-        "radius": 120.0,
+        # Tube radius: the synthetic test tubes have a 30 Å label radius, above a third of this (seg2fil's default).
+        "radius": 75.0,
         "metadata": {"copick": {"filament": {"polar": True}}},
     },
     {"name": "ribosome", "is_particle": True, "label": 2, "radius": 150.0},

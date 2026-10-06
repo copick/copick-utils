@@ -337,7 +337,8 @@ def prune_spurs(topology: Topology, min_length: float) -> Topology:
 
 def merge_junctions(topology: Topology, max_length: float) -> Topology:
     """Contract branches shorter than ``max_length`` voxels that join two different junctions, so two nearby
-    junctions (two filaments crossing, seen as two forks joined by a short bridge) become one.
+    junctions (two filaments crossing, seen as two forks joined by a short bridge) become one. Short branches that
+    then start and end at the merged junction (bubbles of the skeleton, where the label is thick) are absorbed too.
 
     Args:
         topology: The topology (modified in place and returned).
@@ -377,6 +378,9 @@ def merge_junctions(topology: Topology, max_length: float) -> Topology:
         if b in bridge_set:
             continue
         branch.start, branch.end = find(branch.start), find(branch.end)
+        if branch.closed and topology.node_kind.get(branch.start) == "junction" and branch.length <= max_length:
+            merged_voxels[branch.start].append(branch.path)  # a bubble inside the merged junction
+            continue
         kept.append(branch)
     topology.branches = kept
     topology.node_kind = {find(node): kind for node, kind in topology.node_kind.items()}

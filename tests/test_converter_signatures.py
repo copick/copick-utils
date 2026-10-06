@@ -20,11 +20,14 @@ import inspect
 import pytest
 from copick_utils.converters.caps_from_mesh import caps_from_mesh_lazy_batch
 from copick_utils.converters.ellipsoid_from_picks import ellipsoid_from_picks_lazy_batch
+from copick_utils.converters.filaments_from_segmentation import filaments_from_segmentation_lazy_batch
 from copick_utils.converters.mesh_from_picks import mesh_from_picks_lazy_batch
 from copick_utils.converters.mesh_from_segmentation import mesh_from_segmentation_lazy_batch
+from copick_utils.converters.picks_from_filaments import picks_from_filaments_lazy_batch
 from copick_utils.converters.picks_from_mesh import picks_from_mesh_lazy_batch
 from copick_utils.converters.picks_from_segmentation import picks_from_segmentation_lazy_batch
 from copick_utils.converters.plane_from_picks import plane_from_picks_lazy_batch
+from copick_utils.converters.segmentation_from_filaments import segmentation_from_filaments_lazy_batch
 from copick_utils.converters.segmentation_from_mesh import segmentation_from_mesh_lazy_batch
 from copick_utils.converters.segmentation_from_picks import segmentation_from_picks_lazy_batch
 from copick_utils.converters.sphere_from_picks import sphere_from_picks_lazy_batch
@@ -52,6 +55,9 @@ CASES = [
     ("picks2plane", plane_from_picks_lazy_batch, "picks", False),
     ("picks2sphere", sphere_from_picks_lazy_batch, "picks", False),
     ("mesh2caps", caps_from_mesh_lazy_batch, "mesh", False),
+    ("seg2fil", filaments_from_segmentation_lazy_batch, "segmentation", False),
+    ("fil2picks", picks_from_filaments_lazy_batch, "filaments", False),
+    ("fil2seg", segmentation_from_filaments_lazy_batch, "filaments", False),
     ("picksin", picks_inclusion_by_mesh_lazy_batch, "picks", True),
     ("picksout", picks_exclusion_by_mesh_lazy_batch, "picks", True),
     ("clippicks", limit_picks_by_distance_lazy_batch, "picks", True),

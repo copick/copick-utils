@@ -41,13 +41,26 @@ from copick_utils.util.config_models import create_simple_config
     "--remove-short-branches/--keep-short-branches",
     is_flag=True,
     default=True,
-    help="Remove short branches from skeleton.",
+    help="Remove small skeleton pieces (whole connected pieces with fewer than --min-branch-length voxels). "
+    "To shorten side branches of a larger skeleton, use --prune-length.",
 )
 @optgroup.option(
     "--min-branch-length",
     type=int,
     default=5,
-    help="Minimum length of branches to keep.",
+    help="Minimum number of voxels of a skeleton piece to keep (see --remove-short-branches).",
+)
+@optgroup.option(
+    "--prune-length",
+    type=float,
+    default=None,
+    help="Prune side branches (spurs) of the skeleton shorter than this (unit: --length-unit). Unset: no pruning.",
+)
+@optgroup.option(
+    "--length-unit",
+    type=click.Choice(["angstrom", "voxel"]),
+    default="angstrom",
+    help="Unit of --prune-length.",
 )
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
@@ -62,6 +75,8 @@ def skeletonize(
     min_object_size,
     remove_short_branches,
     min_branch_length,
+    prune_length,
+    length_unit,
     workers,
     output_uri,
     debug,
@@ -76,7 +91,9 @@ def skeletonize(
     The input session ID is treated as a regex, so a single invocation can skeletonize
     many segmentations at once. This pairs naturally with the output of connected-component
     separation (e.g. pattern `inst-.*` to match `inst-0`, `inst-1`, etc.). Optional cleanup
-    removes small objects before thinning and prunes short spur branches afterwards.
+    removes small objects before thinning and small skeleton pieces afterwards, and
+    `--prune-length` prunes short side branches (spurs) off the skeleton. The output takes the
+    name given in `-o`.
 
     URI Format:
 
@@ -95,6 +112,11 @@ def skeletonize(
         -o "membrane:skel/skel-{input_session_id}@10.0"
 
     \b
+    # Prune side branches shorter than 20 nm
+    copick process skeletonize -i "microtubule:easymode/job006@10.0" -o "microtubule:skel/job006@10.0" \\
+        --prune-length 200
+
+    \b
     # Use the distance-transform backend and keep short branches
     copick process skeletonize --method distance_transform --keep-short-branches \\
         -i "membrane:user1/inst-.*@10.0" -o "membrane:skel/skel-{input_session_id}@10.0"
@@ -106,6 +128,12 @@ def skeletonize(
     copick process filter-components: drop small connected components before skeletonizing
     """
     from copick_utils.process.skeletonize import skeletonize_lazy_batch
+
+    if prune_length is not None and length_unit == "voxel":
+        vs_raw = parse_copick_uri(input_uri, "segmentation").get("voxel_spacing")
+        if vs_raw is None or vs_raw == "*":
+            raise click.BadParameter("--length-unit voxel requires voxel spacing in the input URI (e.g., @10.0)")
+        prune_length = prune_length * float(vs_raw)
 
     logger = get_logger(__name__, debug=debug)
 
@@ -143,6 +171,7 @@ def skeletonize(
         min_object_size=min_object_size,
         remove_short_branches=remove_short_branches,
         min_branch_length=min_branch_length,
+        prune_length=prune_length,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
