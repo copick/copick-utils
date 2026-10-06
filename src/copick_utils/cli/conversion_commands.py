@@ -3,6 +3,8 @@
 This module imports all conversion commands from specialized files for better organization.
 """
 
+from copick_utils.cli.fil2picks import fil2picks
+from copick_utils.cli.fil2seg import fil2seg
 from copick_utils.cli.mesh2caps import mesh2caps
 from copick_utils.cli.mesh2picks import mesh2picks
 from copick_utils.cli.mesh2seg import mesh2seg
@@ -12,6 +14,7 @@ from copick_utils.cli.picks2plane import picks2plane
 from copick_utils.cli.picks2seg import picks2seg
 from copick_utils.cli.picks2sphere import picks2sphere
 from copick_utils.cli.picks2surface import picks2surface
+from copick_utils.cli.seg2fil import seg2fil
 from copick_utils.cli.seg2mesh import seg2mesh
 from copick_utils.cli.seg2picks import seg2picks
 
@@ -32,4 +35,8 @@ __all__ = [
     "seg2picks",
     "mesh2seg",
     "seg2mesh",
+    # Filament commands
+    "seg2fil",
+    "fil2picks",
+    "fil2seg",
 ]

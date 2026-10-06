@@ -1,320 +1,250 @@
-"""3D spline fitting to skeleton volumes for pick generation with orientations."""
+"""3D spline fitting to skeleton volumes for pick generation with orientations.
 
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+``fit-spline`` fits a smoothing spline to every filament of a skeleton (or segmentation) volume and samples picks
+along each one, in voxel units. It is built on the filament tracer (``filament_tracing.py``): the skeleton is split
+into chains between ends and junctions, continuing straight through junctions, and each chain gets its own spline.
+For new work, ``copick convert seg2fil`` and ``copick convert fil2picks`` separate tracing from sampling and work in
+angstroms.
+"""
 
-import networkx as nx
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
 import numpy as np
 from copick.util.log import get_logger
-from scipy.spatial.distance import pdist, squareform
+from scipy.interpolate import splev
 
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.process.filament_tracing import (
+    evaluate_spline,
+    fit_spline,
+    rotation_minimizing_frames,
+    skeleton_chains,
+)
 
 if TYPE_CHECKING:
     from copick.models import CopickPicks, CopickRun, CopickSegmentation
 
 logger = get_logger(__name__)
 
+#: Chain-splitting settings for skeleton input, in voxels (the input has no thickness to derive them from).
+_PRUNE_VOXELS = 3.0
+_MERGE_VOXELS = 3.0
+_MAX_BEND = 45.0
+_WINDOW_VOXELS = 6.0
+
 
 class SkeletonSplineFitter:
-    """3D spline fitting to skeleton coordinates with point sampling and orientation computation."""
+    """3D spline fitting to skeleton coordinates with point sampling and orientation computation.
+
+    Coordinates are voxel indices: skeleton coordinates in (z, y, x) order, as ``np.argwhere`` returns them, and
+    spline points in (x, y, z) order.
+    """
 
     def __init__(self):
+        self.spline_tck = None
+        self.smoothing = None
         self.skeleton_coords = None
-        self.ordered_path = None
-        self.spline_functions = None
-        self.regularized_points = None
+        self.ordered_coords = None
+        self.sampled_points = None
         self.t_sampled = None
+        self.tangents = None
+        self._dense = None
 
     def extract_skeleton_coordinates(self, binary_volume: np.ndarray) -> np.ndarray:
-        """Extract skeleton coordinates from binary volume."""
-        self.skeleton_coords = np.array(np.where(binary_volume)).T
+        """Extract (z, y, x) coordinates of the skeleton voxels."""
+        self.skeleton_coords = np.argwhere(binary_volume)
         return self.skeleton_coords
 
     def order_skeleton_points_longest_path(self, coords: np.ndarray, connectivity_radius: float = 2.0) -> np.ndarray:
-        """Order skeleton points by finding the longest path through the skeleton."""
-        if len(coords) <= 2:
-            self.ordered_path = coords
-            return coords
+        """Order skeleton points along the longest filament chain.
 
-        # Build adjacency matrix
-        distances = squareform(pdist(coords))
-        adjacency = (distances <= connectivity_radius) & (distances > 0)
+        The skeleton is split into chains between ends and junctions, continuing straight through junctions, and the
+        longest chain is returned in order.
 
-        # Create NetworkX graph
-        G = nx.from_numpy_array(adjacency)
+        Args:
+            coords: (N, 3) skeleton voxel coordinates (z, y, x).
+            connectivity_radius: Unused; skeleton voxels are connected to their 26 neighbours.
 
-        # Find endpoints (degree 1 nodes)
-        endpoints = [node for node, degree in G.degree() if degree == 1]
-
-        if len(endpoints) < 2:
-            # If no clear endpoints, use the two points that are farthest apart
-            max_dist_idx = np.unravel_index(np.argmax(distances), distances.shape)
-            endpoints = [max_dist_idx[0], max_dist_idx[1]]
-
-        # Find the longest path between any two endpoints
-        longest_path = []
-        max_length = 0
-
-        for i, start in enumerate(endpoints):
-            for end in endpoints[i + 1 :]:
-                try:
-                    path = nx.shortest_path(G, start, end)
-                    if len(path) > max_length:
-                        max_length = len(path)
-                        longest_path = path
-                except nx.NetworkXNoPath:
-                    continue
-
-        # If no path found, try all pairs of nodes
-        if not longest_path:
-            for i in range(len(coords)):
-                for j in range(i + 1, len(coords)):
-                    try:
-                        path = nx.shortest_path(G, i, j)
-                        if len(path) > max_length:
-                            max_length = len(path)
-                            longest_path = path
-                    except nx.NetworkXNoPath:
-                        continue
-
-        # Return ordered coordinates
-        if longest_path:
-            self.ordered_path = coords[longest_path]
-        else:
-            # Fallback: order by distance from first point
-            self.ordered_path = self._order_by_nearest_neighbor(coords)
-
-        return self.ordered_path
-
-    def _order_by_nearest_neighbor(self, coords: np.ndarray) -> np.ndarray:
-        """Fallback method to order points by nearest neighbor traversal."""
-        if len(coords) == 0:
-            return coords
-
-        ordered = [0]  # Start with first point
-        remaining = list(range(1, len(coords)))
-
-        while remaining:
-            current_point = coords[ordered[-1]]
-            distances = [np.linalg.norm(coords[i] - current_point) for i in remaining]
-            next_idx = remaining[np.argmin(distances)]
-            ordered.append(next_idx)
-            remaining.remove(next_idx)
-
-        return coords[ordered]
+        Returns:
+            (M, 3) ordered coordinates (z, y, x) of the longest chain.
+        """
+        chains = _chains_from_coords(coords)
+        if not chains:
+            return np.zeros((0, 3))
+        self.ordered_coords = max(chains, key=_chain_length)
+        return self.ordered_coords
 
     def fit_regularized_spline(
         self,
         coords: np.ndarray,
         smoothing_factor: Optional[float] = None,
         degree: int = 3,
-    ) -> Tuple[np.ndarray, Dict[str, Any]]:
-        """Fit regularized 3D parametric spline using scipy.interpolate.splprep."""
-        if len(coords) < degree + 1:
-            raise ValueError(f"Need at least {degree + 1} points for degree {degree} spline")
+    ) -> Any:
+        """Fit a smoothing spline to ordered (z, y, x) coordinates.
 
-        # Use splprep for parametric 3D spline fitting
-        from scipy.interpolate import splprep
+        Args:
+            coords: (N, 3) ordered coordinates (z, y, x).
+            smoothing_factor: scipy ``splprep`` smoothing factor ``s`` in voxels squared; None uses scipy's default
+                ``m - sqrt(2 m)`` for ``m`` points.
+            degree: Spline degree (1-5).
 
-        # Determine spline degree
-        k = min(degree, len(coords) - 1)
-        if k <= 0:
-            k = 1
-
-        # coords should be transposed for splprep: [x_coords, y_coords, z_coords]
-        tck, u = splprep([coords[:, 2], coords[:, 1], coords[:, 0]], s=smoothing_factor, k=k)
-        print(f"Successfully fitted parametric spline with degree {k}, smoothing {smoothing_factor}")
-
-        self.spline_functions = {"tck": tck, "u_original": u, "degree": k}
-
-        return u, self.spline_functions
+        Returns:
+            The spline as scipy's ``(knots, [cx, cy, cz], degree)`` in (x, y, z) voxel coordinates.
+        """
+        points = np.asarray(coords, dtype=float)[:, ::-1]
+        m = len(points)
+        self.smoothing = float(m - np.sqrt(2 * m)) if smoothing_factor is None else float(smoothing_factor)
+        self.spline_tck = fit_spline(points, s=self.smoothing, degree=degree)
+        if self.spline_tck is None:
+            raise ValueError("Not enough distinct points to fit a spline")
+        self._dense = None
+        return self.spline_tck
 
     def sample_points_along_spline(self, spacing_distance: float) -> np.ndarray:
-        """Sample points along the spline at regular intervals using arc-length parameterization."""
-        if self.spline_functions is None:
-            raise ValueError("Spline not fitted yet. Call fit_regularized_spline first.")
+        """Sample points along the spline at exactly ``spacing_distance`` voxels, from its start.
 
-        # Get the spline representation
-        from scipy.interpolate import splev
+        Args:
+            spacing_distance: Distance between consecutive points along the spline, in voxels.
 
-        tck = self.spline_functions["tck"]
-
-        # Estimate total length by sampling densely along the parameter
-        u_dense = np.linspace(0, 1, 1000)
-        points_dense = np.column_stack(splev(u_dense, tck))
-
-        # Calculate cumulative arc lengths
-        distances = np.zeros(len(points_dense))
-        distances[1:] = np.cumsum(np.linalg.norm(np.diff(points_dense, axis=0), axis=1))
-
-        total_length = distances[-1]
-        if total_length == 0:
-            # Fallback: just return the first point
-            self.regularized_points = np.array([points_dense[0]])
-            self.t_sampled = np.array([0.0])
-            return self.regularized_points
-
-        # Calculate number of points needed for desired spacing
-        n_points = max(2, int(np.ceil(total_length / spacing_distance)) + 1)
-
-        # Sample at regular arc length intervals
-        target_distances = np.linspace(0, total_length, n_points)
-        u_sampled = np.interp(target_distances, distances, u_dense)
-
-        # Evaluate spline at sampled parameter values
-        sampled_points = np.column_stack(splev(u_sampled, tck))
-
-        self.regularized_points = sampled_points
-        self.t_sampled = u_sampled  # Store parameter values for transform calculation
-        return sampled_points
+        Returns:
+            (N, 3) sampled points (x, y, z) in voxel coordinates.
+        """
+        if self.spline_tck is None:
+            raise ValueError("Must fit spline first")
+        if spacing_distance <= 0:
+            raise ValueError("spacing_distance must be positive")
+        points, tangents, arc = self._dense_curve()
+        along = np.arange(0.0, arc[-1] + 1e-9, spacing_distance)
+        self.t_sampled = along
+        self.sampled_points = np.column_stack([np.interp(along, arc, points[:, i]) for i in range(3)])
+        sampled_tangents = np.column_stack([np.interp(along, arc, tangents[:, i]) for i in range(3)])
+        self.tangents = sampled_tangents / np.maximum(np.linalg.norm(sampled_tangents, axis=1, keepdims=True), 1e-12)
+        return self.sampled_points
 
     def compute_transforms(self) -> np.ndarray:
-        """
-        Compute 4x4 transformation matrices for each sampled point.
-        Follows the ArtiaX pattern: z_align(last_pos, curr_pos).zero_translation().inverse()
-        The rotation from particle i-1 to particle i is applied to particle i-1.
+        """Compute 4x4 transformation matrices for each sampled point.
+
+        The rotation's +Z axis is the spline's tangent (its exact derivative) at the point, in the direction of the
+        sampling. The rotation about the axis is rotation-minimizing along the spline, starting from the coordinate
+        axis least aligned with the first tangent, so it never flips. The translation is 0.
 
         Returns:
             np.ndarray: [N, 4, 4] array of transformation matrices
         """
-        if self.regularized_points is None:
+        if self.sampled_points is None:
             raise ValueError("Must sample points first before computing transforms")
-
-        n_points = len(self.regularized_points)
-        transforms = np.zeros((n_points, 4, 4))
-
-        print(f"Computing transforms for {n_points} points using ArtiaX z_align pattern...")
-
-        # Initialize all transforms as identity
-        for i in range(n_points):
-            transforms[i] = np.eye(4)
-
-        # ArtiaX pattern: for each particle i, compute rotation from i-1 to i, apply to i-1
-        for i in range(1, n_points):
-            curr_pos = self.regularized_points[i]
-            last_pos = self.regularized_points[i - 1]
-
-            # z_align(last_pos, curr_pos).zero_translation().inverse()
-            rotation_matrix = self._z_align_inverse(last_pos, curr_pos)
-
-            # Apply rotation to the PREVIOUS particle (i-1)
-            transforms[i - 1][:3, :3] = rotation_matrix
-
-        # Handle the last particle - use the same rotation as the previous particle
-        if n_points > 1:
-            transforms[n_points - 1][:3, :3] = transforms[n_points - 2][:3, :3]
-
+        points, tangents, arc = self._dense_curve()
+        frames = rotation_minimizing_frames(points, tangents)
+        nearest = np.clip(np.searchsorted(arc, self.t_sampled), 0, len(arc) - 1)
+        transforms = np.tile(np.eye(4), (len(self.sampled_points), 1, 1))
+        for i, (k, z) in enumerate(zip(nearest, self.tangents)):
+            x = frames[k][:, 0] - np.dot(frames[k][:, 0], z) * z
+            x /= np.linalg.norm(x)
+            transforms[i, :3, :3] = np.column_stack([x, np.cross(z, x), z])
         return transforms
 
-    def _z_align_inverse(self, pt1: np.ndarray, pt2: np.ndarray) -> np.ndarray:
-        """
-        Create the inverse of the z_align transformation.
-        This rotates the z-axis to align with the pt1->pt2 direction.
-        Based on the z_align algorithm but returns the inverse matrix.
-
-        Args:
-            pt1: Two 3D points defining the direction vector
-            pt2: Two 3D points defining the direction vector
-
-        Returns:
-            np.ndarray: 3x3 rotation matrix (inverse of z_align)
-        """
-        a, b, c = pt2 - pt1
-        l = a * a + c * c  # noqa
-        d = l + b * b
-        epsilon = 1e-10
-
-        if abs(d) < epsilon:
-            # Fallback to identity matrix
-            return np.eye(3)
-
-        l = np.sqrt(l)  # noqa
-        d = np.sqrt(d)
-        # Create the z_align rotation matrix
-        xf = np.zeros((3, 3), dtype=np.float64)
-        xf[1][1] = l / d
-
-        if abs(l) < epsilon:
-            xf[0][0] = 1.0
-            xf[2][1] = -b / d
-        else:
-            xf[0][0] = c / l
-            xf[2][0] = -a / l
-            xf[0][1] = -(a * b) / (l * d)
-            xf[2][1] = -(b * c) / (l * d)
-
-        xf[0][2] = a / d
-        xf[1][2] = b / d
-        xf[2][2] = c / d
-
-        return xf
-
     def get_spline_properties(self) -> Dict[str, Any]:
-        """Get properties of the fitted spline."""
-        if self.regularized_points is None:
+        """Properties of the fitted spline: length, sampled point count and spacing, and curvature (1/voxel)."""
+        if self.spline_tck is None:
             return {}
-
-        # Calculate total length
-        distances = np.linalg.norm(np.diff(self.regularized_points, axis=0), axis=1)
-        total_length = np.sum(distances)
-
-        # Calculate curvature at sampled points
-        curvatures = []
-        if len(self.regularized_points) >= 3:
-            for i in range(1, len(self.regularized_points) - 1):
-                p1, p2, p3 = self.regularized_points[i - 1 : i + 2]
-                v1 = p2 - p1
-                v2 = p3 - p2
-                # Approximate curvature
-                cross_prod = np.linalg.norm(np.cross(v1, v2))
-                if np.linalg.norm(v1) > 0 and np.linalg.norm(v2) > 0:
-                    curvature = cross_prod / (np.linalg.norm(v1) * np.linalg.norm(v2))
-                    curvatures.append(curvature)
-
+        points, _, arc = self._dense_curve()
+        knots, coefficients, k = self.spline_tck
+        u = np.linspace(knots[k], knots[-k - 1], max(64, len(points)))
+        d1 = np.array(splev(u, self.spline_tck, der=1)).T
+        d2 = np.array(splev(u, self.spline_tck, der=2)).T if k >= 2 else np.zeros_like(d1)
+        speed = np.maximum(np.linalg.norm(d1, axis=1), 1e-12)
+        curvature = np.linalg.norm(np.cross(d1, d2), axis=1) / speed**3
+        n = len(self.sampled_points) if self.sampled_points is not None else 0
         return {
-            "n_points": len(self.regularized_points),
-            "total_length": total_length,
-            "average_spacing": (
-                total_length / (len(self.regularized_points) - 1) if len(self.regularized_points) > 1 else 0
-            ),
-            "mean_curvature": np.mean(curvatures) if curvatures else 0,
-            "max_curvature": np.max(curvatures) if curvatures else 0,
-            "curvatures": curvatures,
+            "total_length": float(arc[-1]),
+            "n_sampled_points": n,
+            "average_spacing": float(arc[-1] / (n - 1)) if n > 1 else 0.0,
+            "max_curvature": float(curvature.max()) if len(curvature) else 0.0,
+            "mean_curvature": float(curvature.mean()) if len(curvature) else 0.0,
+            "smoothing_factor": self.smoothing,
         }
 
+    def max_turn(self) -> float:
+        """The largest sine of the turning angle between consecutive sampled segments (the --curvature-threshold
+        quantity; it depends on the sampling spacing)."""
+        if self.sampled_points is None or len(self.sampled_points) < 3:
+            return 0.0
+        v = np.diff(self.sampled_points, axis=0)
+        v1, v2 = v[:-1], v[1:]
+        cross = np.linalg.norm(np.cross(v1, v2), axis=1)
+        norms = np.maximum(np.linalg.norm(v1, axis=1) * np.linalg.norm(v2, axis=1), 1e-12)
+        return float(np.max(cross / norms))
+
     def detect_high_curvature_outliers(self, coords: np.ndarray, curvature_threshold: float = 0.2) -> np.ndarray:
-        """Detect points that contribute to high curvature."""
-        if len(coords) < 4:
-            return coords
+        """Deprecated: returns ``coords`` unchanged.
 
-        # Calculate curvature at each point
-        curvatures = []
-        for i in range(1, len(coords) - 1):
-            p1, p2, p3 = coords[i - 1 : i + 2]
-            v1 = p2 - p1
-            v2 = p3 - p2
-            cross_prod = np.linalg.norm(np.cross(v1, v2))
-            if np.linalg.norm(v1) > 0 and np.linalg.norm(v2) > 0:
-                curvature = cross_prod / (np.linalg.norm(v1) * np.linalg.norm(v2))
-                curvatures.append(curvature)
-            else:
-                curvatures.append(0)
+        Earlier versions deleted skeleton points around sharp bends, which also removed real curves. Sharp bends are
+        now handled by raising the spline's smoothing (``fit_spline_to_skeleton``).
+        """
+        logger.warning("detect_high_curvature_outliers is deprecated and no longer removes points")
+        return coords
 
-        # Find points with high curvature
-        curvatures = np.array(curvatures)
-        high_curvature_mask = curvatures > curvature_threshold
+    def _dense_curve(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if self._dense is None:
+            self._dense = evaluate_spline(self.spline_tck, step=0.25)
+        return self._dense
 
-        if not np.any(high_curvature_mask):
-            return coords
 
-        # Remove points contributing to high curvature (keep first and last)
-        points_to_keep = [True] + [not high_curvature_mask[i] for i in range(len(high_curvature_mask))] + [True]
+def _chain_length(coords: np.ndarray) -> float:
+    return float(np.sum(np.linalg.norm(np.diff(coords, axis=0), axis=1))) if len(coords) > 1 else 0.0
 
-        filtered_coords = coords[points_to_keep]
-        removed_count = len(coords) - len(filtered_coords)
 
-        print(f"Removed {removed_count} outlier points with high curvature")
-        return filtered_coords
+def _chains_from_coords(coords: np.ndarray) -> List[np.ndarray]:
+    """Ordered (z, y, x) chains of a skeleton given as voxel coordinates."""
+    coords = np.asarray(coords, dtype=int)
+    if len(coords) == 0:
+        return []
+    low = coords.min(axis=0)
+    volume = np.zeros(tuple(coords.max(axis=0) - low + 1), dtype=bool)
+    volume[tuple((coords - low).T)] = True
+    return [chain.coords + low for chain in _skeleton_chains(volume)]
+
+
+def _skeleton_chains(volume: np.ndarray):
+    from skimage.morphology import skeletonize
+
+    skeleton = skeletonize(np.pad(np.asarray(volume, dtype=bool), 1))[1:-1, 1:-1, 1:-1]
+    if not skeleton.any():
+        skeleton = np.asarray(volume, dtype=bool)  # already as thin as it gets
+    chains, _ = skeleton_chains(
+        skeleton,
+        prune_length=_PRUNE_VOXELS,
+        junction_merge=_MERGE_VOXELS,
+        max_bend=_MAX_BEND,
+        direction_window=_WINDOW_VOXELS,
+    )
+    return chains
+
+
+def _fit_chain(
+    coords: np.ndarray,
+    spacing_distance: float,
+    smoothing_factor: Optional[float],
+    degree: int,
+    compute_transforms: bool,
+    curvature_threshold: float,
+    max_iterations: int,
+) -> Tuple[np.ndarray, Optional[np.ndarray], SkeletonSplineFitter, Dict[str, Any]]:
+    """Fit one ordered chain; if the sampled curve turns more sharply than ``curvature_threshold``, raise the
+    smoothing (doubling it, up to ``max_iterations`` times) instead of removing skeleton points."""
+    fitter = SkeletonSplineFitter()
+    fitter.ordered_coords = coords
+    fitter.fit_regularized_spline(coords, smoothing_factor=smoothing_factor, degree=degree)
+    fitter.sample_points_along_spline(spacing_distance)
+    smoothing = max(fitter.smoothing, float(len(coords)))
+    for _ in range(max_iterations):
+        if fitter.max_turn() <= curvature_threshold:
+            break
+        smoothing *= 2.0
+        fitter.fit_regularized_spline(coords, smoothing_factor=smoothing, degree=degree)
+        fitter.sample_points_along_spline(spacing_distance)
+    transforms = fitter.compute_transforms() if compute_transforms else None
+    return fitter.sampled_points, transforms, fitter, fitter.get_spline_properties()
 
 
 def fit_spline_to_skeleton(
@@ -328,91 +258,41 @@ def fit_spline_to_skeleton(
     max_iterations: int = 5,
 ) -> Tuple[np.ndarray, Optional[np.ndarray], SkeletonSplineFitter, Dict[str, Any]]:
     """
-    Main function to fit a regularized 3D spline to a skeleton and sample points.
+    Fit a smoothing spline to the longest filament of a skeleton and sample points along it.
 
     Args:
         binary_volume: 3D binary volume where skeleton is True/1
-        spacing_distance: Distance between consecutive sampled points along the spline
-        smoothing_factor: Smoothing parameter for spline fitting (auto if None)
+        spacing_distance: Distance between consecutive sampled points along the spline, in voxels
+        smoothing_factor: Smoothing parameter for spline fitting (scipy's ``s``, voxels squared; auto if None)
         degree: Degree of the spline (1-5)
-        connectivity_radius: Maximum distance to consider skeleton points as connected
+        connectivity_radius: Unused; skeleton voxels are connected to their 26 neighbours
         compute_transforms: Whether to compute 4x4 transformation matrices for each point
-        curvature_threshold: Maximum allowed curvature before outlier removal (default 0.2)
-        max_iterations: Maximum number of outlier removal iterations (default 5)
+        curvature_threshold: Largest sine of the turning angle between consecutive samples; a sharper fit is
+            smoothed further
+        max_iterations: Maximum number of smoothing increases
 
     Returns:
         Tuple of (sampled_points, transforms, spline_fitter, properties):
-            - sampled_points: Nx3 array of evenly spaced points along spline
+            - sampled_points: Nx3 array of points (x, y, z, voxels) exactly ``spacing_distance`` apart
             - transforms: [N, 4, 4] array of transformation matrices (or None if compute_transforms=False)
             - spline_fitter: SkeletonSplineFitter object for further analysis
             - properties: dict with spline properties
     """
-    # Initialize fitter
-    fitter = SkeletonSplineFitter()
-
-    # Extract skeleton coordinates
-    coords = fitter.extract_skeleton_coordinates(binary_volume)
-
-    if len(coords) == 0:
+    chains = _skeleton_chains(binary_volume)
+    if not chains:
         raise ValueError("No skeleton points found in binary volume")
-
-    # Order skeleton points
-    ordered_coords = fitter.order_skeleton_points_longest_path(coords, connectivity_radius=connectivity_radius)
-
-    if len(ordered_coords) < 2:
+    coords = max((chain.coords for chain in chains), key=_chain_length)
+    if len(coords) < 2:
         raise ValueError("Not enough ordered points for spline fitting")
-
-    # Iterative fitting with outlier removal
-    current_coords = ordered_coords.copy()
-    iteration = 0
-
-    while iteration < max_iterations:
-        # Fit regularized spline
-        fitter.fit_regularized_spline(current_coords, smoothing_factor=smoothing_factor, degree=degree)
-
-        # Sample points along spline
-        sampled_points = fitter.sample_points_along_spline(spacing_distance)
-
-        # Get properties to check curvature
-        properties = fitter.get_spline_properties()
-        max_curvature = properties.get("max_curvature", 0)
-
-        print(f"Iteration {iteration + 1}: Max curvature = {max_curvature:.4f}")
-
-        # If curvature is acceptable, break
-        if max_curvature <= curvature_threshold:
-            print(f"Curvature acceptable after {iteration + 1} iterations")
-            break
-
-        # Remove outliers and try again
-        print(f"Max curvature {max_curvature:.4f} > {curvature_threshold}, removing outliers...")
-        filtered_coords = fitter.detect_high_curvature_outliers(current_coords, curvature_threshold)
-
-        # If no points were removed, break to avoid infinite loop
-        if len(filtered_coords) == len(current_coords):
-            print("No outliers found to remove, stopping iterations")
-            break
-
-        # If too few points remain, break
-        if len(filtered_coords) < degree + 1:
-            print(f"Too few points remaining ({len(filtered_coords)}), stopping iterations")
-            break
-
-        current_coords = filtered_coords
-        iteration += 1
-
-    if iteration >= max_iterations:
-        print(f"Reached maximum iterations ({max_iterations}), final curvature: {max_curvature:.4f}")
-
-    # Compute transformation matrices if requested
-    transforms = None
-    if compute_transforms:
-        transforms = fitter.compute_transforms()
-
-    # Get final properties
-    properties = fitter.get_spline_properties()
-
-    return sampled_points, transforms, fitter, properties
+    return _fit_chain(
+        coords,
+        spacing_distance,
+        smoothing_factor,
+        degree,
+        compute_transforms,
+        curvature_threshold,
+        max_iterations,
+    )
 
 
 def fit_spline_to_segmentation(
@@ -429,12 +309,20 @@ def fit_spline_to_segmentation(
     curvature_threshold: float = 0.2,
     max_iterations: int = 5,
     voxel_spacing: float = 1.0,
+    label: Optional[int] = None,
+    filaments_object_name: Optional[str] = None,
+    filaments_user_id: Optional[str] = None,
+    filaments_session_id: Optional[str] = None,
+    **kwargs,
 ) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
     """
-    Fit a spline to a segmentation (skeleton) volume and create picks with orientations.
+    Fit a spline to every filament of a segmentation (skeleton) volume and create picks with orientations.
 
     Matches the lazy converter signature:
         (segmentation, run, object_name, session_id, user_id, **tool_kwargs)
+
+    Every filament gets its own spline. The picks of all filaments go into one pick set, grouped by filament and in
+    order along it, with the filament's ID (1..K by length, longest first) as ``instance_id``.
 
     Args:
         segmentation: Input segmentation containing skeleton to fit spline to
@@ -442,66 +330,126 @@ def fit_spline_to_segmentation(
         object_name: Name for the output pick object
         session_id: Session ID for output picks
         user_id: User ID for output picks
-        spacing_distance: Distance between consecutive sampled points along the spline
-        smoothing_factor: Smoothing parameter for spline fitting (auto if None)
+        spacing_distance: Distance between consecutive sampled points along the spline, in voxels
+        smoothing_factor: Smoothing parameter for spline fitting (scipy's ``s``, voxels squared; auto if None)
         degree: Degree of the spline (1-5)
-        connectivity_radius: Maximum distance to consider skeleton points as connected
+        connectivity_radius: Unused; skeleton voxels are connected to their 26 neighbours
         compute_transforms: Whether to compute orientations for picks
-        curvature_threshold: Maximum allowed curvature before outlier removal
-        max_iterations: Maximum number of outlier removal iterations
-        voxel_spacing: Voxel spacing for coordinate scaling
+        curvature_threshold: Largest sine of the turning angle between consecutive samples
+        max_iterations: Maximum number of smoothing increases
+        voxel_spacing: Voxel spacing for coordinate scaling (the segmentation's own voxel size is used when known)
+        label: Label to fit in a multilabel segmentation (default: every non-zero voxel)
+        filaments_object_name: Also store the fitted splines as copick Filaments under this object name
+        filaments_user_id: User ID of the Filaments
+        filaments_session_id: Session ID of the Filaments ({input_session_id} is replaced)
+        **kwargs: Additional keyword arguments from the lazy converter
 
     Returns:
         Tuple of (CopickPicks object, stats dict) or None if failed.
-        Stats dict contains 'picks_created'.
+        Stats dict contains 'picks_created' and 'filaments_fitted'.
     """
-    # Get the segmentation volume
     volume = segmentation.numpy()
     if volume is None:
         logger.error(f"Could not load segmentation data for {run.name}")
         return None
 
-    logger.info(f"Fitting spline to segmentation {segmentation.session_id} in run {run.name}")
+    logger.info(f"Fitting splines to segmentation {segmentation.session_id} in run {run.name}")
 
     try:
-        # Fit spline to skeleton
-        sampled_points, transforms, fitter, properties = fit_spline_to_skeleton(
-            binary_volume=volume.astype(bool),
-            spacing_distance=spacing_distance,
-            smoothing_factor=smoothing_factor,
-            degree=degree,
-            connectivity_radius=connectivity_radius,
-            compute_transforms=compute_transforms,
-            curvature_threshold=curvature_threshold,
-            max_iterations=max_iterations,
-        )
+        voxel_spacing = float(segmentation.voxel_size or voxel_spacing)
+        mask = volume == label if label is not None else volume > 0
+        chains = [chain.coords for chain in _skeleton_chains(mask)]
+        chains = sorted((c for c in chains if len(c) >= 2), key=_chain_length, reverse=True)
 
-        # Scale points to physical coordinates
-        scaled_points = sampled_points * voxel_spacing
+        positions, transforms, ids, curves = [], [], [], []
+        for instance_id, coords in enumerate(chains, start=1):
+            points, rotations, fitter, _ = _fit_chain(
+                _start_at_smaller_end(coords),
+                spacing_distance,
+                smoothing_factor,
+                degree,
+                True,
+                curvature_threshold,
+                max_iterations,
+            )
+            positions.append(points * voxel_spacing)
+            transforms.append(rotations if compute_transforms else np.tile(np.eye(4), (len(points), 1, 1)))
+            ids.append(np.full(len(points), instance_id, dtype=np.int64))
+            curves.append((fitter.spline_tck, fitter.smoothing))
 
-        logger.info(f"Spline properties: {properties}")
-
-        # Create output picks
-        output_picks = run.new_picks(
-            object_name=object_name,
-            session_id=session_id,
-            user_id=user_id,
-            exist_ok=True,
-        )
-
-        # Store the picks with transformations
-        if compute_transforms and transforms is not None:
-            output_picks.from_numpy(scaled_points, transforms)
+        output_picks = run.new_picks(object_name=object_name, session_id=session_id, user_id=user_id, exist_ok=True)
+        if positions:
+            output_picks.from_numpy(
+                np.concatenate(positions),
+                np.concatenate(transforms),
+                instance_ids=np.concatenate(ids),
+            )
         else:
-            output_picks.from_numpy(scaled_points)
+            output_picks.points = []
+            output_picks.store()
 
-        stats = {"picks_created": len(scaled_points)}
-        logger.info(f"Created {stats['picks_created']} picks with session_id: {session_id}")
+        if filaments_object_name:
+            _store_filaments(
+                run,
+                segmentation,
+                curves,
+                voxel_spacing,
+                filaments_object_name,
+                filaments_user_id or user_id,
+                (filaments_session_id or session_id).replace("{input_session_id}", segmentation.session_id),
+                {
+                    "spacing_distance": spacing_distance,
+                    "smoothing_factor": smoothing_factor,
+                    "degree": degree,
+                    "curvature_threshold": curvature_threshold,
+                    "max_iterations": max_iterations,
+                },
+            )
+
+        stats = {"picks_created": int(sum(len(p) for p in positions)), "filaments_fitted": len(positions)}
+        logger.info(
+            f"Created {stats['picks_created']} picks on {stats['filaments_fitted']} filaments "
+            f"with session_id: {session_id}",
+        )
         return output_picks, stats
 
     except Exception as e:
         logger.error(f"Error fitting spline to segmentation: {e}")
         return None
+
+
+def _start_at_smaller_end(coords: np.ndarray) -> np.ndarray:
+    """Order a chain so that it starts at the end with the smaller (z, y, x) voxel."""
+    start, end = np.round(coords[0]).astype(int), np.round(coords[-1]).astype(int)
+    return coords[::-1] if tuple(end) < tuple(start) else coords
+
+
+def _store_filaments(run, segmentation, curves, voxel_spacing, object_name, user_id, session_id, flags) -> None:
+    """Store fitted splines (voxel coordinates) as copick Filaments with ``bspline`` curves."""
+    from copick.models import CopickFilamentCurve
+
+    import copick_utils
+
+    source = f"{segmentation.name}:{segmentation.user_id}/{segmentation.session_id}@{voxel_spacing}"
+    fitted = [
+        CopickFilamentCurve.from_tck(tck, step=voxel_spacing, smoothing=smoothing, scale=voxel_spacing)
+        for tck, smoothing in curves
+    ]
+    metadata = [
+        {
+            "fit": {
+                "method": "splprep",
+                "coordinates": "voxels",
+                "tool": "copick-utils fit-spline",
+                "version": copick_utils.__version__,
+                "source": source,
+                **flags,
+            },
+        }
+        for _ in curves
+    ]
+    filaments = run.new_filaments(object_name, session_id, user_id, exist_ok=True)
+    filaments.from_curves(fitted, voxel_spacing=voxel_spacing, metadata=metadata)
 
 
 # Lazy batch converter for the lazy task discovery architecture
