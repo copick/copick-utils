@@ -1,12 +1,21 @@
 """Segmentation processing utilities for copick."""
 
 from .connected_components import (
+    components_as_instances,
     extract_individual_components,
     print_component_stats,
     separate_components_converter,
     separate_components_lazy_batch,
     separate_connected_components_3d,
     separate_segmentation_components,
+)
+from .filament_tracing import (
+    Centreline,
+    TraceParameters,
+    TraceReport,
+    paint_tubes,
+    sample_curve,
+    trace_centrelines,
 )
 from .rescale import (
     rescale_lazy_batch,
@@ -27,6 +36,7 @@ from .spline_fitting import (
 from .split_labels import (
     split_labels_batch,
     split_multilabel_segmentation,
+    split_panoptic_segmentation,
 )
 from .thickness_filter import (
     thickness_filter_lazy_batch,
@@ -45,6 +55,7 @@ __all__ = [
     "separate_segmentation_components",
     "separate_components_converter",
     "separate_components_lazy_batch",
+    "components_as_instances",
     "TubeSkeletonizer3D",
     "skeletonize_segmentation",
     "skeletonize_converter",
@@ -53,6 +64,13 @@ __all__ = [
     "rescale_lazy_batch",
     "split_multilabel_segmentation",
     "split_labels_batch",
+    "split_panoptic_segmentation",
+    "Centreline",
+    "TraceParameters",
+    "TraceReport",
+    "trace_centrelines",
+    "sample_curve",
+    "paint_tubes",
     "SkeletonSplineFitter",
     "fit_spline_to_skeleton",
     "fit_spline_to_segmentation",

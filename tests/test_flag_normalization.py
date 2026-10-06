@@ -55,3 +55,14 @@ def test_fit_spline_derives_vs_from_uri(runner):
 
     param, hidden = _hidden_alias(fit_spline, "--voxel-spacing")
     assert param is not None and hidden is True
+
+
+def test_fit_spline_hides_the_retired_connectivity_radius(runner):
+    from copick_utils.cli.fit_spline import fit_spline
+
+    out = runner.invoke(fit_spline, ["--help"]).output
+    assert "--connectivity-radius" not in out
+    assert "--filaments" in out and "--label" in out
+
+    param, hidden = _hidden_alias(fit_spline, "--connectivity-radius")
+    assert param is not None and hidden is True
