@@ -1,6 +1,6 @@
 """CLI utilities for copick-utils commands."""
 
-from typing import Callable
+from typing import Callable, Optional
 
 import click
 from click_option_group import optgroup
@@ -340,12 +340,13 @@ def add_input_option(object_type: str, func: click.Command = None, required: boo
     Add --input/-i option for URI-based input selection.
 
     Supports copick URI format with pattern matching:
-    - Picks/Meshes: object_name:user_id/session_id
-    - Segmentations: name:user_id/session_id@voxel_spacing?multilabel=true
+    - Picks/Meshes/Filaments: object_name:user_id/session_id
+    - Segmentations: name:user_id/session_id@voxel_spacing, with ?multilabel=true, ?instance=true or
+      ?panoptic=true to select a type (without a flag, binary and multilabel segmentations match)
     - Tomograms: tomo_type@voxel_spacing
 
     Args:
-        object_type (str): Type of object ('picks', 'mesh', 'segmentation', 'tomogram').
+        object_type (str): Type of object ('picks', 'mesh', 'segmentation', 'filaments', 'tomogram').
         func (click.Command, optional): The Click command to which the option will be added.
         required (bool): Whether the option is required. Default is True. Pass False for
             commands that keep deprecated fallback flags (e.g. --tomo-alg/--voxel-size).
@@ -361,12 +362,15 @@ def add_input_option(object_type: str, func: click.Command = None, required: boo
             "picks": "object_name:user_id/session_id",
             "mesh": "object_name:user_id/session_id",
             "segmentation": "name:user_id/session_id@voxel_spacing",
+            "filaments": "object_name:user_id/session_id",
             "tomogram": "tomo_type@voxel_spacing",
         }
 
         help_text = (
             f"Input {object_type} URI (format: {format_examples.get(object_type, 'URI')}). Supports glob patterns."
         )
+        if object_type == "segmentation":
+            help_text += " Append ?instance=true or ?panoptic=true to read those segmentation types."
 
         opt = optgroup.option(
             "--input",
@@ -389,9 +393,16 @@ def add_output_option(
     func: click.Command = None,
     default_tool: str = None,
     required: bool = True,
+    flag: str = "--output",
+    short_flag: Optional[str] = "-o",
+    param_name: str = "output_uri",
+    description: Optional[str] = None,
 ) -> Callable:
     """
     Add --output/-o option for URI-based output specification with smart defaults.
+
+    A command with a second output (for example a tracer that writes filaments and an instance segmentation) adds it
+    with its own ``flag``, ``short_flag`` and ``param_name``; ``required=False`` makes it optional.
 
     Supports copick URI format with smart defaults and pattern matching:
     - Full format: object_name:user_id/session_id or name:user_id/session_id@voxel_spacing
@@ -405,9 +416,14 @@ def add_output_option(
     - voxel_spacing omitted → inherits from input (segmentation only)
 
     Args:
-        object_type (str): Type of object ('picks', 'mesh', 'segmentation').
+        object_type (str): Type of object ('picks', 'mesh', 'segmentation', 'filaments', 'tomogram').
         func (click.Command, optional): The Click command to which the option will be added.
         default_tool (str, optional): Default user_id if not specified in URI (deprecated, auto-detected).
+        required (bool): Whether the option is required.
+        flag (str): Long option name. Default "--output".
+        short_flag (str, optional): Short option name, or None. Default "-o".
+        param_name (str): Name of the command parameter. Default "output_uri".
+        description (str, optional): Help text to use instead of the generated one.
 
     Returns:
         Callable: The Click command with the output option added.
@@ -420,6 +436,7 @@ def add_output_option(
             "picks": '"ribosome", "ribosome/my-session", or "/my-session"',
             "mesh": '"membrane", "membrane/my-session", or "/my-session"',
             "segmentation": '"membrane", "membrane/my-session", or "/my-session"',
+            "filaments": '"microtubule", "microtubule/my-session", or "/my-session"',
             "tomogram": '"wbp@20.0" or "denoised@10.0"',
         }
 
@@ -432,11 +449,14 @@ def add_output_option(
                 f"Supports smart defaults (e.g., {shorthand_examples.get(object_type, 'shorthand')}). "
                 f"Full format: object_name:user_id/session_id{voxel_suffix}."
             )
+            if object_type == "segmentation":
+                help_text += " Append ?instance=true or ?panoptic=true to write those segmentation types."
+        if description is not None:
+            help_text = description
 
+        names = [flag] + ([short_flag] if short_flag else []) + [param_name]
         opt = optgroup.option(
-            "--output",
-            "-o",
-            "output_uri",
+            *names,
             type=CopickURI(object_type, "output"),
             required=required,
             help=help_text,
@@ -606,7 +626,9 @@ def add_reference_seg_option(func: click.Command = None, required: bool = False)
             "ref_seg_uri",
             type=CopickURI("segmentation", "reference"),
             required=required,
-            help="Reference segmentation URI (format: name:user_id/session_id@voxel_spacing). Supports glob patterns.",
+            help="Reference segmentation URI (format: name:user_id/session_id@voxel_spacing). Supports glob patterns. "
+            "Append ?instance=true or ?panoptic=true to use an instance or panoptic segmentation (any non-zero "
+            "voxel of an instance segmentation, or of a panoptic one's label channel, counts).",
         )
         return opt(_func)
 

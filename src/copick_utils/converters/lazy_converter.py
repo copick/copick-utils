@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 from copick.util.log import get_logger
 
 from copick_utils.util.config_models import ReferenceConfig, SelectorConfig, TaskConfig
+from copick_utils.util.segmentations import query_kwargs, selection_filters
 
 if TYPE_CHECKING:
     from copick.models import CopickRoot, CopickRun
@@ -92,6 +93,16 @@ def create_reference_config(
     )
 
 
+def _accepts_parameter(func: Callable, name: str) -> bool:
+    """Whether ``func`` names the parameter ``name`` explicitly."""
+    import inspect
+
+    try:
+        return name in inspect.signature(func).parameters
+    except (TypeError, ValueError):
+        return False
+
+
 def _is_regex_pattern(pattern: str) -> bool:
     """Check if string is a regex pattern."""
     regex_chars = r"[.*+?^${}()|[\]\\"
@@ -127,7 +138,7 @@ def discover_tasks_for_run(run: "CopickRun", selector_config: SelectorConfig) ->
     # Build filter dict based on input type
     filters = {"pattern_type": pattern_type}
 
-    if selector_config.input_type == "picks" or selector_config.input_type == "mesh":
+    if selector_config.input_type in ("picks", "mesh", "filaments"):
         filters["object_name"] = selector_config.input_object_name
         filters["user_id"] = selector_config.input_user_id
         filters["session_id"] = selector_config.input_session_id
@@ -136,6 +147,14 @@ def discover_tasks_for_run(run: "CopickRun", selector_config: SelectorConfig) ->
         filters["user_id"] = selector_config.input_user_id
         filters["session_id"] = selector_config.input_session_id
         filters["voxel_spacing"] = selector_config.voxel_spacing
+        # Without an instance or panoptic flag on the input URI, only binary and multilabel segmentations match.
+        filters.update(
+            selection_filters(
+                selector_config.input_multilabel,
+                selector_config.input_instance,
+                selector_config.input_panoptic,
+            ),
+        )
 
     # Find matching input objects using copick's official resolution
     matching_inputs = get_copick_objects_by_type(
@@ -149,12 +168,8 @@ def discover_tasks_for_run(run: "CopickRun", selector_config: SelectorConfig) ->
         return []
 
     # Generate type-specific input parameter name
-    if selector_config.input_type == "mesh":
-        input_param_name = "mesh"
-    elif selector_config.input_type == "segmentation":
-        input_param_name = "segmentation"
-    elif selector_config.input_type == "picks":
-        input_param_name = "picks"
+    if selector_config.input_type in ("mesh", "segmentation", "picks", "filaments"):
+        input_param_name = selector_config.input_type
     else:
         input_param_name = "input_object"  # fallback
 
@@ -176,6 +191,8 @@ def discover_tasks_for_run(run: "CopickRun", selector_config: SelectorConfig) ->
             "output_type": selector_config.output_type,
             "segmentation_name": selector_config.segmentation_name,
             "voxel_spacing": selector_config.voxel_spacing,
+            # The segmentation type the output URI names (None: the converter's own choice, as before)
+            "output_segmentation_type": selector_config.output_segmentation_type,
         }
 
         # Add session ID template for individual outputs
@@ -238,6 +255,7 @@ def add_references_to_tasks(
             user_id=reference_config.user_id,
             session_id=reference_config.session_id,
             voxel_size=reference_config.voxel_spacing,
+            **query_kwargs(reference_config.multilabel, reference_config.instance, reference_config.panoptic),
         )
         ref_key = "reference_segmentation"
         alt_key = "reference_mesh"
@@ -436,12 +454,14 @@ def lazy_conversion_worker(
             # Single input pattern that expands to N-way union
             discovered_tasks = discover_tasks_for_run(run, config.selector)
 
-            if len(discovered_tasks) < 2:
+            # A panoptic output can be built from one input plus instance segmentations given separately
+            minimum = 1 if config.selector.output_segmentation_type == "panoptic" else 2
+            if len(discovered_tasks) < minimum:
                 # Not enough matches for union operation
                 return {
                     "processed": 0,
                     "errors": [
-                        f"Pattern matched {len(discovered_tasks)} segmentation(s) in {run.name}, but union requires at least 2",
+                        f"Pattern matched {len(discovered_tasks)} segmentation(s) in {run.name}, but union requires at least {minimum}",
                     ],
                 }
 
@@ -469,6 +489,7 @@ def lazy_conversion_worker(
                     "session_id": first_task["session_id"],
                     "voxel_spacing": first_task.get("voxel_spacing"),
                     "is_multilabel": False,
+                    "output_segmentation_type": first_task.get("output_segmentation_type"),
                 },
             ]
 
@@ -499,6 +520,11 @@ def lazy_conversion_worker(
                 ):
                     task_params.pop(key, None)
 
+                # The output URI's segmentation type reaches only converters that ask for it by name, so converters
+                # that forward **kwargs to helpers are unaffected.
+                if not _accepts_parameter(converter_func, "output_segmentation_type"):
+                    task_params.pop("output_segmentation_type", None)
+
                 task_params.update(converter_kwargs)
 
                 result = converter_func(**task_params)
@@ -519,6 +545,7 @@ def lazy_conversion_worker(
                         or task.get("segmentation")
                         or task.get("mesh")
                         or task.get("picks")
+                        or task.get("filaments")
                         or task.get("segmentation1")
                         or task.get("mesh1")
                         or task.get("picks1")

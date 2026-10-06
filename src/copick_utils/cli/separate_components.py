@@ -7,6 +7,7 @@ from copick.util.uri import parse_copick_uri
 
 from copick_utils.cli.util import add_input_option, add_output_option, add_workers_option
 from copick_utils.util.config_models import create_simple_config
+from copick_utils.util.segmentations import type_from_uri
 
 
 @click.command(
@@ -62,10 +63,17 @@ def separate_components(
     For multilabel segmentations the analysis is performed on each label separately. Output
     segmentations use the `{instance_id}` placeholder for auto-numbering (e.g. `inst-0`, `inst-1`).
 
+    Alternatively, write all components into one segmentation: an output URI with
+    `?instance=true` writes an instance segmentation of a binary input (each component is an
+    instance, numbered 1, 2, ... by size, largest first), and `?panoptic=true` writes a
+    panoptic segmentation that keeps every label of a multilabel input and numbers the
+    components of each label. These outputs need no `{instance_id}` placeholder.
+
     URI Format:
 
         \b
         Segmentations: name:user_id/session_id@voxel_spacing
+        Instance or panoptic output: append ?instance=true or ?panoptic=true
 
     Examples:
 
@@ -83,6 +91,16 @@ def separate_components(
         copick process separate-components -i "membrane:user1/manual-001@10.0" \\
             -o "membrane:components/comp-{instance_id}@10.0"
 
+        \b
+        # All components as one instance segmentation (IDs 1..K by size)
+        copick process separate-components -i "microtubule:easymode/job006@10.0" --binary \\
+            -o "microtubule:components/job006@10.0?instance=true"
+
+        \b
+        # Components of every label of a multilabel segmentation as one panoptic segmentation
+        copick process separate-components -i "labels:user1/auto@10.0?multilabel=true" \\
+            -o "cell:components/auto@10.0?panoptic=true"
+
     See Also:
 
         \b
@@ -97,14 +115,16 @@ def separate_components(
     root = copick.from_file(config)
     run_names_list = list(run_names) if run_names else None
 
-    # Create config from URIs with smart defaults (individual_outputs for {instance_id})
+    # One segmentation per component (with {instance_id}), unless the output URI names an instance or panoptic
+    # segmentation, which holds all components in one store.
     try:
+        output_type = type_from_uri(output_uri)
         task_config = create_simple_config(
             input_uri=input_uri,
             input_type="segmentation",
             output_uri=output_uri,
             output_type="segmentation",
-            individual_outputs=True,
+            individual_outputs=output_type not in ("instance", "panoptic"),
             command_name="components",
         )
     except ValueError as e:

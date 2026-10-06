@@ -13,12 +13,81 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _combine_panoptic(
+    segmentations: List["CopickSegmentation"],
+    run: "CopickRun",
+    object_name: str,
+    session_id: str,
+    user_id: str,
+    instances_uri: Optional[str] = None,
+) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
+    """Combine binary or multilabel segmentations (regions without instances) and per-object instance
+    segmentations into one panoptic segmentation. Overlaps go to the lowest label; an instance ID survives only
+    where its object's label won."""
+    from copick_utils.util.segmentations import new_segmentation, resolve_segmentations, segmentation_type
+
+    root = run.root
+    layers = []  # (label value, label mask, instance IDs or None)
+    for seg in segmentations:
+        volume = seg.numpy()
+        if volume is None:
+            logger.warning(f"Could not load segmentation '{seg.name}', skipping")
+            continue
+        if segmentation_type(seg) == "multilabel":
+            for value in np.unique(volume[volume > 0]):
+                layers.append((int(value), volume == value, None))
+        else:
+            obj = root.get_object(seg.name)
+            if obj is None:
+                logger.warning(f"No pickable object found for '{seg.name}', skipping")
+                continue
+            layers.append((int(obj.label), volume > 0, None))
+    voxel_size = segmentations[0].voxel_size if segmentations else None
+    if instances_uri:
+        uri = instances_uri if "instance=true" in instances_uri else instances_uri + "?instance=true"
+        for seg in resolve_segmentations(uri, root, run_name=run.name):
+            voxel_size = voxel_size or seg.voxel_size
+            obj = root.get_object(seg.name)
+            if obj is None:
+                logger.warning(f"No pickable object found for instance segmentation '{seg.name}', skipping")
+                continue
+            ids = seg.numpy()
+            layers.append((int(obj.label), ids > 0, ids))
+    if not layers:
+        logger.error("No segmentations to combine")
+        return None
+
+    shape = layers[0][1].shape
+    label_channel = np.zeros(shape, dtype=np.uint32)
+    instance_channel = np.zeros(shape, dtype=np.uint32)
+    overlap_count = np.zeros(shape, dtype=np.uint8)
+    # Paint the highest label first, so the lowest label wins where inputs overlap
+    for label_value, mask, ids in sorted(layers, key=lambda layer: layer[0], reverse=True):
+        overlap_count += mask.astype(np.uint8)
+        label_channel[mask] = label_value
+        instance_channel[mask] = ids[mask] if ids is not None else 0
+    overlapping_voxels = int(np.sum(overlap_count > 1))
+    if overlapping_voxels:
+        logger.warning(f"Detected {overlapping_voxels} overlapping voxels across inputs. Resolved by lowest label.")
+
+    output_seg = new_segmentation(run, voxel_size, object_name, session_id, user_id, "panoptic")
+    output_seg.from_numpy(np.stack([label_channel, instance_channel]))
+    stats = {
+        "labels_combined": len({layer[0] for layer in layers}),
+        "instances_combined": int(len(np.unique(instance_channel[instance_channel > 0]))),
+        "overlapping_voxels": overlapping_voxels,
+    }
+    return output_seg, stats
+
+
 def combine_labels(
     segmentations: List["CopickSegmentation"],
     run: "CopickRun",
     object_name: str,
     session_id: str,
     user_id: str,
+    output_segmentation_type: Optional[str] = None,
+    instances_uri: Optional[str] = None,
     **kwargs,
 ) -> Optional[Tuple["CopickSegmentation", Dict[str, int]]]:
     """
@@ -28,18 +97,28 @@ def combine_labels(
     its integer label value. Overlapping regions are resolved by lowest label priority
     (lowest label value wins).
 
+    When the output URI names a panoptic segmentation (``?panoptic=true``), the inputs become its label channel and
+    the instance segmentations selected by ``instances_uri`` add their objects' labels and instance IDs.
+
     Args:
         segmentations: List of input CopickSegmentation objects (binary/single-label).
         run: CopickRun object.
         object_name: Name for the output multilabel segmentation.
         session_id: Session ID for the output segmentation.
         user_id: User ID for the output segmentation.
+        output_segmentation_type: The segmentation type the output URI names, if any.
+        instances_uri: Instance segmentations to add to a panoptic output (URI, patterns allowed).
         **kwargs: Additional keyword arguments from lazy converter.
 
     Returns:
         Tuple of (CopickSegmentation, stats dict) or None if operation failed.
     """
     try:
+        if output_segmentation_type == "panoptic":
+            return _combine_panoptic(segmentations, run, object_name, session_id, user_id, instances_uri)
+        if output_segmentation_type == "instance":
+            logger.error("combine writes multilabel or panoptic segmentations, not instance ones")
+            return None
         if not segmentations:
             logger.error("No segmentations provided")
             return None

@@ -60,10 +60,15 @@ def split(
     values do not match the config object labels; only the listed values are then split. The
     input URI must name an exact segmentation (no wildcards) and include a voxel spacing.
 
+    A panoptic segmentation (input URI ending in `?panoptic=true`) is split per object: the
+    voxels with an instance ID become an instance segmentation of that object (keeping the
+    IDs), and its voxels without one become a binary segmentation.
+
     URI Format:
 
         \b
         Segmentations: name:user_id/session_id@voxel_spacing
+        Panoptic input: append ?panoptic=true
 
     Label-to-Object Mapping:
 
@@ -91,6 +96,10 @@ def split(
         \b
         # Split only specific label values with an explicit name:value map
         copick process split -i "predictions:model/run-001@10.0" --labels "sample:1,vacuum:2"
+
+        \b
+        # Split a panoptic segmentation into instance and binary segmentations per object
+        copick process split -i "cell:combine/0@10.0?panoptic=true"
 
     See Also:
 
@@ -164,6 +173,7 @@ def split(
         run_names=run_names_list,
         workers=workers,
         labels=labels_map,
+        panoptic=bool(input_params.get("panoptic")),
     )
 
     # Aggregate results
