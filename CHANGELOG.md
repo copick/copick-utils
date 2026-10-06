@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0-alpha.5](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.4...copick-utils-v2.0.0-alpha.5) (2026-10-06)
+
+
+### 🐞 Bug Fixes
+
+* release without inspecting the built artifacts' metadata ([#120](https://github.com/copick/copick-utils/issues/120)) ([90c3ce8](https://github.com/copick/copick-utils/commit/90c3ce8c33e6a560f2cbef1b1ffefd37174feeca))
+
 ## [2.0.0-alpha.4](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.3...copick-utils-v2.0.0-alpha.4) (2026-10-06)
 
 
