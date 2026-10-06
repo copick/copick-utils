@@ -18,9 +18,7 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    # TODO:remove before release -- build against the unreleased copick filament stack (copick#479/#480/#492/#494);
-    # restore "copick>=<release with those PRs>" when it is published.
-    "copick @ git+https://github.com/copick/copick@uermel/panoptic-segmentations",
+    "copick>=1.28.0",
     "click",
     "click-option-group",
     "numpy",
