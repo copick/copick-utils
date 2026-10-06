@@ -1,5 +1,6 @@
-import numpy as np
 from copick.util.uri import resolve_copick_objects
+
+from copick_utils.util.picks import pick_centres
 
 
 def tomogram(run, voxel_size: float = 10, algorithm: str = "wbp", raise_error: bool = False, verbose=True):
@@ -143,7 +144,8 @@ def coordinates(
     """Read pick coordinates from a copick run as an array of voxel indices.
 
     Looks up the picks for `name` (optionally filtered by `user_id` and
-    `session_id`) and returns their locations divided by `voxel_size`. If several
+    `session_id`) and returns their particle centres (location plus the transform's
+    shift) divided by `voxel_size`. If several
     pick sets match, the first is used; if none match, reports the available picks.
 
     Args:
@@ -194,19 +196,5 @@ def coordinates(
                 f"Defaulting to loading:\n {picks[0]}\n",
             )
 
-    points = picks[0].points
-
-    # Initialize an array to store the coordinates
-    nPoints = len(picks[0].points)  # Number of points retrieved
-    coordinates = np.zeros([len(picks[0].points), 3])  # Create an empty array to hold the (z, y, x) coordinates
-
-    # Iterate over all points and convert their locations to coordinates in voxel space
-    for ii in range(nPoints):
-        coordinates[ii,] = [
-            points[ii].location.z / voxel_size,  # Scale z-coordinate by voxel size
-            points[ii].location.y / voxel_size,  # Scale y-coordinate by voxel size
-            points[ii].location.x / voxel_size,
-        ]  # Scale x-coordinate by voxel size
-
-    # Return the array of coordinates
-    return coordinates
+    # Particle centres (location plus the transform's shift), converted to (z, y, x) voxel coordinates
+    return pick_centres(picks[0])[:, ::-1] / voxel_size

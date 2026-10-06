@@ -19,7 +19,7 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "copick>=2.0.0a1",
+    "copick>=2.0.0a3,<3",
     "click",
     "click-option-group",
     "numpy",

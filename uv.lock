@@ -700,7 +700,7 @@ wheels = [
 
 [[package]]
 name = "copick"
-version = "2.0.0a1"
+version = "2.0.0a3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -733,9 +733,9 @@ dependencies = [
     { name = "zarr", version = "3.1.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "zarr", version = "3.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/80/40/65bd5bb0c774b964e489683fa541d8fda09b3c2bbe51b0fa9ec73011ff97/copick-2.0.0a1.tar.gz", hash = "sha256:39256a1671d82088e8a3aebd237b322e498d5b38e2f5ff008ba9f586bf87c101", size = 47806055, upload-time = "2026-08-18T16:41:20.765Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/26/065b6dc5ea4685ec8212329b1e72bc25523f6fe6958902cc4398d622fd63/copick-2.0.0a3.tar.gz", hash = "sha256:63ebfb8ea6fd3e4106d3e3e47c93181ed89f42a2388e68dee19c14f276e39d60", size = 47884273, upload-time = "2026-10-06T08:10:42.11Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/d7/a44a4a97bebd025b484e5c49f59627ba7ba67136d16d0f83f50a392864c1/copick-2.0.0a1-py3-none-any.whl", hash = "sha256:6c8002976c2e485d4e1d8814ee8aa096f76be8f82531ff3559e11e2469285ed9", size = 235457, upload-time = "2026-08-18T16:41:18.84Z" },
+    { url = "https://files.pythonhosted.org/packages/86/25/0ea1d3d5a9c9fed0b270bcd533f798f6356654dfd09dd0264f060b40f367/copick-2.0.0a3-py3-none-any.whl", hash = "sha256:f83efe9e5f52e40c5641ac3018f4e25f26a27ff51f6d6f117ec8390d0299ea3e", size = 277010, upload-time = "2026-10-06T08:10:38.833Z" },
 ]
 
 [[package]]
@@ -782,7 +782,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=25.1.0" },
     { name = "click" },
     { name = "click-option-group" },
-    { name = "copick", specifier = ">=2.0.0a1" },
+    { name = "copick", specifier = ">=2.0.0a3,<3" },
     { name = "hatch-vcs", marker = "extra == 'dev'", specifier = ">=0.4.0" },
     { name = "hatchling", marker = "extra == 'dev'", specifier = ">=1.25.0" },
     { name = "manifold3d" },
