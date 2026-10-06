@@ -7,6 +7,7 @@ import trimesh as tm
 from copick.util.log import get_logger
 
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.util.picks import point_centres, segmentation_label_volume, store_pick_subset, voxel_indices
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickPicks, CopickRun, CopickSegmentation
@@ -55,36 +56,83 @@ def _check_points_in_segmentation(
     Check which points are inside a segmentation volume.
 
     Args:
-        points: Array of points to check (N, 3) in physical coordinates
-        segmentation_array: Binary segmentation array
+        points: Array of points to check (N, 3) in physical (x, y, z) coordinates
+        segmentation_array: Segmentation array (z, y, x); any non-zero voxel is inside (binary, multilabel, or an
+            instance segmentation's IDs)
         voxel_spacing: Spacing between voxels
 
     Returns:
         Boolean array indicating which points are inside the segmentation
     """
-    # Convert points to voxel coordinates
-    voxel_coords = np.round(points / voxel_spacing).astype(int)
-
-    # Check bounds
-    valid_bounds = (
-        (voxel_coords[:, 0] >= 0)
-        & (voxel_coords[:, 0] < segmentation_array.shape[2])
-        & (voxel_coords[:, 1] >= 0)
-        & (voxel_coords[:, 1] < segmentation_array.shape[1])
-        & (voxel_coords[:, 2] >= 0)
-        & (voxel_coords[:, 2] < segmentation_array.shape[0])
-    )
+    zyx = voxel_indices(points, voxel_spacing)
+    valid_bounds = np.all((zyx >= 0) & (zyx < np.array(segmentation_array.shape)), axis=1)
 
     inside = np.zeros(len(points), dtype=bool)
-
-    # Check only points within bounds
-    valid_coords = voxel_coords[valid_bounds]
-    if len(valid_coords) > 0:
-        # Check if voxels are non-zero (inside segmentation)
-        voxel_values = segmentation_array[valid_coords[:, 2], valid_coords[:, 1], valid_coords[:, 0]]
-        inside[valid_bounds] = voxel_values > 0
-
+    valid = zyx[valid_bounds]
+    if len(valid) > 0:
+        inside[valid_bounds] = segmentation_array[valid[:, 0], valid[:, 1], valid[:, 2]] > 0
     return inside
+
+
+def _inside_reference(
+    centres: np.ndarray,
+    reference_mesh: Optional["CopickMesh"],
+    reference_segmentation: Optional["CopickSegmentation"],
+) -> Optional[np.ndarray]:
+    """Which particle centres lie inside the reference mesh or segmentation (None if the reference cannot be read)."""
+    if reference_mesh is not None:
+        ref_mesh = reference_mesh.mesh
+        if ref_mesh is None:
+            logger.error("Could not load reference mesh data")
+            return None
+
+        if isinstance(ref_mesh, tm.Scene):
+            if len(ref_mesh.geometry) == 0:
+                logger.error("Reference mesh is empty")
+                return None
+            ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
+
+        return _check_points_in_mesh(centres, ref_mesh)
+
+    ref_seg_array = segmentation_label_volume(reference_segmentation)
+    if ref_seg_array is None or ref_seg_array.size == 0:
+        logger.error("Could not load reference segmentation data")
+        return None
+    return _check_points_in_segmentation(centres, ref_seg_array, reference_segmentation.voxel_size)
+
+
+def _filter_picks_by_reference(
+    picks: "CopickPicks",
+    run: "CopickRun",
+    object_name: str,
+    session_id: str,
+    user_id: str,
+    reference_mesh: Optional["CopickMesh"],
+    reference_segmentation: Optional["CopickSegmentation"],
+    keep_inside: bool,
+) -> Optional[Tuple["CopickPicks", Dict[str, int]]]:
+    """Keep the picks whose particle centres are inside (or outside) a reference, unchanged and in order."""
+    if reference_mesh is None and reference_segmentation is None:
+        raise ValueError("Either reference_mesh or reference_segmentation must be provided")
+
+    points = picks.points or []
+    if len(points) == 0:
+        logger.error("Could not load pick data")
+        return None
+
+    inside_mask = _inside_reference(point_centres(points), reference_mesh, reference_segmentation)
+    if inside_mask is None:
+        return None
+
+    keep = inside_mask if keep_inside else ~inside_mask
+    where = "inside" if keep_inside else "outside"
+    if not np.any(keep):
+        logger.warning(f"No picks found {where} reference volume; writing an empty pick set")
+
+    output_picks = store_pick_subset(points, keep, run, object_name, session_id, user_id)
+    stats = {"points_created": int(np.count_nonzero(keep))}
+    logger.info(f"Kept {stats['points_created']} of {len(points)} picks {where} reference volume")
+    return output_picks, stats
 
 
 def picks_inclusion_by_mesh(
@@ -100,10 +148,15 @@ def picks_inclusion_by_mesh(
     """
     Filter picks to include only those inside a reference mesh or segmentation.
 
+    A pick is tested at its particle centre (``location`` plus the transform's shift). Kept picks are written
+    unchanged and in their original order: transform, ``instance_id`` and ``score`` survive. If no pick is inside,
+    an empty pick set is written.
+
     Args:
         picks: CopickPicks to filter
         reference_mesh: Reference CopickMesh (either this or reference_segmentation must be provided)
-        reference_segmentation: Reference CopickSegmentation
+        reference_segmentation: Reference CopickSegmentation (binary, multilabel, instance, or the label channel
+            of a panoptic segmentation; any non-zero voxel is inside)
         run: CopickRun object
         object_name: Name for the output picks
         session_id: Session ID for the output picks
@@ -115,61 +168,16 @@ def picks_inclusion_by_mesh(
         Stats dict contains 'points_created'.
     """
     try:
-        if reference_mesh is None and reference_segmentation is None:
-            raise ValueError("Either reference_mesh or reference_segmentation must be provided")
-
-        # Load pick data
-        points, transforms = picks.numpy()
-        if points is None or len(points) == 0:
-            logger.error("Could not load pick data")
-            return None
-
-        pick_positions = points[:, :3]  # Use only x, y, z coordinates
-
-        # Check which points are inside the reference
-        if reference_mesh is not None:
-            ref_mesh = reference_mesh.mesh
-            if ref_mesh is None:
-                logger.error("Could not load reference mesh data")
-                return None
-
-            if isinstance(ref_mesh, tm.Scene):
-                if len(ref_mesh.geometry) == 0:
-                    logger.error("Reference mesh is empty")
-                    return None
-                ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
-
-            inside_mask = _check_points_in_mesh(pick_positions, ref_mesh)
-
-        else:  # reference_segmentation is not None
-            ref_seg_array = reference_segmentation.numpy()
-            if ref_seg_array is None or ref_seg_array.size == 0:
-                logger.error("Could not load reference segmentation data")
-                return None
-
-            inside_mask = _check_points_in_segmentation(
-                pick_positions,
-                ref_seg_array,
-                reference_segmentation.voxel_size,
-            )
-
-        if not np.any(inside_mask):
-            logger.warning("No picks found inside reference volume")
-            return None
-
-        # Filter picks to include only those inside
-        included_points = points[inside_mask]
-        included_transforms = transforms[inside_mask] if transforms is not None else None
-
-        # Create output picks
-        output_picks = run.new_picks(object_name, session_id, user_id, exist_ok=True)
-        output_picks.from_numpy(positions=included_points, transforms=included_transforms)
-        output_picks.store()
-
-        stats = {"points_created": len(included_points)}
-        logger.info(f"Included {stats['points_created']} picks inside reference volume")
-        return output_picks, stats
-
+        return _filter_picks_by_reference(
+            picks,
+            run,
+            object_name,
+            session_id,
+            user_id,
+            reference_mesh,
+            reference_segmentation,
+            keep_inside=True,
+        )
     except Exception as e:
         logger.error(f"Error filtering picks by inclusion: {e}")
         return None
@@ -188,10 +196,15 @@ def picks_exclusion_by_mesh(
     """
     Filter picks to exclude those inside a reference mesh or segmentation.
 
+    A pick is tested at its particle centre (``location`` plus the transform's shift). Kept picks are written
+    unchanged and in their original order: transform, ``instance_id`` and ``score`` survive. If every pick is
+    inside, an empty pick set is written.
+
     Args:
         picks: CopickPicks to filter
         reference_mesh: Reference CopickMesh (either this or reference_segmentation must be provided)
-        reference_segmentation: Reference CopickSegmentation
+        reference_segmentation: Reference CopickSegmentation (binary, multilabel, instance, or the label channel
+            of a panoptic segmentation; any non-zero voxel is inside)
         run: CopickRun object
         object_name: Name for the output picks
         session_id: Session ID for the output picks
@@ -203,66 +216,16 @@ def picks_exclusion_by_mesh(
         Stats dict contains 'points_created'.
     """
     try:
-        if reference_mesh is None and reference_segmentation is None:
-            raise ValueError("Either reference_mesh or reference_segmentation must be provided")
-
-        # Load pick data
-        points, transforms = picks.numpy()
-        if points is None or len(points) == 0:
-            logger.error("Could not load pick data")
-            return None
-
-        pick_positions = points[:, :3]  # Use only x, y, z coordinates
-
-        # Check which points are inside the reference
-        if reference_mesh is not None:
-            ref_mesh = reference_mesh.mesh
-            if ref_mesh is None:
-                logger.error("Could not load reference mesh data")
-                return None
-
-            if isinstance(ref_mesh, tm.Scene):
-                if len(ref_mesh.geometry) == 0:
-                    logger.error("Reference mesh is empty")
-                    return None
-                ref_mesh = tm.util.concatenate(list(ref_mesh.geometry.values()))
-
-            inside_mask = _check_points_in_mesh(pick_positions, ref_mesh)
-
-        else:  # reference_segmentation is not None
-            ref_seg_array = reference_segmentation.numpy()
-            if ref_seg_array is None or ref_seg_array.size == 0:
-                logger.error("Could not load reference segmentation data")
-                return None
-
-            inside_mask = _check_points_in_segmentation(
-                pick_positions,
-                ref_seg_array,
-                reference_segmentation.voxel_size,
-            )
-
-        # Invert mask to exclude points inside
-        outside_mask = ~inside_mask
-
-        if not np.any(outside_mask):
-            logger.warning("No picks found outside reference volume")
-            return None
-
-        # Filter picks to exclude those inside
-        excluded_points = points[outside_mask]
-        excluded_transforms = transforms[outside_mask] if transforms is not None else None
-
-        # Create output picks
-        output_picks = run.new_picks(object_name, session_id, user_id, exist_ok=True)
-        output_picks.from_numpy(positions=excluded_points, transforms=excluded_transforms)
-        output_picks.store()
-
-        stats = {"points_created": len(excluded_points)}
-        logger.info(
-            f"Excluded {len(points) - stats['points_created']} picks inside reference volume, kept {stats['points_created']} picks",
+        return _filter_picks_by_reference(
+            picks,
+            run,
+            object_name,
+            session_id,
+            user_id,
+            reference_mesh,
+            reference_segmentation,
+            keep_inside=False,
         )
-        return output_picks, stats
-
     except Exception as e:
         logger.error(f"Error filtering picks by exclusion: {e}")
         return None

@@ -10,6 +10,7 @@ from copick_utils.converters.converter_common import (
     store_mesh_with_stats,
 )
 from copick_utils.converters.lazy_converter import create_lazy_batch_converter
+from copick_utils.util.picks import point_centres, segmentation_label_volume, store_pick_subset, voxel_indices
 
 if TYPE_CHECKING:
     from copick.models import CopickMesh, CopickPicks, CopickRun, CopickSegmentation
@@ -586,6 +587,10 @@ def limit_picks_by_distance(
     """
     Limit picks to those within a certain distance of a reference surface.
 
+    A pick is measured at its particle centre (``location`` plus the transform's shift). Kept picks are written
+    unchanged and in their original order: transform, ``instance_id`` and ``score`` survive. If no pick passes, an
+    empty pick set is written.
+
     Args:
         picks: CopickPicks to limit
         run: CopickRun object
@@ -610,13 +615,14 @@ def limit_picks_by_distance(
                 "One of reference_mesh, reference_segmentation, or reference_tomogram_info must be provided",
             )
 
-        # Load pick data
-        points, transforms = picks.numpy()
-        if points is None or len(points) == 0:
+        # Load pick data; picks are tested at their particle centres (location plus the transform's shift)
+        points = picks.points or []
+        if len(points) == 0:
             logger.error("Could not load pick data")
             return None
 
-        pick_positions = points[:, :3]  # Use only x, y, z coordinates
+        pick_positions = point_centres(points)
+        within_or_beyond = "beyond" if invert else "within"
 
         # Handle tomogram boundary reference (direct distance calculation, no distance field)
         if reference_tomogram_info is not None:
@@ -627,27 +633,19 @@ def limit_picks_by_distance(
             # Apply invert logic: default keeps within distance, invert keeps beyond
             final_valid = pick_distances > max_distance if invert else pick_distances <= max_distance
 
-            if not np.any(final_valid):
-                within_or_beyond = "beyond" if invert else "within"
-                logger.warning(f"No picks {within_or_beyond} {max_distance} units of tomogram boundary")
-                return None
-
         # Handle segmentation or mesh reference (uses distance field)
         else:
             # Create distance field from reference
             if reference_segmentation is not None:
-                ref_seg_array = reference_segmentation.numpy()
+                ref_seg_array = segmentation_label_volume(reference_segmentation)
                 if ref_seg_array is None or ref_seg_array.size == 0:
                     logger.error("Could not load reference segmentation data")
                     return None
 
-                # Use reference segmentation's coordinate space
+                # The field is on the reference segmentation's own (z, y, x) grid; voxel i sits at i * spacing.
                 field_voxel_spacing = reference_segmentation.voxel_size
                 distance_field = _create_distance_field_from_segmentation(ref_seg_array, field_voxel_spacing)
-
-                # Convert pick coordinates to voxel indices in reference segmentation space
-                pick_voxel_coords = pick_positions / field_voxel_spacing
-                pick_voxel_indices = np.floor(pick_voxel_coords).astype(int)
+                pick_voxel_indices = voxel_indices(pick_positions, field_voxel_spacing)
 
             else:  # reference_mesh is not None
                 ref_mesh = reference_mesh.mesh
@@ -674,7 +672,7 @@ def limit_picks_by_distance(
                 field_size = coord_bounds[1] - coord_bounds[0]
                 field_shape = np.ceil(field_size / field_voxel_spacing).astype(int)
 
-                # Create distance field from mesh in this coordinate space.
+                # Create distance field from mesh in this coordinate space (axis order x, y, z).
                 # Pass origin=coord_bounds[0] so the field aligns with the pick-index origin below.
                 distance_field = _create_distance_field_from_mesh(
                     ref_mesh,
@@ -693,10 +691,6 @@ def limit_picks_by_distance(
                 axis=1,
             )
 
-            if not np.any(valid_picks):
-                logger.warning("No picks within distance field bounds")
-                return None
-
             # Get distances for valid picks
             valid_indices = pick_voxel_indices[valid_picks]
             pick_distances = distance_field[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
@@ -708,22 +702,15 @@ def limit_picks_by_distance(
             final_valid = np.zeros(len(points), dtype=bool)
             final_valid[valid_picks] = distance_valid
 
-            if not np.any(final_valid):
-                within_or_beyond = "beyond" if invert else "within"
-                logger.warning(f"No picks {within_or_beyond} {max_distance} units of reference surface")
-                return None
+        if not np.any(final_valid):
+            logger.warning(
+                f"No picks {within_or_beyond} {max_distance} units of the reference; writing an empty pick set",
+            )
 
-        # Filter picks
-        valid_points = points[final_valid]
-        valid_transforms = transforms[final_valid] if transforms is not None else None
+        # Kept picks are written unchanged and in order (transform, instance_id and score survive)
+        output_picks = store_pick_subset(points, final_valid, run, object_name, session_id, user_id)
 
-        # Create output picks
-        output_picks = run.new_picks(object_name, session_id, user_id, exist_ok=True)
-        output_picks.from_numpy(positions=valid_points, transforms=valid_transforms)
-        output_picks.store()
-
-        stats = {"points_created": len(valid_points)}
-        within_or_beyond = "beyond" if invert else "within"
+        stats = {"points_created": int(np.count_nonzero(final_valid))}
         logger.info(f"Limited picks to {stats['points_created']} points {within_or_beyond} {max_distance} units")
         return output_picks, stats
 

@@ -50,6 +50,11 @@ def picksin(
     whose coordinates fall inside it are written to the output. This is the inverse of
     `copick logical picksout`, which keeps the picks that fall outside the volume instead.
 
+    Each pick is tested at its particle centre (its location plus the shift stored in its
+    transform). Kept picks are written unchanged and in their original order, so their
+    orientations, instance IDs (e.g. filament IDs) and scores survive. If no pick is kept, an
+    empty pick set is written.
+
     URI Format:
 
         \b
