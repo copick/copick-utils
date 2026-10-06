@@ -36,6 +36,7 @@ def segmentation(
     session_id="0",
     voxel_size=10,
     multilabel=True,
+    instance=False,
 ):
     """Write a segmentation into a copick run as OME-Zarr.
 
@@ -51,10 +52,20 @@ def segmentation(
         session_id: Session id for the segmentation. Defaults to `0`.
         voxel_size: Voxel spacing in angstroms.
         multilabel: Whether the segmentation holds multiple labels.
+        instance: Write an instance segmentation (voxel value = instance ID; `name`
+            is the object). Its values are stored without loss (uint16 or wider)
+            instead of as `uint8`.
     """
 
-    # Retrieve or create a segmentation
-    segmentations = run.get_segmentations(name=name, user_id=user_id, session_id=session_id)
+    # Retrieve or create a segmentation of the requested type
+    multilabel = multilabel and not instance
+    segmentations = run.get_segmentations(
+        name=name,
+        user_id=user_id,
+        session_id=session_id,
+        is_instance=instance,
+        is_panoptic=False,
+    )
 
     # If no segmentation exists or no segmentation at the given voxel size, create a new one
     if len(segmentations) == 0 or any(seg.voxel_size != voxel_size for seg in segmentations):
@@ -64,10 +75,11 @@ def segmentation(
             session_id=session_id,
             is_multilabel=multilabel,
             user_id=user_id,
+            is_instance=instance,
         )
     else:
         # Overwrite the current segmentation at the specified voxel size if it exists
         seg = next(seg for seg in segmentations if seg.voxel_size == voxel_size)
 
     # Write the segmentation data
-    seg.from_numpy(seg_vol, dtype=np.uint8)
+    seg.from_numpy(seg_vol, dtype=None if instance else np.uint8)

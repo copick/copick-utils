@@ -53,6 +53,19 @@ from copick_utils.util.config_models import create_simple_config
     help="Keep only the N largest connected components by voxel count (e.g. 1 = keep only the "
     "single largest). Applied in addition to any --min-size/--max-size filter.",
 )
+@optgroup.option(
+    "--min-skeleton-length",
+    type=float,
+    default=None,
+    help="Minimum skeleton length of a component (or instance) to keep, in the unit set by --length-unit "
+    "(optional). Drops specks and short blobs of filamentous structures; see seg-stats --skeleton.",
+)
+@optgroup.option(
+    "--length-unit",
+    type=click.Choice(["angstrom", "voxel"]),
+    default="angstrom",
+    help="Unit for --min-skeleton-length: 'angstrom' for Å, 'voxel' for voxels.",
+)
 @add_workers_option
 @optgroup.group("\nOutput Options", help="Options related to output segmentations.")
 @add_output_option("segmentation", default_tool="filter-components")
@@ -66,6 +79,8 @@ def filter_components(
     max_size,
     size_unit,
     keep_largest,
+    min_skeleton_length,
+    length_unit,
     workers,
     output_uri,
     debug,
@@ -82,10 +97,17 @@ def filter_components(
     top of any --min-size/--max-size limits. Run `copick process seg-stats` first to inspect
     component sizes and choose sensible thresholds.
 
+    A multilabel segmentation is filtered label by label and keeps its labels. An instance
+    segmentation (`?instance=true`) is filtered instance by instance: whole instances are
+    dropped, and the IDs of the kept ones do not change, so picks and filaments with the same
+    IDs still match. `--min-skeleton-length` also drops components (or instances) whose
+    skeleton is shorter than the given length.
+
     URI Format:
 
         \b
         Segmentations: name:user_id/session_id@voxel_spacing
+        Instance segmentations: append ?instance=true
 
     Examples:
 
@@ -106,6 +128,11 @@ def filter_components(
         \b
         # Keep only the single largest connected component
         copick process filter-components -i "membrane:user1/auto-001@10.0" -o "membrane_main" --keep-largest 1
+
+        \b
+        # Drop microtubule instances shorter than 100 nm, keeping the IDs of the others
+        copick process filter-components -i "microtubule:trace/1@10.0?instance=true" -o "microtubule:trace/1-long" \\
+            --min-skeleton-length 1000
 
     See Also:
 
@@ -134,6 +161,13 @@ def filter_components(
         if max_size is not None:
             max_size = max_size * voxel_volume
 
+    if length_unit == "voxel" and min_skeleton_length is not None:
+        input_params = parse_copick_uri(input_uri, "segmentation")
+        vs_raw = input_params.get("voxel_spacing")
+        if vs_raw is None or vs_raw == "*":
+            raise click.BadParameter("--length-unit voxel requires voxel spacing in the input URI (e.g., @10.0)")
+        min_skeleton_length = min_skeleton_length * float(vs_raw)
+
     # Create config from URIs with smart defaults
     try:
         task_config = create_simple_config(
@@ -159,6 +193,8 @@ def filter_components(
         if keep_largest < 1:
             raise click.BadParameter("--keep-largest must be >= 1")
         logger.info(f"Keeping only the {keep_largest} largest component(s)")
+    if min_skeleton_length is not None:
+        logger.info(f"Minimum skeleton length: {min_skeleton_length} Å")
 
     # Parallel discovery and processing
     results = filter_components_lazy_batch(
@@ -170,6 +206,7 @@ def filter_components(
         min_size=min_size,
         max_size=max_size,
         keep_largest=keep_largest,
+        min_skeleton_length=min_skeleton_length,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)

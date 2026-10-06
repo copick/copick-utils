@@ -41,3 +41,9 @@ def copick_root(tmp_path):
 def run(copick_root):
     """The fixture project's single run."""
     return copick_root.get_run("run1")
+
+
+@pytest.fixture
+def config_path(copick_root, tmp_path):
+    """The fixture project's config file (for CLI tests)."""
+    return str(tmp_path / "copick_config.json")
