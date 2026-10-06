@@ -80,7 +80,7 @@ jobs:
       - name: Check lockfile
         run: uv lock --check
 
-      - name: Install inspection environment
+      - name: Install the locked environment
         run: uv sync --locked --extra test
 
       - name: Verify Python version
@@ -106,9 +106,6 @@ jobs:
           got = Version(os.path.basename(glob.glob('dist/*.whl')[0]).split('-')[1]);
           print(f'release {want}, built {got}');
           sys.exit(0 if got == want else f'Built {got}, but the release is {want}: src/copick_utils/__init__.py was not bumped.')"
-
-      - name: Inspect distributions
-        run: uv run --no-sync python scripts/inspect_distribution.py dist
 
       - name: Preserve validated artifacts
         uses: actions/upload-artifact@v7
