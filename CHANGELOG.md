@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/copick/copick-utils/compare/copick-utils-v1.10.0...copick-utils-v1.10.1) (2026-10-15)
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.41.2 to 6.41.3 ([#122](https://github.com/copick/copick-utils/issues/122)) ([c3cf289](https://github.com/copick/copick-utils/commit/c3cf289807bd4336628881d2be4874560be72396))
+
 ## [1.10.0](https://github.com/copick/copick-utils/compare/copick-utils-v1.9.0...copick-utils-v1.10.0) (2026-10-06)
 
 
