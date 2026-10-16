@@ -132,6 +132,20 @@ def test_y_junction_continues_the_straightest_pair():
     assert report.junctions_resolved == 1
 
 
+def test_two_filaments_touching_end_to_end_are_two_filaments():
+    # A V: two filaments that meet at their ends (actin on dataset 10426) skeletonize as one bent branch with no
+    # junction, so pairing at junctions never sees the turn.
+    volume = tube(np.zeros(SHAPE, np.uint8), (20, 30, 10), (20, 45, 60), 3)
+    tube(volume, (20, 45, 60), (20, 60, 10), 3)  # 33 degrees between the arms
+    centrelines, _, report = trace_centrelines(volume, VS, TraceParameters(min_length=150))
+    assert len(centrelines) == 2 and report.split_at_bends == 1
+    for c in centrelines:
+        points, tangents, _ = evaluate_spline(c.tck, step=VS / 2)
+        overall = (points[-1] - points[0]) / np.linalg.norm(points[-1] - points[0])
+        assert np.degrees(np.arccos(np.clip(tangents @ overall, -1, 1))).max() < 30.0
+        assert c.length > 400
+
+
 def test_ring_is_one_closed_filament():
     volume = np.zeros(SHAPE, np.uint8)
     zz, yy, xx = np.indices(SHAPE)

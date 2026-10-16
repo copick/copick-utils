@@ -21,9 +21,11 @@ Tracing a semantic segmentation (``trace_centrelines``):
 3. At every junction, branches are paired by straightest continuation: the pair whose directions deviate least from
    a straight line is joined first, as long as the deviation is at most ``max_bend`` degrees. A crossing therefore
    gives two filaments, and a Y gives one filament through the junction and one that ends there.
-4. Paired branches are chained into filaments. At a free end, the last label radius of skeleton is replaced by the
-   continuation of the filament's direction up to the edge of the label (thinning shortens a rod's skeleton by about
-   one radius at each end and often bends its last voxels).
+4. Paired branches are chained into filaments. A chain that turns by more than ``max_bend`` degrees between its
+   directions over ``direction_window`` before and after a point is split there: two filaments that touch end to end
+   (a V) skeletonize as one bent branch with no junction, which the pairing never sees. At a free end, the last label
+   radius of skeleton is replaced by the continuation of the filament's direction up to the edge of the label
+   (thinning shortens a rod's skeleton by about one radius at each end and often bends its last voxels).
 5. Filaments shorter than ``min_length``, shorter than ``min_aspect`` label diameters (blobs), or thinner than
    ``min_radius`` (slivers of segmentation noise, much thinner than the real filaments) are rejected.
 6. Each filament is fitted with a smoothing B-spline (scipy ``splprep``) whose RMS deviation from the skeleton is
@@ -73,7 +75,12 @@ class TraceParameters:
             tube radius (40 Å there).
         prune_length: Prune skeleton spurs shorter than this. None: one label diameter.
         junction_merge: Merge junctions joined by a bridge up to this long. None: one label diameter.
-        max_bend: Largest deviation from a straight line, in degrees, for two branches to continue through a junction.
+        max_bend: Largest deviation from a straight line, in degrees, for two branches to continue through a junction,
+            and for a chain to continue around a bend over ``direction_window`` (a sharper one is split). Basis:
+            measured that way, a filament turns by more than 45 degrees only on a radius below about 2.5 label
+            diameters. On dataset 10521 splitting changes none of the 102 microtubules traced on 58 tomograms; on
+            dataset 10426 (easymode actin) it splits paths where two filaments touch, turning by 45-159 degrees
+            (median 55, 51 splits on three tomograms).
         smoothing: RMS deviation of the fitted spline from the skeleton. None: half a voxel.
         extend_ends: Extend free ends along their direction to the edge of the label.
         direction_window: Length over which a branch's direction at a junction is measured. None: two label
@@ -139,6 +146,7 @@ class TraceReport:
     rejected_aspect: int = 0
     rejected_radius: int = 0
     junctions_resolved: int = 0
+    split_at_bends: int = 0
     total_length: float = 0.0
     dropped_branch_length: float = 0.0
 
@@ -351,6 +359,48 @@ def skeleton_chains(
     return chains, len(link) // 2
 
 
+def split_at_bends(chain: Chain, max_bend: float, window: float, trim: float = 0.0) -> List[Chain]:
+    """Split a chain wherever it turns by more than ``max_bend`` degrees, the turn at a point being the angle between
+    the chain's directions over ``window`` voxels of path before and after it.
+
+    Two filaments that touch end to end (a V, or one ending against another at an acute angle) skeletonize as one
+    bent branch with no junction, so pairing at junctions never sees the turn. The new ends are not free: they lie
+    against the other filament, so they are not extended. Like a branch at a junction, each piece loses ``trim``
+    voxels of path at the split, where thinning bends it towards the other. Closed chains, and chains shorter than
+    two windows, are kept whole.
+
+    Returns:
+        The pieces, in order along the chain (the chain itself if it has no such bend).
+    """
+    coords = chain.coords.astype(float)
+    if chain.closed or len(coords) < 3 or window <= 0:
+        return [chain]
+    reach = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(coords, axis=0), axis=1))])
+    inner = np.nonzero((reach >= window) & (reach <= reach[-1] - window))[0]
+    if inner.size == 0:
+        return [chain]
+    before = coords[inner] - coords[np.searchsorted(reach, reach[inner] - window)]
+    after = coords[np.minimum(np.searchsorted(reach, reach[inner] + window), len(coords) - 1)] - coords[inner]
+    norms = np.linalg.norm(before, axis=1) * np.linalg.norm(after, axis=1)
+    cosine = np.where(norms > 1e-9, np.sum(before * after, axis=1) / np.maximum(norms, 1e-9), 1.0)
+    bend = np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
+    k = int(np.argmax(bend))
+    if bend[k] <= max_bend:
+        return [chain]
+    at = int(inner[k])
+    head = Chain(
+        coords=_trim(chain.coords[: at + 1], trim, at_start=False) if trim > 0 else chain.coords[: at + 1],
+        free_ends=(chain.free_ends[0], False),
+        junctions=chain.junctions,
+    )
+    tail = Chain(
+        coords=_trim(chain.coords[at:], trim, at_start=True) if trim > 0 else chain.coords[at:],
+        free_ends=(False, chain.free_ends[1]),
+        junctions=chain.junctions,
+    )
+    return split_at_bends(head, max_bend, window, trim) + split_at_bends(tail, max_bend, window, trim)
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 # Fitting
 # ---------------------------------------------------------------------------------------------------------------------
@@ -527,6 +577,15 @@ def _trace_mask(
         junction_trim=radius,
     )
     report.junctions_resolved += resolved
+    if not single:
+        # An instance is one filament by definition; in a semantic label, a sharp bend is two filaments touching.
+        window = voxels(params.direction_window, 2.0 * diameter)
+        pieces = []
+        for chain in chains:
+            parts = split_at_bends(chain, params.max_bend, window, trim=radius)
+            report.split_at_bends += len(parts) - 1
+            pieces.extend(parts)
+        chains = pieces
     if single and len(chains) > 1:
         lengths = [np.sum(np.linalg.norm(np.diff(c.coords, axis=0), axis=1)) for c in chains]
         keep = int(np.argmax(lengths))
