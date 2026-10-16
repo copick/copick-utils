@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0-alpha.6](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.5...copick-utils-v2.0.0-alpha.6) (2026-10-16)
+
+
+### ⚙ Continuous Integration
+
+* v2.0 release PR titles without the branch scope ([#124](https://github.com/copick/copick-utils/issues/124)) ([216204f](https://github.com/copick/copick-utils/commit/216204f62a32baccde773fadda34e826b77e278d))
+
 ## [2.0.0-alpha.5](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.4...copick-utils-v2.0.0-alpha.5) (2026-10-06)
 
 
