@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0-alpha.7](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.6...copick-utils-v2.0.0-alpha.7) (2026-10-19)
+
+
+### 🐞 Bug Fixes
+
+* split traced filaments at sharp bends without a junction (v2.0) ([#127](https://github.com/copick/copick-utils/issues/127)) ([9c2d909](https://github.com/copick/copick-utils/commit/9c2d9090f661c5e900ed435c8dd863e772e18201))
+
 ## [2.0.0-alpha.6](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.5...copick-utils-v2.0.0-alpha.6) (2026-10-16)
 
 
