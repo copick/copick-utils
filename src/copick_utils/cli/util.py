@@ -812,7 +812,7 @@ def add_filament_tracing_options(func: click.Command = None) -> Callable:
                 type=float,
                 default=45.0,
                 help="Largest deviation from a straight line, in degrees, for a filament to continue through a "
-                "junction.",
+                "junction or around a bend; a sharper bend (two filaments touching end to end) splits it.",
             ),
             optgroup.option(
                 "--smoothing",
