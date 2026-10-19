@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.2](https://github.com/copick/copick-utils/compare/copick-utils-v1.10.1...copick-utils-v1.10.2) (2026-10-19)
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.41.3 to 6.42.0 ([#128](https://github.com/copick/copick-utils/issues/128)) ([a9a08b2](https://github.com/copick/copick-utils/commit/a9a08b2af339865f96b4b02b8359de5b9d56feba))
+* split traced filaments at sharp bends without a junction ([#126](https://github.com/copick/copick-utils/issues/126)) ([660d721](https://github.com/copick/copick-utils/commit/660d721b060eb44de2d6c754ad052fbd6a2b76f8))
+
 ## [1.10.1](https://github.com/copick/copick-utils/compare/copick-utils-v1.10.0...copick-utils-v1.10.1) (2026-10-15)
 
 
