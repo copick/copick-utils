@@ -129,6 +129,7 @@ def seg2mesh(
         workers=workers,
         level=level,
         step_size=step_size,
+        individual_meshes=individual_meshes,
     )
 
     successful = sum(1 for result in results.values() if result and result.get("processed", 0) > 0)
