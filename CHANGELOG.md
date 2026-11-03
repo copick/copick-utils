@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0-alpha.8](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.7...copick-utils-v2.0.0-alpha.8) (2026-11-03)
+
+
+### 🐞 Bug Fixes
+
+* seg2mesh writes closed x/y/z meshes, and mesh2seg fills them back exactly (v2.0) ([#134](https://github.com/copick/copick-utils/issues/134)) ([afe9377](https://github.com/copick/copick-utils/commit/afe9377e68d2a0b0a3d7309b9dd34fd1499d4ab7))
+
 ## [2.0.0-alpha.7](https://github.com/copick/copick-utils/compare/copick-utils-v2.0.0-alpha.6...copick-utils-v2.0.0-alpha.7) (2026-10-19)
 
 
