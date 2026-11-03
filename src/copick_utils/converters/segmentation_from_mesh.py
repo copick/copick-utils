@@ -40,62 +40,93 @@ def ensure_mesh(trimesh_object) -> Optional[tm.Trimesh]:
         raise ValueError("Input must be a Trimesh or Scene object")
 
 
+#: Ray origins sit this far (in voxels) off the voxel centres, across the ray. Meshes made by marching cubes have
+#: their vertices and edges on the voxel grid, where rays through the voxel centres would hit edges and vertices
+#: exactly and count the crossing twice or not at all. Rounding back to voxel indices removes the offset; a voxel
+#: centre within about this distance of a sloped surface may fall on either side of it.
+_RAY_OFFSET = (0.01 * np.sqrt(2), 0.01 * np.sqrt(3))
+
+#: A crossing this close (in voxels) to a voxel centre counts as before it, so a face through the centres (e.g. a
+#: box at the volume's edge) includes them where the ray enters and excludes them where it leaves.
+_CENTRE_TOLERANCE = 1e-6
+
+
+def _crossing_voxels(loc: np.ndarray, voxel_spacing: float, axis: int) -> np.ndarray:
+    """Voxel indices of ray crossings: the ray's own voxel across it, and along it the first voxel centre after the
+    crossing, so a voxel is inside when its centre is. Crossings before the volume move to its first voxel."""
+    pos = loc / voxel_spacing
+    idx = np.round(pos).astype("int")
+    idx[:, axis] = np.maximum(np.ceil(pos[:, axis] - _CENTRE_TOLERANCE).astype("int"), 0)
+    return idx
+
+
+def _fill_from_crossings(
+    int_loc: np.ndarray,
+    voxel_dims: Tuple[int, int, int],
+    axis: int,
+) -> np.ndarray:
+    """Inside/outside of every voxel along rays on ``axis``, from the voxels of their crossings: a voxel is inside
+    after an odd number of crossings. Crossings in the same voxel cancel in pairs. Returns a (z, y, x) volume."""
+    toggles = np.zeros((voxel_dims[2], voxel_dims[1], voxel_dims[0]), dtype=np.uint8)
+    zyx = int_loc[int_loc[:, axis] < voxel_dims[axis]][:, ::-1]
+    np.add.at(toggles, (zyx[:, 0], zyx[:, 1], zyx[:, 2]), 1)
+    toggles &= 1
+    return np.bitwise_xor.accumulate(toggles, axis=2 - axis).astype(bool)
+
+
+def _ray_start(mesh: tm.Trimesh, voxel_spacing: float, axis: int) -> float:
+    """Where rays along an axis start (in voxels): before the volume and before the mesh."""
+    return min(-1.0, np.floor(mesh.bounds[0, axis] / voxel_spacing) - 1)
+
+
 def _onesmask_z(mesh: tm.Trimesh, voxel_dims: Tuple[int, int, int], voxel_spacing: float) -> np.ndarray:
     """Create mask by ray casting in Z direction."""
     intersector = RayMeshIntersector(mesh)
 
-    # Create a grid of rays in XY plane, shooting in Z direction
+    # Create a grid of rays in XY plane (off the voxel centres, see _RAY_OFFSET), shooting in Z direction
     grid_x, grid_y = np.mgrid[0 : voxel_dims[0], 0 : voxel_dims[1]]
-    ray_grid = np.vstack([grid_x.ravel(), grid_y.ravel(), -np.ones((grid_x.size,))]).T * voxel_spacing
+    ray_grid = (
+        np.vstack(
+            [
+                grid_x.ravel() + _RAY_OFFSET[0],
+                grid_y.ravel() + _RAY_OFFSET[1],
+                np.full(grid_x.size, _ray_start(mesh, voxel_spacing, 2)),
+            ],
+        ).T
+        * voxel_spacing
+    )
     ray_dir = np.zeros((ray_grid.shape[0], 3))
     ray_dir[:, 2] = 1
 
     loc, _, _ = intersector.intersects_location(ray_grid, ray_dir)
 
-    # Convert to voxel coordinates and sort by z
-    int_loc = np.round(loc / voxel_spacing).astype("int")
-    sort_idx = int_loc[:, 2].argsort()
-    int_loc = int_loc[sort_idx, :]
-
     # Build volume by tracking crossings
-    img = np.zeros((voxel_dims[1], voxel_dims[0]), dtype="bool")
-    vol = np.zeros((voxel_dims[2], voxel_dims[1], voxel_dims[0]), dtype="bool")
-
-    for z in range(voxel_dims[2]):
-        idx = int_loc[:, 2] == z
-        img[int_loc[idx, 1], int_loc[idx, 0]] = np.logical_not(img[int_loc[idx, 1], int_loc[idx, 0]])
-        vol[z, :, :] = img
-
-    return vol
+    return _fill_from_crossings(_crossing_voxels(loc, voxel_spacing, 2), voxel_dims, 2)
 
 
 def _onesmask_x(mesh: tm.Trimesh, voxel_dims: Tuple[int, int, int], voxel_spacing: float) -> np.ndarray:
     """Create mask by ray casting in X direction."""
     intersector = RayMeshIntersector(mesh)
 
-    # Create a grid of rays in YZ plane, shooting in X direction
+    # Create a grid of rays in YZ plane (off the voxel centres, see _RAY_OFFSET), shooting in X direction
     grid_y, grid_z = np.mgrid[0 : voxel_dims[1], 0 : voxel_dims[2]]
-    ray_grid = np.vstack([-np.ones((grid_y.size,)), grid_y.ravel(), grid_z.ravel()]).T * voxel_spacing
+    ray_grid = (
+        np.vstack(
+            [
+                np.full(grid_y.size, _ray_start(mesh, voxel_spacing, 0)),
+                grid_y.ravel() + _RAY_OFFSET[0],
+                grid_z.ravel() + _RAY_OFFSET[1],
+            ],
+        ).T
+        * voxel_spacing
+    )
     ray_dir = np.zeros((ray_grid.shape[0], 3))
     ray_dir[:, 0] = 1
 
     loc, _, _ = intersector.intersects_location(ray_grid, ray_dir)
 
-    # Convert to voxel coordinates and sort by x
-    int_loc = np.round(loc / voxel_spacing).astype("int")
-    sort_idx = int_loc[:, 0].argsort()
-    int_loc = int_loc[sort_idx, :]
-
     # Build volume by tracking crossings
-    img = np.zeros((voxel_dims[2], voxel_dims[1]), dtype="bool")
-    vol = np.zeros((voxel_dims[2], voxel_dims[1], voxel_dims[0]), dtype="bool")
-
-    for x in range(voxel_dims[0]):
-        idx = int_loc[:, 0] == x
-        img[int_loc[idx, 2], int_loc[idx, 1]] = np.logical_not(img[int_loc[idx, 2], int_loc[idx, 1]])
-        vol[:, :, x] = img
-
-    return vol
+    return _fill_from_crossings(_crossing_voxels(loc, voxel_spacing, 0), voxel_dims, 0)
 
 
 def mesh_to_volume(mesh: tm.Trimesh, voxel_dims: Tuple[int, int, int], voxel_spacing: float) -> np.ndarray:
