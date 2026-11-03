@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.3](https://github.com/copick/copick-utils/compare/copick-utils-v1.10.2...copick-utils-v1.10.3) (2026-11-03)
+
+
+### 🐞 Bug Fixes
+
+* bump chanzuckerberg/github-actions from 6.42.0 to 6.42.2 ([#135](https://github.com/copick/copick-utils/issues/135)) ([b44d41c](https://github.com/copick/copick-utils/commit/b44d41cd174ffeadfe5f3ab8d6883a5e5bbd25f8))
+* seg2mesh writes closed x/y/z meshes, and mesh2seg fills them back exactly ([#133](https://github.com/copick/copick-utils/issues/133)) ([3fc24fb](https://github.com/copick/copick-utils/commit/3fc24fb48e34af31554c8ea505f5a9d0019ad924))
+
 ## [1.10.2](https://github.com/copick/copick-utils/compare/copick-utils-v1.10.1...copick-utils-v1.10.2) (2026-10-19)
 
 
